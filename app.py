@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import uvicorn
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -20,9 +20,13 @@ if not WEBAPP_URL.startswith("https://"):
 
 api = FastAPI(title="Paint Studio Telegram Bot")
 
+INDEX_FILE = BASE_DIR / "static" / "index.html"
+if not INDEX_FILE.exists():
+    INDEX_FILE = BASE_DIR / "index.html"
+
 @api.get("/")
 async def home():
-    return FileResponse(BASE_DIR / "static" / "index.html")
+    return FileResponse(INDEX_FILE)
 
 @api.get("/health")
 async def health():
@@ -35,8 +39,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ])
     await update.effective_message.reply_text(
         "Привет! Это Paint Studio — мини-рисовалка прямо в Telegram.\n\n"
-        "Рисуй пальцем или мышью, выбирай цвет и толщину кисти, используй ластик, "
-        "фигуры, отмену и повтор действий. Готовую работу можно скачать в PNG.\n\n"
+        "Рисуй пальцем, выбирай цвет и толщину кисти, используй ластик, "
+        "фигуры, отмену и повтор. Готовую работу можно скачать в PNG.\n\n"
         "Нажми кнопку ниже, чтобы открыть холст 👇",
         reply_markup=keyboard,
     )
@@ -49,8 +53,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Линия, прямоугольник и круг — фигуры.\n"
         "• Цвет и размер — настройки инструмента.\n"
         "• Отмена/Повтор — история действий.\n"
-        "• Сохранить PNG — скачать рисунок на устройство.\n\n"
-        "Рисунки и история хранятся в памяти браузера на этом устройстве."
+        "• Сохранить PNG — скачать рисунок."
     )
 
 async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -58,14 +61,13 @@ async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     await query.message.reply_text(
         "Открой Paint Studio кнопкой в /start. На панели есть кисть, ластик, "
-        "линия, прямоугольник, круг, палитра, размер, отмена, повтор, очистка и сохранение PNG."
+        "фигуры, палитра, размер, отмена, повтор, очистка и сохранение PNG."
     )
 
 async def main():
     bot = Application.builder().token(TOKEN).build()
     bot.add_handler(CommandHandler("start", start))
     bot.add_handler(CommandHandler("help", help_command))
-    from telegram.ext import CallbackQueryHandler
     bot.add_handler(CallbackQueryHandler(help_button, pattern="^help$"))
 
     await bot.initialize()
