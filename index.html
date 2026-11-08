@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#171923">
+<title>Paint Studio</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#11131b;--panel:#1b1e2a;--panel2:#252938;--text:#f4f5fb;--muted:#aeb4c6;--accent:#8b7cff;--line:#34394b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+header{padding:13px 16px 10px;display:flex;align-items:center;justify-content:space-between;gap:10px}h1{font-size:19px;margin:0;font-weight:800}header small{color:var(--muted)}
+main{max-width:900px;margin:auto;padding:0 12px 18px}.toolbar{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:10px;display:grid;gap:10px;margin-bottom:12px}
+.tools{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px}.tool,.action{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:11px;min-height:42px;padding:7px 5px;font-size:13px;font-weight:650}.tool.active{border-color:var(--accent);background:#373153;box-shadow:inset 0 0 0 1px var(--accent)}button:active{transform:scale(.98)}
+.settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.setting{display:flex;align-items:center;gap:7px;color:var(--muted);font-size:13px}.setting input[type=range]{width:110px;accent-color:var(--accent)}input[type=color]{width:38px;height:34px;border:0;background:transparent;padding:0}
+.swatches{display:flex;gap:7px;flex-wrap:wrap}.swatch{width:25px;height:25px;border-radius:50%;border:2px solid #ffffff55;padding:0}.swatch.selected{outline:2px solid var(--accent);outline-offset:2px}
+.actions{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}.action{min-height:38px}.action.primary{background:var(--accent);border-color:var(--accent);color:white}
+.canvas-wrap{background:#242838;border:1px solid var(--line);border-radius:16px;padding:9px;box-shadow:0 8px 30px #0003}.canvas-stage{width:100%;aspect-ratio:1/1;background:white;border-radius:8px;overflow:hidden;touch-action:none;position:relative}canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+.hint{color:var(--muted);font-size:12px;text-align:center;padding:10px 4px 0}.gallery{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:12px}.gallery h2{font-size:15px;margin:0 0 9px}.gallery-list{display:flex;gap:9px;overflow-x:auto}.thumb{width:76px;height:76px;object-fit:cover;border-radius:9px;border:1px solid var(--line);background:white;flex:none}.empty{font-size:12px;color:var(--muted)}
+@media(min-width:650px){.tools{grid-template-columns:repeat(8,1fr)}.canvas-stage{aspect-ratio:4/3}.canvas-wrap{padding:14px}}
+</style>
+</head>
+<body>
+<header><div><h1>🎨 Paint Studio</h1><small>Твоя мини-мастерская</small></div><small id="status">Готово к рисованию</small></header>
+<main>
+<section class="toolbar">
+ <div class="tools" id="tools">
+  <button class="tool active" data-tool="brush">🖌️ Кисть</button><button class="tool" data-tool="eraser">🧽 Ластик</button>
+  <button class="tool" data-tool="line">／ Линия</button><button class="tool" data-tool="rect">▭ Прямоуг.</button>
+  <button class="tool" data-tool="circle">◯ Круг</button><button class="tool" data-tool="fill">🪣 Фон</button>
+ </div>
+ <div class="settings">
+  <label class="setting">Цвет <input id="color" type="color" value="#20202a"></label>
+  <label class="setting">Размер <input id="size" type="range" min="1" max="50" value="6"><b id="sizeVal">6</b></label>
+  <label class="setting"><input id="filled" type="checkbox"> Залитая фигура</label>
+ </div>
+ <div class="swatches" id="swatches"></div>
+ <div class="actions">
+  <button class="action" id="undo">↶ Отмена</button><button class="action" id="redo">↷ Повтор</button>
+  <button class="action" id="clear">Очистить</button><button class="action" id="save">⬇ PNG</button>
+  <button class="action primary" id="saveGallery">♡ В галерею</button>
+ </div>
+</section>
+<section class="canvas-wrap"><div class="canvas-stage"><canvas id="canvas" width="1200" height="1200"></canvas></div><div class="hint">Рисуй пальцем прямо на холсте. На компьютере — мышью.</div></section>
+<section class="gallery"><h2>Мои рисунки на этом устройстве</h2><div class="gallery-list" id="gallery"><span class="empty">Пока здесь пусто. Нажми «В галерею».</span></div></section>
+</main>
+<script>
+(() => {
+ const tg=window.Telegram?.WebApp; if(tg){tg.ready();tg.expand();}
+ const canvas=document.getElementById('canvas'),ctx=canvas.getContext('2d',{willReadFrequently:true});
+ const color=document.getElementById('color'),size=document.getElementById('size'),sizeVal=document.getElementById('sizeVal'),filled=document.getElementById('filled'),status=document.getElementById('status');
+ const palette=['#20202a','#ffffff','#e53935','#ff8a00','#ffd600','#43a047','#00acc1','#1e88e5','#3949ab','#8e24aa','#ec407a','#795548','#9e9e9e','#111111'];
+ let tool='brush',drawing=false,start=null,last=null,snapshot=null,undoStack=[],redoStack=[];
+ function setStatus(s){status.textContent=s;}
+ function white(){ctx.save();ctx.globalCompositeOperation='source-over';ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.restore();}
+ white();
+ function pushUndo(){undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height));if(undoStack.length>35)undoStack.shift();redoStack=[];}
+ function restore(data){ctx.putImageData(data,0,0);}
+ function chooseTool(t){tool=t;document.querySelectorAll('.tool').forEach(b=>b.classList.toggle('active',b.dataset.tool===t));setStatus('Инструмент: '+({brush:'кисть',eraser:'ластик',line:'линия',rect:'прямоугольник',circle:'круг',fill:'фон'}[t]));}
+ document.querySelectorAll('.tool').forEach(b=>b.addEventListener('click',()=>chooseTool(b.dataset.tool)));
+ palette.forEach(c=>{const b=document.createElement('button');b.className='swatch'+(c===color.value?' selected':'');b.style.background=c;b.title=c;b.addEventListener('click',()=>{color.value=c;document.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');});document.getElementById('swatches').appendChild(b)});
+ color.addEventListener('input',()=>document.querySelectorAll('.swatch').forEach(x=>x.classList.remove('selected')));
+ size.addEventListener('input',()=>sizeVal.textContent=size.value);
+ function point(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width,y:(e.clientY-r.top)*canvas.height/r.height};}
+ function setupStroke(){ctx.lineCap='round';ctx.lineJoin='round';ctx.lineWidth=Number(size.value);ctx.strokeStyle=tool==='eraser'?'#ffffff':color.value;ctx.fillStyle=color.value;ctx.globalCompositeOperation='source-over';}
+ function drawShape(a,b,preview=false){if(preview&&snapshot)restore(snapshot);setupStroke();ctx.beginPath();if(tool==='line'){ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}else if(tool==='rect'){const w=b.x-a.x,h=b.y-a.y;if(filled.checked)ctx.fillRect(a.x,a.y,w,h);else ctx.strokeRect(a.x,a.y,w,h);}else if(tool==='circle'){const rx=(b.x-a.x)/2,ry=(b.y-a.y)/2;ctx.ellipse(a.x+rx,a.y+ry,Math.max(1,Math.abs(rx)),Math.max(1,Math.abs(ry)),0,0,Math.PI*2);if(filled.checked)ctx.fill();else ctx.stroke();}}
+ canvas.addEventListener('pointerdown',e=>{e.preventDefault();canvas.setPointerCapture(e.pointerId);const p=point(e);if(tool==='fill'){pushUndo();white();ctx.fillStyle=color.value;ctx.fillRect(0,0,canvas.width,canvas.height);setStatus('Цвет фона изменён');return;}pushUndo();drawing=true;start=last=p;snapshot=ctx.getImageData(0,0,canvas.width,canvas.height);if(tool==='brush'||tool==='eraser'){setupStroke();ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(p.x+.1,p.y+.1);ctx.stroke();}});
+ canvas.addEventListener('pointermove',e=>{if(!drawing)return;e.preventDefault();const p=point(e);if(tool==='brush'||tool==='eraser'){setupStroke();ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;}else drawShape(start,p,true);});
+ function end(e){if(!drawing)return;const p=point(e);if(['line','rect','circle'].includes(tool))drawShape(start,p,true);drawing=false;snapshot=null;setStatus('Рисунок обновлён');}
+ canvas.addEventListener('pointerup',end);canvas.addEventListener('pointercancel',end);canvas.addEventListener('lostpointercapture',()=>{drawing=false;snapshot=null;});
+ document.getElementById('undo').onclick=()=>{if(!undoStack.length)return;redoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height));restore(undoStack.pop());setStatus('Действие отменено');};
+ document.getElementById('redo').onclick=()=>{if(!redoStack.length)return;undoStack.push(ctx.getImageData(0,0,canvas.width,canvas.height));restore(redoStack.pop());setStatus('Действие повторено');};
+ document.getElementById('clear').onclick=()=>{if(!confirm('Очистить весь холст?'))return;pushUndo();white();setStatus('Холст очищен');};
+ function png(){return canvas.toDataURL('image/png');}
+ document.getElementById('save').onclick=()=>{const a=document.createElement('a');a.href=png();a.download='paint-studio-'+new Date().toISOString().slice(0,10)+'.png';a.click();setStatus('PNG сохранён');};
+ function getGallery(){try{return JSON.parse(localStorage.getItem('paintStudioGallery')||'[]')}catch{return[]}}
+ function renderGallery(){const el=document.getElementById('gallery'),items=getGallery();el.innerHTML='';if(!items.length){el.innerHTML='<span class="empty">Пока здесь пусто. Нажми «В галерею».</span>';return;}items.forEach((src,i)=>{const img=document.createElement('img');img.className='thumb';img.src=src;img.alt='Рисунок '+(i+1);img.title='Нажми, чтобы скачать';img.onclick=()=>{const a=document.createElement('a');a.href=src;a.download='paint-studio-'+(i+1)+'.png';a.click()};el.appendChild(img);});}
+ document.getElementById('saveGallery').onclick=()=>{let items=getGallery();items.unshift(png());items=items.slice(0,12);try{localStorage.setItem('paintStudioGallery',JSON.stringify(items));renderGallery();setStatus('Добавлено в галерею');}catch{setStatus('Память устройства заполнена — скачай PNG');}};
+ renderGallery();
+})();
+</script>
+</body>
+</html>
