@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0a14"><title>Государство</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--t:#f7f4ff;--m:#a79fc9;--g1:#8b5cf6;--g2:#3df5ff;--ok:#3ddc97;--bad:#ff5d73}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:#0b0a14;color:var(--t);font:14px ui-rounded,system-ui,-apple-system,"Segoe UI",sans-serif;user-select:none;-webkit-user-select:none}
+body{background:radial-gradient(circle at 10% 0,#3b1d6e66,transparent 50%),radial-gradient(circle at 95% 100%,#0a6e8a55,transparent 45%),#0b0a14;padding:0 10px calc(90px + env(safe-area-inset-bottom));padding-top:max(10px,env(safe-area-inset-top))}
+button{font:inherit;color:var(--t);background:#ffffff14;border:1px solid #ffffff22;border-radius:14px;min-height:40px;padding:0 12px;font-weight:600}
+button:active{transform:scale(.94)}button.on{background:linear-gradient(135deg,var(--g1),var(--g2));border-color:transparent;color:#06122b;font-weight:800}
+header{display:flex;justify-content:space-between;align-items:center;padding:6px 2px 10px}h1{font-size:19px;margin:0}
+.tabs{display:flex;gap:6px;position:fixed;left:0;right:0;bottom:0;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:#14102ad9;-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border-top:1px solid #ffffff22;z-index:5}.tabs button{flex:1;padding:0 2px;font-size:12px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.card{background:#ffffff0f;border:1px solid #ffffff1c;border-radius:16px;padding:10px 12px}.card small{color:var(--m);display:block}.card b{font-size:20px}
+.ok{color:var(--ok)}.bad{color:var(--bad)}h3{margin:14px 2px 6px;font-size:15px}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.big{width:100%;min-height:48px;font-size:16px}
+label{display:flex;align-items:center;gap:8px;margin:6px 0;color:var(--m)}label span{min-width:120px}label b{min-width:52px;text-align:right;color:var(--t)}
+input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:8px;border-radius:99px;background:linear-gradient(90deg,var(--g1),var(--g2))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;background:#fff;border:3px solid var(--g1)}
+.nw{padding:8px 10px;margin:6px 0;border-radius:12px;background:#ffffff0d;border-left:3px solid var(--g1)}.nw small{color:var(--m)}.nw.bad{border-color:var(--bad)}.nw.ok{border-color:var(--ok)}
+svg{width:100%;height:140px;background:#ffffff0a;border-radius:14px}
+.msg{padding:14px;border-radius:16px;background:#ff5d7322;border:1px solid var(--bad);margin:10px 0}
+</style></head><body>
+<header><h1>🏛 Государство</h1><div id="hd"></div></header>
+<main id="v"></main>
+<nav class="tabs"><button data-t="ov">📊 Обзор</button><button data-t="bd">💰 Бюджет</button><button data-t="tx">🧾 Налоги</button><button data-t="nw">📰 Новости</button></nav>
+<script>
+(()=>{
+const tg=window.Telegram&&Telegram.WebApp;if(tg){try{tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}catch(e){}}
+const $=s=>document.querySelector(s),f=(x,d=1)=>(+x).toFixed(d),cl=(x,a,b)=>Math.max(a,Math.min(b,x)),MN='янв фев мар апр май июн июл авг сен окт ноя дек'.split(' ');
+const KEY='stateSim1';
+const NEW=()=>({m:0,gdp:1000,pop:10,g:2.6,inf:4,u:6.5,debt:600,res:100,fx:100,rate:5,app:55,inc:15,corp:20,vat:20,sp:{soc:7,hlt:3.5,edu:3.5,def:1.5,inf:2.5,adm:1.5},ix:{inf:50,edu:50,hlt:50},last:{rev:0,sp:0,int:0,bal:0},hist:[],news:[],over:null,tab:'ov',met:'g',rng:12,ask:false});
+let S;try{S=JSON.parse(localStorage.getItem(KEY))||NEW()}catch(e){S=NEW()}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+const date=()=>MN[S.m%12]+' '+(2026+Math.floor(S.m/12));
+const dr=()=>S.debt/S.gdp*100;
+function news(t,k){S.news.unshift({d:date(),t,k:k||''});if(S.news.length>80)S.news.pop()}
+const EV=[
+['Мировые цены на энергоносители выросли: экспортёры выигрывают, импортёры страдают.',{g:.5,fx:-.6,app:2},'ok'],
+['Мировая рецессия ударила по экспорту: заказы предприятий сокращаются.',{g:-1.2,fx:.8,app:-2},'bad'],
+['Неурожай поднял цены на продукты питания.',{inf:.8,app:-2.5},'bad'],
+['Рекордный урожай удешевил продукты и поддержал село.',{inf:-.5,g:.3,app:2},'ok'],
+['Коррупционный скандал в министерстве: доверие к власти упало.',{app:-6},'bad'],
+['Крупный иностранный инвестор открыл заводы в стране.',{g:.7,app:2},'ok'],
+['Забастовки транспортников нарушили логистику.',{g:-.6,inf:.3,app:-1.5},'bad'],
+['Технологический прорыв в промышленности поднял производительность.',{g:.8,app:1.5},'ok']];
+function step(){
+if(S.over)return;const s=S,sp=s.sp,sum=Object.values(sp).reduce((a,b)=>a+b,0);
+const rev=s.gdp/12*(.5*s.inc/100*(1-s.u/100)+.25*s.corp/100+.33*s.vat/100),spend=s.gdp/12*sum/100,int=s.debt*(s.rate*.6+1)/1200,bal=rev-spend-int;
+if(bal<0){const t=Math.min(s.res,-bal);s.res-=t;s.debt+=-bal-t}else{s.res+=bal*.5;s.debt=Math.max(0,s.debt-bal*.5)}
+s.last={rev,sp:spend,int,bal};const def=-bal*12/s.gdp*100,D=dr(),real=s.rate-s.inf,sh={g:0,inf:0,fx:0,app:0};
+if(Math.random()<.09){const e=EV[Math.random()*EV.length|0];Object.assign(sh,e[1]);news('⚡ '+e[0],e[2])}
+const pg=s.g,pi=s.inf,pu=s.u;
+const tg2=2.6+.035*(s.ix.inf-50)+.03*(s.ix.edu-50)-.12*(s.corp-20)-.08*(s.inc-15)-.05*(s.vat-20)-.15*(real-2)+.12*(def-3)-.05*Math.max(0,D-60);
+s.g=cl(pg*.7+tg2*.3+sh.g,-12,12);
+s.inf=cl(pi+.05*(s.g-2.6)-.06*(real-1.5)+.04*(def-3)+.1*(3-pi)+sh.inf,0,60);
+s.u=cl(pu-.05*(s.g-2.5)+.01*(6.5-pu)+.005*(real-2),2,35);
+s.ix.inf=cl(s.ix.inf+(sp.inf-2.5)*1.2-.3,0,100);s.ix.edu=cl(s.ix.edu+(sp.edu-3.5)-.1,0,100);s.ix.hlt=cl(s.ix.hlt+(sp.hlt-3.5)-.1,0,100);
+s.gdp*=1+(s.g+s.inf)/1200;
+s.fx*=1+.0012*(s.inf-3)-.001*(real-2)+.0004*(def-3)+sh.fx/100;
+const tar=55-1.4*(s.inf-3)-1.6*(s.u-6.5)+.5*(s.g-2.5)+.15*(s.ix.hlt-50)+.1*(s.ix.edu-50)-.5*(s.inc-15)-.35*(s.vat-20)-.06*(s.corp-20)+.6*(sp.soc-7)-.1*Math.max(0,D-60)+sh.app;
+s.app=cl(s.app+.18*(tar-s.app),0,100);
+s.m++;s.hist.push({g:s.g,inf:s.inf,u:s.u,d:dr(),a:s.app,fx:s.fx,gdp:s.gdp});if(s.hist.length>240)s.hist.shift();
+// новости: только по реальным причинам
+if(pi<=8&&s.inf>8)news('Инфляция превысила 8%: цены растут быстрее зарплат, покупательная способность падает.','bad');
+if(pu<=10&&s.u>10)news('Безработица выше 10%: закрываются предприятия, рейтинг власти под ударом.','bad');
+if(pg>=0&&s.g<0)news('Экономика в рецессии: ВВП сокращается.','bad');
+if(pg<0&&s.g>=0)news('Рецессия закончилась: экономика снова растёт.','ok');
+if(s.res<=0&&s.last.bal<0)news('Резервный фонд исчерпан, дефицит покрывается долгом.','bad');
+if(D>90&&dr()>90&&s.m%6===0)news('Госдолг '+f(D,0)+'% ВВП: расходы на проценты съедают бюджет.','bad');
+if(s.app<30&&s.m%4===0)news('Рейтинг правительства '+f(s.app,0)+'%: на улицах протесты.','bad');
+if(s.m%3===0)news('Квартальный отчёт Минфина: '+(bal<0?'дефицит ':'профицит ')+f(Math.abs(def),1)+'% ВВП, процентные платежи '+f(int*12/s.gdp*100,1)+'% ВВП.',bal<0?'bad':'ok');
+if(s.m%48===0){if(s.app<45){s.over='Выборы: вы проиграли. Рейтинг '+f(s.app,0)+'% не хватило для победы.';news('🗳 '+s.over,'bad')}else news('🗳 Выборы: правительство переизбрано (рейтинг '+f(s.app,0)+'%).','ok')}
+if(dr()>150){s.over='Государство объявило дефолт: долг превысил 150% ВВП.';news('💥 '+s.over,'bad')}
+if(s.app<8){s.over='Правительство отправлено в отставку: рейтинг рухнул ниже 8%.';news('🔥 '+s.over,'bad')}
+save()}
+const tone=(v,good,bad,inv)=>{const g=inv?v<=good:v>=good,b=inv?v>=bad:v<=bad;return g?'ok':b?'bad':''};
+const card=(l,v,c)=>'<div class="card"><small>'+l+'</small><b class="'+(c||'')+'">'+v+'</b></div>';
+const sl=(k,l,min,max,st,val,u)=>'<label><span>'+l+'</span><input type="range" data-k="'+k+'" min="'+min+'" max="'+max+'" step="'+st+'" value="'+val+'"><b id="o_'+k.replace('.','_')+'">'+f(val,st<1?1:0)+u+'</b></label>';
+const MET={g:['Рост ВВП, %','g'],inf:['Инфляция, %','inf'],u:['Безработица, %','u'],d:['Долг, % ВВП','d'],a:['Рейтинг, %','a'],fx:['Курс','fx']};
+function chart(){const h=S.hist.slice(-(S.rng||240));if(h.length<2)return'<div class="card"><small>График появится после 2-го хода</small></div>';
+const v=h.map(x=>x[S.met]),mn=Math.min(...v),mx=Math.max(...v),r=mx-mn||1,pts=v.map((y,i)=>(i/(v.length-1)*300).toFixed(1)+','+(120-(y-mn)/r*100).toFixed(1)).join(' ');
+return'<svg viewBox="0 0 300 140" preserveAspectRatio="none"><polyline fill="none" stroke="#3df5ff" stroke-width="2.5" points="'+pts+'"/></svg><div class="row" style="justify-content:space-between;color:var(--m)"><span>мин '+f(mn,1)+'</span><span>сейчас '+f(v[v.length-1],1)+'</span><span>макс '+f(mx,1)+'</span></div>'}
+function view(){
+$('#hd').innerHTML='<b>'+date()+'</b> · рейтинг <b class="'+tone(S.app,55,35)+'">'+f(S.app,0)+'%</b>';
+document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===S.tab));
+let h='';const D=dr();
+if(S.over)h+='<div class="msg"><b>Игра окончена.</b><br>'+S.over+'<div class="row"><button class="on big" data-a="new">Начать заново</button></div></div>';
+if(S.tab==='ov'){
+h+='<div class="grid">'+card('ВВП, млрд',f(S.gdp,0))+card('На душу, тыс.',f(S.gdp/S.pop,1))+card('Рост ВВП',f(S.g,1)+'%',tone(S.g,2,0))+card('Инфляция',f(S.inf,1)+'%',tone(S.inf,4,8,1))+card('Безработица',f(S.u,1)+'%',tone(S.u,6,10,1))+card('Долг / ВВП',f(D,0)+'%',tone(D,60,100,1))+card('Резерв, млрд',f(S.res,0),S.res>20?'ok':'bad')+card('Курс (100=старт)',f(S.fx,1))+'</div>';
+h+='<h3>Динамика</h3><div class="row">'+Object.keys(MET).map(k=>'<button data-m="'+k+'" class="'+(S.met===k?'on':'')+'">'+MET[k][0]+'</button>').join('')+'</div><div class="row">'+[[12,'Год'],[36,'3 года'],[240,'Всё']].map(x=>'<button data-r="'+x[0]+'" class="'+(S.rng===x[0]?'on':'')+'">'+x[1]+'</button>').join('')+'</div>'+chart();
+h+='<div class="row"><button class="on big" data-a="step"'+(S.over?' disabled':'')+'>▶ Следующий месяц</button><button data-a="q">⏩ 3 месяца</button><button data-a="y">⏩ 12 месяцев</button></div>';
+if(S.ask)h+='<div class="msg">Сбросить игру и начать заново?<div class="row"><button class="on" data-a="new">Да, сбросить</button><button data-a="no">Нет</button></div></div>';else h+='<div class="row"><button data-a="ask">↺ Новая игра</button></div>'}
+if(S.tab==='bd'){const l=S.last,sum=Object.values(S.sp).reduce((a,b)=>a+b,0);
+h+='<div class="grid">'+card('Доходы (мес.)',f(l.rev,1))+card('Расходы (мес.)',f(l.sp,1))+card('Проценты по долгу',f(l.int,1))+card('Баланс (мес.)',f(l.bal,1),l.bal>=0?'ok':'bad')+card('Долг, млрд',f(S.debt,0))+card('Резерв, млрд',f(S.res,0))+'</div>';
+h+='<h3>Расходы, % ВВП (итого '+f(sum,1)+'%)</h3>'+sl('sp.soc','Пенсии и пособия',0,15,.5,S.sp.soc,'%')+sl('sp.hlt','Здравоохранение',0,10,.5,S.sp.hlt,'%')+sl('sp.edu','Образование',0,10,.5,S.sp.edu,'%')+sl('sp.def','Оборона',0,8,.5,S.sp.def,'%')+sl('sp.inf','Инфраструктура',0,10,.5,S.sp.inf,'%')+sl('sp.adm','Управление',0,6,.5,S.sp.adm,'%');
+h+='<h3>Качество (0–100)</h3><div class="grid">'+card('Инфраструктура',f(S.ix.inf,0))+card('Образование',f(S.ix.edu,0))+card('Здравоохр.',f(S.ix.hlt,0))+'</div>';
+h+='<div class="row"><button data-a="bor">+ Занять 1% ВВП</button><button data-a="rep">− Погасить 1% ВВП</button></div>'}
+if(S.tab==='tx'){
+h+='<h3>Налоги</h3>'+sl('inc','Подоходный',0,45,1,S.inc,'%')+sl('corp','На прибыль',0,50,1,S.corp,'%')+sl('vat','НДС',0,35,1,S.vat,'%')+'<h3>Денежная политика</h3>'+sl('rate','Ключевая ставка',0,30,.5,S.rate,'%')+
+'<div class="card" style="margin-top:10px"><small>Как это работает</small>Высокие налоги пополняют бюджет, но снижают рост, прибыль бизнеса и рейтинг. Высокая ставка сбивает инфляцию, но тормозит экономику и повышает проценты по долгу.</div>'}
+if(S.tab==='nw')h+=S.news.length?S.news.map(n=>'<div class="nw '+n.k+'"><small>'+n.d+'</small><br>'+n.t+'</div>').join(''):'<div class="card"><small>Новостей пока нет. Сделай первый ход.</small></div>';
+$('#v').innerHTML=h}
+function run(n){for(let i=0;i<n&&!S.over;i++)step();view()}
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+if(b.dataset.t){S.tab=b.dataset.t;save();view();scrollTo(0,0);return}
+if(b.dataset.m){S.met=b.dataset.m;view();return}
+if(b.dataset.r){S.rng=+b.dataset.r;view();return}
+const a=b.dataset.a;if(!a)return;
+if(a==='step')run(1);else if(a==='q')run(3);else if(a==='y')run(12);
+else if(a==='ask'){S.ask=true;view()}else if(a==='no'){S.ask=false;view()}
+else if(a==='new'){S=NEW();save();view()}
+else if(a==='bor'){S.debt+=S.gdp*.01;S.res+=S.gdp*.01;news('Правительство заняло '+f(S.gdp*.01,0)+' млрд на рынке: резервы пополнены, долг вырос.');save();view()}
+else if(a==='rep'){const x=Math.min(S.res,S.gdp*.01,S.debt);S.res-=x;S.debt-=x;news('Погашено '+f(x,0)+' млрд долга из резерва.','ok');save();view()}});
+document.addEventListener('input',e=>{const k=e.target.dataset&&e.target.dataset.k;if(!k)return;const v=+e.target.value,p=k.split('.');if(p[1])S[p[0]][p[1]]=v;else S[k]=v;
+const o=$('#o_'+k.replace('.','_'));if(o)o.textContent=f(v,e.target.step<1?1:0)+'%';save()});
+view();
+})();
+</script></body></html>
