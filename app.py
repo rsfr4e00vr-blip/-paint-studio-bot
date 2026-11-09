@@ -53,6 +53,16 @@ def game():
     return FileResponse(BASE / "game.html")
 
 
+@app.get("/style.css")
+def game_css():
+    return FileResponse(BASE / "style.css", media_type="text/css")
+
+
+@app.get("/game.js")
+def game_js():
+    return FileResponse(BASE / "game.js", media_type="application/javascript")
+
+
 @app.get("/health")
 def health():
     return PlainTextResponse("ok")
