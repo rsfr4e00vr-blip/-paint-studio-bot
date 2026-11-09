@@ -67,7 +67,7 @@ async def health():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Открыть Paint Studio", web_app=WebAppInfo(url=WEBAPP_URL))],
-        [InlineKeyboardButton("🏛 Симулятор государства", web_app=WebAppInfo(url=WEBAPP_URL + "/game"))],
+        [InlineKeyboardButton("🏛 Симулятор государства", web_app=WebAppInfo(url=WEBAPP_URL + "/game?v=3"))],
         [InlineKeyboardButton("ℹ️ Как пользоваться", callback_data="help")],
     ])
     await update.effective_message.reply_text(
