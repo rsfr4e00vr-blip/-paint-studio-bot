@@ -1,71 +1,215 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Симулятор Страны PRO</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #eef2f5; color: #333; margin: 0; padding: 15px; }
-        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        h3 { margin-top: 0; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 5px; }
-        .btn { display: block; width: 100%; background: #3498db; color: white; border: none; padding: 12px; margin: 8px 0; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; box-sizing: border-box; }
-        .btn-danger { background: #e74c3c; }
-        .btn-success { background: #2ecc71; }
-        .bar-container { width: 100%; background: #ddd; border-radius: 6px; margin: 5px 0 15px 0; }
-        .bar { height: 12px; background: #2ecc71; border-radius: 6px; width: 50%; transition: width 0.3s; }
-        .flex { display: flex; justify-content: space-between; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Государственный симулятор</title>
+<style>
+body{font-family:Arial;background:#101827;color:#eee;margin:0;padding:20px}
+h1,h2{color:#70b7ff}
+section{background:#1d293b;padding:16px;margin:15px 0;border-radius:10px}
+input,select,textarea,button{box-sizing:border-box;width:100%;padding:10px;margin:6px 0;border-radius:6px;border:1px solid #526078;background:#29384d;color:white}
+button{background:#2469ad;cursor:pointer}
+button:hover{background:#3489d8}
+.document{background:#29384d;padding:12px;margin:10px 0;border-radius:8px}
+small{color:#aabbd0}
+</style>
 </head>
 <body>
 
-    <!-- Раздел Главных ресурсов -->
-    <div class="card">
-        <h3>👑 Резиденция Правителя</h3>
-        <p>🏛️ Здание: <strong id="palace-name">Загрузка...</strong></p>
-        <div class="flex">
-            <span>💰 Казна: <span id="money-val">0</span>$</span>
-            <span>📦 Резервы: <span id="stock-val">0</span> ед.</span>
-        </div>
-    </div>
+<h1>🏛️ Симулятор государства</h1>
 
-    <!-- Статус-бары показателей страны -->
-    <div class="card">
-        <h3>📊 Показатели государства</h3>
-        <p>📈 Стабильность системы:</p>
-        <div class="bar-container"><div id="stability-bar" class="bar"></div></div>
-        <p>👥 Одобрение населения:</p>
-        <div class="bar-container"><div id="approval-bar" class="bar"></div></div>
-    </div>
+<section>
+<h2>Государственная информация</h2>
+<p>Казна: <b id="money">1000000</b> $</p>
+<p>Стабильность: <b id="stability">75</b>%</p>
+<p>Поддержка правительства: <b id="support">65</b>%</p>
+<p>Текущий месяц: <b id="month">1</b></p>
+<button onclick="nextMonth()">Начать следующий месяц</button>
+</section>
 
-    <!-- Влияние фракций -->
-    <div class="card">
-        <h3>⚔️ Лояльность фракций</h3>
-        <div id="factions-container"></div>
-    </div>
+<section>
+<h2>📜 Государственные документы</h2>
+<p>Создавай законы, указы, приказы, договоры и отчёты.</p>
 
-    <!-- Пульт Черного Рынка и Шпионажа -->
-    <div class="card" style="background: #fdfefe; border: 1px solid #d6dbdf;">
-        <h3>⚖️ Секретные Службы и Рынок</h3>
-        <button class="btn btn-success" onclick="makeMarketAction('sell')">💰 Продать резерв (+800$)</button>
-        <button class="btn btn-danger" onclick="makeMarketAction('print')">🖨️ Печатный станок (+2000$, -20% Стаб.)</button>
-        <button class="btn" style="background: #9b59b6;" onclick="makeSpyAction('steal')">🕵️ Украсть золото (Шанс 60%)</button>
-        <button class="btn" style="background: #f1c40f; color: #333;" onclick="makeSpyAction('propaganda')">📣 Пропаганда (Шанс 80%)</button>
-    </div>
+<label>Тип документа</label>
+<select id="type">
+<option>Указ президента</option>
+<option>Государственный закон</option>
+<option>Конституция</option>
+<option>Государственный бюджет</option>
+<option>Военный приказ</option>
+<option>Дипломатический договор</option>
+<option>Мирный договор</option>
+<option>Постановление правительства</option>
+<option>Отчёт разведки</option>
+<option>Отчёт министерства</option>
+<option>Региональное постановление</option>
+<option>Приказ о мобилизации</option>
+<option>Протокол заседания парламента</option>
+<option>Чрезвычайный указ</option>
+</select>
 
-    <!-- Парламент и Реформы -->
-    <div class="card">
-        <h3>📜 Подписание Указов</h3>
-        <button class="btn" onclick="upgradePalace()">🏰 Улучшить Дворец</button>
-        <button class="btn" onclick="adoptLaw('press')">📝 Свобода прессы (-1500$)</button>
-        <button class="btn" onclick="adoptLaw('tax')">🪖 Военный налог (-1000$)</button>
-        <button class="btn" onclick="adoptLaw('money')">💵 Субсидии рабочим (-2500$)</button>
-        <button class="btn" onclick="adoptLaw('censorship')">👁️ Тотальная цензура (-2000$)</button>
-    </div>
+<label>Название документа</label>
+<input id="title" placeholder="Например: Закон о развитии промышленности">
 
-    <!-- Смена хода -->
-    <button class="btn btn-danger" style="font-size: 18px; padding: 15px;" onclick="nextTurn()">🎲 ЗАВЕРШИТЬ ХОД</button>
+<label>Автор документа</label>
+<input id="author" placeholder="Например: Президент">
 
-    <!-- Скрипты логики -->
-    <script src="extras.js"></script>
+<label>Номер документа</label>
+<input id="number" placeholder="Например: №001">
+
+<label>Основной текст</label>
+<textarea id="content" rows="7" placeholder="Напиши содержание документа..."></textarea>
+
+<label>Цель документа</label>
+<textarea id="goal" rows="3" placeholder="Для чего создаётся документ?"></textarea>
+
+<label>Ожидаемые последствия</label>
+<textarea id="effects" rows="3" placeholder="Какие последствия он вызовет?"></textarea>
+
+<label>Статус</label>
+<select id="status">
+<option>Черновик</option>
+<option>На рассмотрении</option>
+<option>Утверждён</option>
+<option>Отклонён</option>
+</select>
+
+<button onclick="addDocument()">Создать документ</button>
+<button onclick="exportDocuments()">Экспортировать документы</button>
+<input type="text" id="search" placeholder="Поиск документов..." oninput="renderDocuments()">
+<select id="filter" onchange="renderDocuments()">
+<option value="">Все документы</option>
+<option>Указ президента</option>
+<option>Государственный закон</option>
+<option>Военный приказ</option>
+<option>Дипломатический договор</option>
+<option>Государственный бюджет</option>
+<option>Отчёт министерства</option>
+</select>
+<div id="documents"></div>
+</section>
+
+<script>
+let state = JSON.parse(localStorage.getItem("countryGame")) || {
+ money:1000000, stability:75, support:65, month:1, documents:[]
+};
+
+function save(){
+ localStorage.setItem("countryGame",JSON.stringify(state));
+ update();
+}
+
+function update(){
+ document.getElementById("money").textContent=state.money.toLocaleString("ru-RU");
+ document.getElementById("stability").textContent=state.stability;
+ document.getElementById("support").textContent=state.support;
+ document.getElementById("month").textContent=state.month;
+ renderDocuments();
+}
+
+function nextMonth(){
+ state.month++;
+ state.money+=50000;
+ state.stability=Math.max(0,Math.min(100,state.stability+Math.floor(Math.random()*5)-2));
+ save();
+}
+
+function addDocument(){
+ let title=document.getElementById("title").value.trim();
+ let content=document.getElementById("content").value.trim();
+ if(!title||!content){alert("Заполни название и основной текст!");return;}
+
+ state.documents.unshift({
+  id:Date.now(),
+  type:document.getElementById("type").value,
+  title,
+  author:document.getElementById("author").value,
+  number:document.getElementById("number").value,
+  content,
+  goal:document.getElementById("goal").value,
+  effects:document.getElementById("effects").value,
+  status:document.getElementById("status").value,
+  date:new Date().toLocaleString("ru-RU"),
+  month:state.month
+ });
+
+ ["title","author","number","content","goal","effects"].forEach(id=>document.getElementById(id).value="");
+ save();
+ alert("Документ успешно создан!");
+}
+
+function renderDocuments(){
+ let list=document.getElementById("documents");
+ let search=document.getElementById("search").value.toLowerCase();
+ let filter=document.getElementById("filter").value;
+ list.innerHTML="";
+ let docs=state.documents.filter(d=>
+  (!filter||d.type===filter)&&
+  (d.title.toLowerCase().includes(search)||d.content.toLowerCase().includes(search)||d.type.toLowerCase().includes(search))
+ );
+ if(!docs.length){list.innerHTML="<p>Документов пока нет.</p>";return;}
+
+ docs.forEach(d=>{
+  let div=document.createElement("div");
+  div.className="document";
+  let heading=document.createElement("h3");
+  heading.textContent=d.number+" — "+d.title;
+  let meta=document.createElement("small");
+  meta.textContent=d.type+" | "+d.date+" | "+d.author+" | "+d.status;
+  let body=document.createElement("p");
+  body.textContent=d.content;
+  let goal=document.createElement("p");
+  goal.textContent="Цель: "+d.goal;
+  let effects=document.createElement("p");
+  effects.textContent="Последствия: "+d.effects;
+  let edit=document.createElement("button");
+  edit.textContent="Изменить статус";
+  edit.onclick=()=>changeStatus(d.id);
+  let download=document.createElement("button");
+  download.textContent="Скачать TXT";
+  download.onclick=()=>downloadDocument(d);
+  let del=document.createElement("button");
+  del.textContent="Удалить";
+  del.onclick=()=>deleteDocument(d.id);
+  div.append(heading,meta,body,goal,effects,edit,download,del);
+  list.append(div);
+ });
+}
+
+function changeStatus(id){
+ let d=state.documents.find(x=>x.id===id);
+ if(!d)return;
+ let status=prompt("Введи статус: Черновик, На рассмотрении, Утверждён, Отклонён",d.status);
+ if(status){d.status=status;save();}
+}
+
+function deleteDocument(id){
+ if(confirm("Удалить этот документ?")){
+  state.documents=state.documents.filter(d=>d.id!==id);
+  save();
+ }
+}
+
+function downloadDocument(d){
+ let text=`${d.type}\n${d.number} — ${d.title}\nАвтор: ${d.author}\nДата: ${d.date}\nСтатус: ${d.status}\n\nСодержание:\n${d.content}\n\nЦель:\n${d.goal}\n\nПоследствия:\n${d.effects}`;
+ let blob=new Blob([text],{type:"text/plain;charset=utf-8"});
+ let url=URL.createObjectURL(blob);
+ let a=document.createElement("a");
+ a.href=url;a.download=(d.title||"document")+".txt";a.click();
+ URL.revokeObjectURL(url);
+}
+
+function exportDocuments(){
+ let blob=new Blob([JSON.stringify(state.documents,null,2)],{type:"application/json"});
+ let url=URL.createObjectURL(blob);
+ let a=document.createElement("a");
+ a.href=url;a.download="government_documents.json";a.click();
+ URL.revokeObjectURL(url);
+}
+
+update();
+</script>
 </body>
 </html>
