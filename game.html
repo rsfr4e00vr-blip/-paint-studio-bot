@@ -33,6 +33,7 @@ button:disabled{opacity:.4}button small{display:block;font-weight:500;color:inhe
 <header><h1>🏛 Государство</h1><div id="hd"></div></header>
 <main id="v"></main><div id="tip"></div>
 <nav class="tabs"><button data-t="ov">📊 Обзор</button><button data-t="bd">💰 Бюджет</button><button data-t="tx">🧾 Налоги</button><button data-t="co">🌍 Страна</button><button data-t="nw">📰 Новости</button></nav>
+<script>window.onerror=function(m,u,l){var v=document.getElementById('v');if(v)v.innerHTML='<div class="msg">Ошибка: '+m+' (стр. '+l+')</div>'};</script>
 <script>
 (()=>{
 const tg=window.Telegram&&Telegram.WebApp;if(tg){try{tg.ready();tg.expand();tg.disableVerticalSwipes&&tg.disableVerticalSwipes()}catch(e){}}
@@ -42,7 +43,7 @@ const NEW=()=>({m:0,gdp:1000,pop:10,g:2.6,inf:4,u:6.5,debt:600,res:100,fx:100,ra
 sp:{soc:7,hlt:3.5,edu:3.5,def:1.5,inf:2.5,adm:1.5,ac:.5},ix:{inf:50,edu:50,hlt:50},
 cor:35,oil:100,I:20,tb:2,ex:22,im:20,br:12,dt:10.5,mig:.5,old:18,rg:100,cd:0,ev:null,evl:-1,pend:[],
 last:{rev:0,sp:0,int:0,bal:0,def:0},hist:[],news:[],over:null,tab:'ov',met:'g',rng:12,ask:false});
-const rd=n=>{try{return JSON.parse(localStorage.getItem(KEY+n)||(n==1?localStorage.getItem('stateSim1'):null))}catch(e){return null}};
+const rd=n=>{try{return JSON.parse(localStorage.getItem(KEY+n))}catch(e){return null}};
 const L=o=>{const n=NEW();if(!o)return n;const s=Object.assign(n,o);s.sp=Object.assign(NEW().sp,o.sp);s.ix=Object.assign(NEW().ix,o.ix);s.last=Object.assign(NEW().last,o.last);s.pend=o.pend||[];if(typeof s.over==='string')s.over=['Игра окончена',s.over,0];return s};
 let A=1;try{A=+localStorage.getItem(KEY+'act')||1}catch(e){}
 let S=L(rd(A));
@@ -162,5 +163,4 @@ const MET={g:['Рост ВВП, %'],inf:['Инфляция, %'],u:['Безраб
 function chart(){const h=S.hist.slice(-(S.rng||240)).filter(x=>x[S.met]!=null);if(h.length<2)return'<div class="card"><small>График появится после 2-го хода</small></div>';
 const v=h.map(x=>x[S.met]),mn=Math.min(...v),mx=Math.max(...v),r=mx-mn||1,P=v.map((y,i)=>(i/(v.length-1)*300).toFixed(1)+','+(120-(y-mn)/r*100).toFixed(1)).join(' '),d=v[v.length-1]-v[0],ar=Math.abs(d)<.01*Math.abs(v[0])+.02?'→':d>0?'↑':'↓';
 return'<svg viewBox="0 0 300 140" preserveAspectRatio="none"><defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3df5ff" stop-opacity=".35"/><stop offset="1" stop-color="#3df5ff" stop-opacity="0"/></linearGradient></defs>'+[20,70,120].map(y=>'<line x1="0" x2="300" y1="'+y+'" y2="'+y+'" stroke="#ffffff14"/>').join('')+'<polygon fill="url(#gr)" points="0,140 '+P+' 300,140"/><polyline fill="none" stroke="#3df5ff" stroke-width="2.5" vector-effect="non-scaling-stroke" points="'+P+'"/></svg><div class="row" style="justify-content:space-between;color:var(--m)"><span>мин '+f(mn,1)+'</span><span>сейчас '+f(v[v.length-1],1)+' '+ar+'</span><span>макс '+f(mx,1)+'</span></div>'}
-function view(){
-$('#hd').innerHTML='<b>'+date()+'</b> · рейтинг <b class="'+tone(S.app,55,35)+'">'+f(S.app,0)+'%</b>'+tr(
+function view()
