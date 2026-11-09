@@ -226,4 +226,4 @@ def handle_spy(call):
             p["money"] += loot
             res = f"😎 **Успех!** Ваши агенты обчистили зарубежный банк на **{loot}$**!"
         else:
-            p["stability"] = max(0, p["stability"] - 20)
+            p["stability"] = max(0, p["stability"] - 20
