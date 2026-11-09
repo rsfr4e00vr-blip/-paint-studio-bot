@@ -30,8 +30,8 @@ button:disabled{opacity:.4}button small{display:block;font-weight:500;color:inhe
 .ev{padding:14px;border-radius:16px;background:linear-gradient(135deg,#8b5cf633,#3df5ff22);border:1px solid var(--g1);margin:10px 0}.ev p{margin:6px 0 10px;color:var(--m)}.ev button{width:100%;text-align:left;margin:4px 0;padding:8px 12px;min-height:46px}
 .msg.win{background:#3ddc9722;border-color:var(--ok)}
 </style></head><body>
-<header><h1>🏛 Государство</h1><div id="hd"></div></header>
-<main id="v"></main><div id="tip"></div>
+<header><h1>🏛 Государство <small style="font-size:11px;color:var(--m)">v3</small></h1><div id="hd"></div></header>
+<main id="v"><div class="card"><small>Загрузка… если эта надпись не исчезает, скрипт не запустился (версия v3)</small></div></main><div id="tip"></div>
 <nav class="tabs"><button data-t="ov">📊 Обзор</button><button data-t="bd">💰 Бюджет</button><button data-t="tx">🧾 Налоги</button><button data-t="co">🌍 Страна</button><button data-t="nw">📰 Новости</button></nav>
 <script>window.onerror=function(m,u,l){var v=document.getElementById('v');if(v)v.innerHTML='<div class="msg">Ошибка: '+m+' (стр. '+l+')</div>'};</script>
 <script>
@@ -162,5 +162,4 @@ const sl=(k,l,min,max,st,val,u)=>'<label><span>'+l+'</span><input type="range" d
 const MET={g:['Рост ВВП, %'],inf:['Инфляция, %'],u:['Безработица, %'],d:['Долг, % ВВП'],def:['Дефицит, % ВВП'],a:['Рейтинг, %'],fx:['Курс'],cor:['Коррупция, %'],tb:['Торг. баланс, %'],oil:['Сырьё'],pop:['Население'],i:['Инвестиции, %']};
 function chart(){const h=S.hist.slice(-(S.rng||240)).filter(x=>x[S.met]!=null);if(h.length<2)return'<div class="card"><small>График появится после 2-го хода</small></div>';
 const v=h.map(x=>x[S.met]),mn=Math.min(...v),mx=Math.max(...v),r=mx-mn||1,P=v.map((y,i)=>(i/(v.length-1)*300).toFixed(1)+','+(120-(y-mn)/r*100).toFixed(1)).join(' '),d=v[v.length-1]-v[0],ar=Math.abs(d)<.01*Math.abs(v[0])+.02?'→':d>0?'↑':'↓';
-return'<svg viewBox="0 0 300 140" preserveAspectRatio="none"><defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3df5ff" stop-opacity=".35"/><stop offset="1" stop-color="#3df5ff" stop-opacity="0"/></linearGradient></defs>'+[20,70,120].map(y=>'<line x1="0" x2="300" y1="'+y+'" y2="'+y+'" stroke="#ffffff14"/>').join('')+'<polygon fill="url(#gr)" points="0,140 '+P+' 300,140"/><polyline fill="none" stroke="#3df5ff" stroke-width="2.5" vector-effect="non-scaling-stroke" points="'+P+'"/></svg><div class="row" style="justify-content:space-between;color:var(--m)"><span>мин '+f(mn,1)+'</span><span>сейчас '+f(v[v.length-1],1)+' '+ar+'</span><span>макс '+f(mx,1)+'</span></div>'}
-function view()
+return'<svg viewBox="0 0 300 140" preserveAspectRatio="none"><defs><linearGradient id="gr" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3df5ff" stop-opacity=".35"/><stop offset="1" stop-color="#3df5ff" stop-opacity="0"/></linearGradient></defs>'+[20,70,120].map(y=>'<line x1="0" x2="300" y1="'+y+'" y2="'+y+'" stroke="#ffffff14"/>').join('')+'<polygon fill="url(#gr)" points="0,140 '+P+' 300,140"/><polyline fill="none" stroke="#3df5ff" stroke-width="2.5" vector-effect="non-scaling-stroke" points="'+P+'"/></svg><div class="row" style="justify-c
