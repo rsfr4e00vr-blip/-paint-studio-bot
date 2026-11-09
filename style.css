@@ -42,3 +42,53 @@ select,input,textarea{background:#0b1626;border:1px solid #2d4868;border-radius:
 .party-card{border-color:var(--gold)!important;background:linear-gradient(160deg,#2a2412,#161208)!important}
 .actions button{margin:3px 3px 3px 0}.muted,label{color:var(--muted)}
 @media(max-width:760px){h1{font-size:19px}.stat b{font-size:17px}.panel{padding:12px;border-radius:15px}.tabbar{top:52px}}
+
+/* ===== СТИЛЬ HEARTS OF IRON 4 ===== */
+:root{--bg:#0d1519;--panel:#1a2127;--panel2:#232d35;--line:#3a4650;--txt:#d9d4c3;--muted:#8f98a0;--gold:#d6b25e;--green:#6f9a5a;--red:#b5504a;--blue:#5b89a8}
+html,body{background:#0d1519}
+body{background:linear-gradient(#0d1519,#0b1114)!important;background-attachment:fixed;font:15px/1.45 "Roboto Condensed","Segoe UI",system-ui,sans-serif;color:var(--txt)}
+h1,h2,.time-now,.tabbar button,.stat b,th{font-family:Oswald,"Roboto Condensed",sans-serif}
+header{display:flex;align-items:center;gap:14px;background:linear-gradient(#222c33,#161e23)!important;border-bottom:2px solid #3a4650;box-shadow:none;padding-top:9px;padding-bottom:9px}
+.emblem{width:44px;height:44px;border:2px solid var(--gold);background:#1b2a3a;display:flex;align-items:center;justify-content:center;flex:none}
+h1{font-size:22px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:#e8dfc4;text-shadow:none;margin:0}
+header p{color:var(--muted);margin:0}
+.timebar{background:#161e23;border:2px solid var(--line);border-radius:0;box-shadow:none;padding:8px 10px}
+.time-now{font-size:19px;font-weight:500;color:var(--gold);text-shadow:none;letter-spacing:.03em}
+button{background:#232d35;border:1px solid var(--line);border-radius:0;color:var(--txt);font-weight:700;box-shadow:none;text-transform:none}
+button:hover{filter:none;border-color:var(--gold);color:#fff;transform:none;background:#2b3842}
+button:active{transform:none;background:#1c252c}
+button.primary{background:#5e4a1c;border-color:var(--gold);color:#f2e2b0}
+button.good{background:#2f4a2f;border-color:var(--green);color:#d5efc6}
+button.danger{background:#522a2a;border-color:var(--red);color:#f1c9c4}
+.timebar button.active{background:#3a5a3a;color:#fff;border-color:var(--green)}
+select,input,textarea{background:#10171c;border:1px solid var(--line);border-radius:0;color:var(--txt)}
+.pill{background:#10171c;border:1px solid var(--line);border-radius:0;color:var(--muted)}
+.topline{gap:6px}
+.stat{display:flex;align-items:center;gap:10px;background:#10171c;border:1px solid var(--line);border-bottom:2px solid var(--gold);border-radius:0;box-shadow:none;padding:9px 12px}
+.stat svg{flex:none}.stat small{color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase}.stat b{font-size:19px;font-weight:500;margin:0;color:#e8dfc4}
+.tabbar{background:#161e23!important;border:2px solid var(--line);border-radius:0;box-shadow:none;padding:5px;gap:4px;backdrop-filter:none}
+.tabbar button{border-radius:0;background:#1a2127;border:1px solid var(--line);font-size:14px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;padding:8px 14px}
+.tabbar button.active{background:var(--gold);color:#161c21;border-color:var(--gold);box-shadow:none}
+.panel{background:var(--panel);border:2px solid var(--line);border-radius:0;box-shadow:none;padding:14px}
+.panel h2{font-size:16px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--gold);border-bottom:1px solid var(--line);padding-bottom:8px;margin:0 0 12px}
+.mini{background:#10171c;border:1px solid var(--line);border-radius:0;transition:none}
+.mini:hover{border-color:var(--gold);transform:none;box-shadow:none}
+.mini b{color:#e8dfc4}
+.bar{height:9px;border-radius:0;background:#0d1519;border:1px solid var(--line);box-shadow:none}
+.bar i{border-radius:0}
+th{background:#10171c;font-weight:500;letter-spacing:.06em}
+.log div,.choice{border-bottom:1px solid #2a343c}
+.chart-wrap{background:#0d1519;border:1px solid var(--line);border-radius:0}
+.notice{background:#1a2127;border:2px solid var(--gold);border-radius:0;color:#e8dfc4}
+.gameover{background:#000c}
+.gameover-box{background:#1a2127;border:2px solid var(--gold);border-radius:0;box-shadow:none}
+.gameover-box h2{font-family:Oswald,sans-serif;letter-spacing:.1em;color:var(--gold)}
+.party-card{border-color:var(--gold)!important;background:#2a2412!important}
+.hoimap{display:block;width:100%;max-width:640px;margin:0 auto;background:#0d1519;border:1px solid var(--line)}
+.hoimap .maptxt{font-family:Oswald,sans-serif;font-size:15px;font-weight:600;fill:#101418;pointer-events:none}
+.hoimap .maptxt2{font-size:13px;fill:#101418;pointer-events:none}
+.maplegend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:10px;color:var(--muted);font-size:13px}
+.maplegend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+.okbanner{border-color:var(--green)!important;color:#b9dca6;background:#1f2f1f!important}
+.warnbanner{border-color:var(--red)!important;color:#f1c9c4;background:#3a1f1f!important;font-weight:700}
+@media(max-width:760px){.timebar button{flex:1 1 auto;white-space:nowrap;padding:9px 8px;min-width:0}.timebar label{display:none}.time-now{width:100%}h1{font-size:18px}.stat{padding:8px 10px}.stat b{font-size:16px}.panel{padding:10px;border-radius:0}.tabbar{top:60px}}
