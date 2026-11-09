@@ -1,3 +1,4 @@
+
 import asyncio
 import os
 import re
@@ -45,6 +46,11 @@ async def home():
     return HTMLResponse(html, headers=NOCACHE)
 
 
+@api.get("/game")
+async def game():
+    return FileResponse(BASE_DIR / "game.html", media_type="text/html", headers=NOCACHE)
+
+
 @api.get("/{name}.js")
 async def js_file(name: str):
     path = BASE_DIR / (name + ".js")
@@ -61,6 +67,7 @@ async def health():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Открыть Paint Studio", web_app=WebAppInfo(url=WEBAPP_URL))],
+        [InlineKeyboardButton("🏛 Симулятор государства", web_app=WebAppInfo(url=WEBAPP_URL + "/game"))],
         [InlineKeyboardButton("ℹ️ Как пользоваться", callback_data="help")],
     ])
     await update.effective_message.reply_text(
