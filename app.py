@@ -1,146 +1,139 @@
+import telebot
+from telebot import types
 
-import asyncio
-import os
-import re
-from pathlib import Path
+# ⚠️ ВСТАВЬ СЮДА СВОЙ ТОКЕН ИЗ BOTFATHER ВМЕСТО КАВЫЧЕК!
+TOKEN = "ТВОЙ_ТОКЕН_БОТА"
+bot = telebot.TeleBot(TOKEN)
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, HTMLResponse, Response
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo, Update
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
-import uvicorn
+# База данных игроков (хранится в памяти, пока бот запущен)
+players = {}
 
-BASE_DIR = Path(__file__).resolve().parent
-TOKEN = os.getenv("BOT_TOKEN", "").strip()
-WEBAPP_URL = os.getenv("WEBAPP_URL", "").strip().rstrip("/")
-PORT = int(os.getenv("PORT", "10000"))
+# База доступных законов
+LAWS = {
+    "press": {"name": "Свобода прессы 📝", "cost": 1500},
+    "tax": {"name": "Военный налог 🪖", "cost": 500},
+    "money": {"name": "Субсидии рабочим 💰", "cost": 3000}
+}
 
-if not TOKEN:
-    raise RuntimeError("Не задан BOT_TOKEN в переменных окружения")
-if not WEBAPP_URL.startswith("https://"):
-    raise RuntimeError("WEBAPP_URL должен быть публичным HTTPS-адресом Mini App")
+# Функция, которая создает профиль нового игрока
+def init_player(user_id):
+    if user_id not in players:
+        players[user_id] = {
+            "money": 5000,
+            "stability": 75,
+            "approval_rating": 50,
+            "government_type": "Демократия",
+            "factions": {
+                "Либералы": {"loyalty": 60},
+                "Военные": {"loyalty": 50},
+                "Рабочие": {"loyalty": 70}
+            },
+            "laws": []  # Принятые законы
+        }
 
-api = FastAPI(title="Paint Studio Telegram Bot")
-
-INDEX_FILE = BASE_DIR / "static" / "index.html"
-if not INDEX_FILE.exists():
-    INDEX_FILE = BASE_DIR / "index.html"
-
-NOCACHE = {"Cache-Control": "no-cache"}
-
-
-def extra_scripts():
-    """Все файлы extras*.js рядом с app.py подключаются автоматически."""
-    names = sorted(p.name for p in BASE_DIR.glob("extras*.js"))
-    return "".join('<script src="/%s"></script>' % n for n in names)
-
-
-@api.get("/")
-async def home():
-    html = INDEX_FILE.read_text(encoding="utf-8")
-    tags = extra_scripts()
-    if "</body>" in html:
-        html = html.replace("</body>", tags + "</body>")
-    else:
-        html += tags
-    return HTMLResponse(html, headers=NOCACHE)
-
-
-GAME_FILE = BASE_DIR / "game.html"
-
-
-def game_version():
-    try:
-        return str(int(GAME_FILE.stat().st_mtime))
-    except OSError:
-        return "0"
-
-
-@api.get("/game")
-async def game():
-    try:
-        html = GAME_FILE.read_text(encoding="utf-8")
-    except OSError:
-        return HTMLResponse("<h3>game.html не найден на сервере</h3>", status_code=500, headers=NOCACHE)
-    # защита от обрезанного файла (частая проблема при копировании через телефон)
-    if not html.rstrip().lower().endswith("</html>"):
-        return HTMLResponse(
-            "<body style='font:16px sans-serif;padding:20px;background:#0b0a14;color:#fff'>"
-            "<h3>game.html загружен не полностью</h3>"
-            "<p>Файл на сервере обрезан. Загрузите game.html целиком (файлом, а не копированием текста) "
-            "и дождитесь нового деплоя.</p></body>",
-            status_code=500, headers=NOCACHE)
-    return HTMLResponse(html, headers=NOCACHE)
-
-
-@api.get("/{name}.js")
-async def js_file(name: str):
-    path = BASE_DIR / (name + ".js")
-    if not re.fullmatch(r"[a-z0-9_-]+", name) or not path.exists():
-        return Response(status_code=404)
-    return FileResponse(path, media_type="text/javascript", headers=NOCACHE)
-
-
-@api.get("/health")
-async def health():
-    return {"status": "ok"}
-
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎨 Открыть Paint Studio", web_app=WebAppInfo(url=WEBAPP_URL))],
-        [InlineKeyboardButton("🏛 Симулятор государства", web_app=WebAppInfo(url=WEBAPP_URL + "/game?v=" + game_version()))],
-        [InlineKeyboardButton("ℹ️ Как пользоваться", callback_data="help")],
-    ])
-    await update.effective_message.reply_text(
-        "Привет! Это Paint Studio — мини-рисовалка прямо в Telegram.\n\n"
-        "Рисуй пальцем, выбирай кисти и цвета, добавляй текст и стикеры. "
-        "Готовую работу можно скачать в PNG.\n\n"
-        "Нажми кнопку ниже, чтобы открыть холст 👇",
-        reply_markup=keyboard,
+# Команда /start — начало игры и выдача главного меню
+@bot.message_handler(commands=['start'])
+def start_game(message):
+    init_player(message.from_user.id)
+    
+    keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    keyboard.add(types.KeyboardButton("🏛️ Политика"), types.KeyboardButton("💰 Казна и Баланс"))
+    
+    bot.send_message(
+        message.chat.id, 
+        "👑 Добро пожаловать, Господин Правитель! Управляйте своей страной с помощью меню ниже.", 
+        reply_markup=keyboard
     )
 
+# Обработка нажатия обычных кнопок на клавиатуре
+@bot.message_handler(func=lambda msg: True)
+def handle_menu(message):
+    user_id = message.from_user.id
+    init_player(user_id)
+    p = players[user_id]
+    
+    if message.text == "💰 Казна и Баланс":
+        bot.send_message(message.chat.id, f"💵 Бюджет вашей страны: *{p['money']}$*", parse_mode="Markdown")
+        
+    elif message.text == "🏛️ Политика":
+        # Красивый текст с политическим состоянием
+        text = (
+            f"🏛️ *Политическое меню страны*\n\n"
+            f"Режим правления: {p['government_type']}\n"
+            f"Одобрение народа: {p['approval_rating']}%\n"
+            f"Стабильность государства: {p['stability']}%\n\n"
+            f"📊 *Лояльность фракций:*\n"
+            f"▪️ Либералы: {p['factions']['Либералы']['loyalty']}%\n"
+            f"▪️ Военные: {p['factions']['Военные']['loyalty']}%\n"
+            f"▪️ Рабочие: {p['factions']['Рабочие']['loyalty']}%\n\n"
+            f"Выберите закон для принятия:"
+        )
+        
+        # Кнопки под текстом для законов
+        keyboard = types.InlineKeyboardMarkup()
+        for law_id, law_data in LAWS.items():
+            if law_id not in p["laws"]:
+                btn = types.InlineKeyboardButton(
+                    text=f"📜 {law_data['name']} (-{law_data['cost']}$)", 
+                    callback_data=f"law_{law_id}"
+                )
+                keyboard.add(btn)
+                
+        bot.send_message(message.chat.id, text, parse_mode="Markdown", reply_markup=keyboard)
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text(
-        "Как пользоваться:\n"
-        "• Кисти — 15 видов, размер, прозрачность, симметрия.\n"
-        "• Фигуры, ластик, заливка, пипетка.\n"
-        "• Цвет — палитры и ползунки.\n"
-        "• Текст — надписи и стикеры.\n"
-        "• Двумя пальцами — приближение и перемещение холста.\n"
-        "• ⬇ PNG — сохранить рисунок, 📤 — поделиться."
+# Логика, которая срабатывает, когда игрок жмет кнопку с законом
+@bot.callback_query_handler(func=lambda call: call.data.startswith('law_'))
+def handle_law_buying(call):
+    user_id = call.from_user.id
+    init_player(user_id)
+    p = players[user_id]
+    
+    law_id = call.data.replace("law_", "")
+    law = LAWS[law_id]
+    
+    # Если этот закон уже как-то успели принять
+    if law_id in p["laws"]:
+        bot.answer_callback_query(call.id, "Этот закон уже действует!", show_alert=True)
+        return
+
+    # Проверка на деньги
+    if p["money"] < law["cost"]:
+        bot.answer_callback_query(call.id, "❌ В казне не хватает денег на эту реформу!", show_alert=True)
+        return
+        
+    # Списываем деньги и одобряем закон
+    p["money"] -= law["cost"]
+    p["laws"].append(law_id)
+    
+    # Эффекты законов (меняем показатели лояльности фракций)
+    if law_id == "press":
+        p["stability"] -= 5
+        p["factions"]["Либералы"]["loyalty"] += 20
+        p["factions"]["Военные"]["loyalty"] -= 15
+    elif law_id == "tax":
+        p["stability"] -= 10
+        p["factions"]["Военные"]["loyalty"] += 25
+        p["factions"]["Рабочие"]["loyalty"] -= 20
+    elif law_id == "money":
+        p["stability"] += 15
+        p["factions"]["Рабочие"]["loyalty"] += 25
+        p["factions"]["Либералы"]["loyalty"] += 5
+
+    # Считаем новое общее одобрение народа
+    total = sum(f["loyalty"] for f in p["factions"].values())
+    p["approval_rating"] = round(total / 3)
+
+    # Всплывающее окно в ТГ об успехе
+    bot.answer_callback_query(call.id, f"✅ Закон '{law['name']}' принят!", show_alert=False)
+    
+    # Изменяем сообщение: убираем кнопки и пишем, что закон принят
+    bot.edit_message_text(
+        chat_id=call.message.chat.id, 
+        message_id=call.message.message_id, 
+        text=f"📜 Вы успешно приняли закон: *{law['name']}*.\nПосмотрите новые параметры, снова нажав кнопку «🏛️ Политика»."
     )
 
-
-async def help_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    await query.message.reply_text("Открой Paint Studio кнопкой в /start и рисуй!")
-
-
-async def main():
-    bot = Application.builder().token(TOKEN).build()
-    bot.add_handler(CommandHandler("start", start))
-    bot.add_handler(CommandHandler("help", help_command))
-    bot.add_handler(CallbackQueryHandler(help_button, pattern="^help$"))
-
-    await bot.initialize()
-    await bot.start()
-    try:
-        await bot.updater.start_polling(drop_pending_updates=True)
-    except Exception as exc:  # веб-сервер должен жить, даже если Telegram временно недоступен
-        print("Не удалось запустить polling:", exc)
-
-    config = uvicorn.Config(api, host="0.0.0.0", port=PORT, log_level="info")
-    server = uvicorn.Server(config)
-    try:
-        await server.serve()
-    finally:
-        await bot.updater.stop()
-        await bot.stop()
-        await bot.shutdown()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# Запуск бота
+if __name__ == '__main__':
+    print("Бот успешно запущен!")
+    bot.infinity_polling()
