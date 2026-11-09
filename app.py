@@ -46,9 +46,31 @@ async def home():
     return HTMLResponse(html, headers=NOCACHE)
 
 
+GAME_FILE = BASE_DIR / "game.html"
+
+
+def game_version():
+    try:
+        return str(int(GAME_FILE.stat().st_mtime))
+    except OSError:
+        return "0"
+
+
 @api.get("/game")
 async def game():
-    return FileResponse(BASE_DIR / "game.html", media_type="text/html", headers=NOCACHE)
+    try:
+        html = GAME_FILE.read_text(encoding="utf-8")
+    except OSError:
+        return HTMLResponse("<h3>game.html не найден на сервере</h3>", status_code=500, headers=NOCACHE)
+    # защита от обрезанного файла (частая проблема при копировании через телефон)
+    if not html.rstrip().lower().endswith("</html>"):
+        return HTMLResponse(
+            "<body style='font:16px sans-serif;padding:20px;background:#0b0a14;color:#fff'>"
+            "<h3>game.html загружен не полностью</h3>"
+            "<p>Файл на сервере обрезан. Загрузите game.html целиком (файлом, а не копированием текста) "
+            "и дождитесь нового деплоя.</p></body>",
+            status_code=500, headers=NOCACHE)
+    return HTMLResponse(html, headers=NOCACHE)
 
 
 @api.get("/{name}.js")
@@ -67,7 +89,7 @@ async def health():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Открыть Paint Studio", web_app=WebAppInfo(url=WEBAPP_URL))],
-        [InlineKeyboardButton("🏛 Симулятор государства", web_app=WebAppInfo(url=WEBAPP_URL + "/game?v=3"))],
+        [InlineKeyboardButton("🏛 Симулятор государства", web_app=WebAppInfo(url=WEBAPP_URL + "/game?v=" + game_version()))],
         [InlineKeyboardButton("ℹ️ Как пользоваться", callback_data="help")],
     ])
     await update.effective_message.reply_text(
@@ -105,7 +127,10 @@ async def main():
 
     await bot.initialize()
     await bot.start()
-    await bot.updater.start_polling(drop_pending_updates=True)
+    try:
+        await bot.updater.start_polling(drop_pending_updates=True)
+    except Exception as exc:  # веб-сервер должен жить, даже если Telegram временно недоступен
+        print("Не удалось запустить polling:", exc)
 
     config = uvicorn.Config(api, host="0.0.0.0", port=PORT, log_level="info")
     server = uvicorn.Server(config)
