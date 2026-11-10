@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=s=>document.querySelector(s), clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v)), fmt=n=>Math.round(n).toLocaleString('ru-RU'), months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-const initial=()=>({name:'Республика Новария',month:0,year:1,money:18000,debt:0,pop:8200000,gdp:42000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:20,health:12,education:12,defense:15,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Столица',pop:1200000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный край',pop:1600000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточная область',pop:2100000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южная провинция',pop:1900000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный округ',pop:1400000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[{name:'Аркания',value:15,power:65},{name:'Белория',value:48,power:42},{name:'Тарвия',value:-20,power:80}],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
+const initial=()=>({name:'Республика Новария',currencyName:'новар',currencyCode:'NVR',fxUsd:1,fxBaseUsd:1,fxReserves:8000,keyRate:7,nominalWageIndex:100,priceIndex:100,importsUsd:0,exportsUsd:0,fxHistory:[],fxLastChange:0,fxLastGdp:42000,month:0,year:1,money:18000,debt:0,pop:8200000,gdp:42000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:20,health:12,education:12,defense:15,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Столица',pop:1200000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный край',pop:1600000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточная область',pop:2100000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южная провинция',pop:1900000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный округ',pop:1400000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[{name:'Аркания',value:15,power:65},{name:'Белория',value:48,power:42},{name:'Тарвия',value:-20,power:80}],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
 let S;try{S={...initial(),...JSON.parse(localStorage.getItem('novariaSave')||'{}')}}catch{S=initial()}if(!Array.isArray(S.regions)||!Array.isArray(S.parties)||!Array.isArray(S.relations))S=initial();
 if(!S.playerParty)S.playerParty=S.party||'Центристский союз';if(!S.difficulty)S.difficulty='normal';if(typeof S.campaignOver!=='boolean')S.campaignOver=false;if(!Array.isArray(S.history))S.history=[];if(!Array.isArray(S.log))S.log=[];if(!Array.isArray(S.documents))S.documents=[];if(!Array.isArray(S.laws))S.laws=[];if(!S.event||!Array.isArray(S.event.choices))S.event=null;if(S.history.length===0){let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap())}
 let tab='overview',timer=null,running=false,selectedDifficulty=S.difficulty;
@@ -563,6 +563,162 @@ render=function(auto){
   stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
  }
  economyRender(auto);
+};
+
+
+/* ===== ПЛАВАЮЩАЯ НАЦИОНАЛЬНАЯ ВАЛЮТА NOVARIA =====
+   Внутренний бюджетный ledger остаётся в USD для совместимости со старыми сохранениями.
+   Курс, цены импорта, покупательная способность и валютная политика — динамические.
+*/
+const FX_MIN=0.000001, FX_MAX=1000000;
+if(!Number.isFinite(S.fxUsd)||S.fxUsd<=0)S.fxUsd=1; // USD за 1 новар
+if(!Number.isFinite(S.fxReserves))S.fxReserves=8000; // млн USD
+if(!Number.isFinite(S.keyRate))S.keyRate=7;
+if(!Number.isFinite(S.nominalWageIndex))S.nominalWageIndex=100;
+if(!Number.isFinite(S.priceIndex))S.priceIndex=100;
+if(!Number.isFinite(S.importsUsd))S.importsUsd=0;
+if(!Number.isFinite(S.exportsUsd))S.exportsUsd=0;
+if(!Array.isArray(S.fxHistory))S.fxHistory=[];
+S.currencyName=S.currencyName||'новар';
+S.currencyCode=S.currencyCode||'NVR';
+S.fxBaseUsd=Number.isFinite(S.fxBaseUsd)&&S.fxBaseUsd>0?S.fxBaseUsd:1;
+S.fxLastChange=Number(S.fxLastChange)||0;
+S.fxHistory.push(...(S.fxHistory.length?[]:[{year:S.year,month:S.month,rate:S.fxUsd}]));
+S.fxHistory=S.fxHistory.slice(-500);
+function fxFmt(n){
+ n=Number(n);if(!Number.isFinite(n))return '—';
+ if(n>=1000000||n<0.000001)return n.toExponential(3).replace('.',',');
+ if(n>=100)return n.toLocaleString('ru-RU',{maximumFractionDigits:2});
+ if(n>=1)return n.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:4});
+ return n.toLocaleString('ru-RU',{minimumFractionDigits:6,maximumFractionDigits:9});
+}
+function localMoneyFromUsd(usdMillions){return Number(usdMillions||0)*1000000/S.fxUsd;}
+function fxImportFactor(){return clamp(Math.pow(1/Math.max(FX_MIN,S.fxUsd),.12),.5,3.5);}
+function fxExportFactor(){return clamp(Math.pow(1/Math.max(FX_MIN,S.fxUsd),.035),.78,1.45);}
+function fxRealWage(){return 100*(S.nominalWageIndex/Math.max(1,S.priceIndex));}
+function fxMonthUpdate(){
+ const oldRate=S.fxUsd,oldGdp=Number(S.fxLastGdp)||S.gdp;
+ const trust=Number.isFinite(S.trust)?S.trust:55;
+ const deficit=(expenses()-income())/Math.max(100,income()+expenses());
+ const tradeGap=(S.importsUsd-S.exportsUsd)/Math.max(100,income()+expenses());
+ const debtRatio=S.debt/Math.max(100,S.gdp);
+ const inflationPressure=(S.inflation-5)*.00045;
+ const trustPressure=(55-trust)*.00005;
+ const debtPressure=Math.max(0,debtRatio-.35)*.003;
+ const fiscalPressure=clamp(deficit,-1,1)*.0015;
+ const tradePressure=clamp(tradeGap,-2,2)*.00055;
+ const stabilityPressure=(55-S.stability)*.000025;
+ const ratePressure=(S.keyRate-7)*-.00025;
+ const reserveSupport=-Math.min(.00025,Math.max(0,S.fxReserves)/32000000);
+ const random=(Math.random()-.5)*.0016;
+ let depreciation=clamp(inflationPressure+trustPressure+debtPressure+fiscalPressure+tradePressure+stabilityPressure+ratePressure+reserveSupport+random,-.025,.04);
+ // Положительное значение означает ослабление новара.
+ S.fxUsd=clamp(oldRate*(1-depreciation),FX_MIN,FX_MAX);
+ S.fxLastChange=oldRate>0?(S.fxUsd/oldRate-1)*100:0;
+ // Денежная политика влияет и на инфляцию, и на выпуск: дорогой кредит охлаждает спрос.
+ S.inflation=clamp(S.inflation+Math.max(0,S.fxLastChange)*.06-Math.max(0,-S.fxLastChange)*.025+(7-S.keyRate)*.04,0,100);
+ S.gdp=Math.max(100,S.gdp*(1-Math.max(0,S.keyRate-7)*.0007+Math.max(0,7-S.keyRate)*.0005));
+ // Импорт дорожает в национальной валюте напрямую через курс; внутренние цены реагируют постепенно.
+ const targetCpi=clamp(100*Math.pow(S.fxBaseUsd/S.fxUsd,.28),30,5000);
+ const convergence=Math.log(Math.max(1,targetCpi)/Math.max(1,S.priceIndex))*.14;
+ const monthlyInflation=clamp(S.inflation/1200,-.02,.08);
+ S.priceIndex=clamp(S.priceIndex*Math.exp(convergence+monthlyInflation),20,10000);
+ // Зарплаты индексируются медленнее цен: при девальвации покупательная способность может падать.
+ const productivity=(S.gdp-oldGdp)/Math.max(100,S.gdp);
+ const wageGrowth=clamp(S.inflation/1200*.55+productivity*.18,-.005,.018);
+ S.nominalWageIndex=clamp(S.nominalWageIndex*(1+wageGrowth),10,100000);
+ S.fxLastGdp=S.gdp;
+ S.fxHistory.push({year:S.year,month:S.month,rate:S.fxUsd});
+ if(S.fxHistory.length>500)S.fxHistory.splice(0,S.fxHistory.length-500);
+ if(Math.abs(S.fxLastChange)>=1.5){
+  const direction=S.fxLastChange<0?'укрепился':'ослаб';
+  log(`Валютный рынок: новар ${direction} на ${Math.abs(S.fxLastChange).toFixed(2)}% за месяц. Курс: 1 ${S.currencyCode} = ${fxFmt(S.fxUsd)} USD.`);
+ }
+ S.importsUsd=0;S.exportsUsd=0;
+}
+window.setKeyRate=function(v){S.keyRate=clamp(Number(v)||0,0,30);const n=document.getElementById('keyRateValue');if(n)n.textContent=S.keyRate.toFixed(1)+'%';save()};
+window.supportCurrency=function(){
+ if(blocked())return;
+ const cost=500;
+ if(S.fxReserves<cost)return toast('Недостаточно валютных резервов центрального банка');
+ S.fxReserves-=cost;
+ S.fxUsd=clamp(S.fxUsd*1.04,FX_MIN,FX_MAX);
+ S.trust=clamp((S.trust||55)+1.5);S.inflation=clamp(S.inflation-.25,0,100);
+ S.fxLastChange=4;
+ S.fxHistory.push({year:S.year,month:S.month,rate:S.fxUsd});S.fxHistory=S.fxHistory.slice(-500);
+ log('Центральный банк провёл валютную интервенцию: потрачено 500 млн USD резервов, новар укрепился примерно на 4%.');
+ save();render();toast('Интервенция проведена: курс поддержан, резервы уменьшились');
+};
+const fxPreviousMonthTick=monthTick;
+monthTick=function(){
+ const y=S.year,m=S.month;
+ fxPreviousMonthTick();
+ if(S.year!==y||S.month!==m){
+  fxMonthUpdate();
+  const last=S.history[S.history.length-1];if(last){last.fxUsd=S.fxUsd;last.realWage=fxRealWage();last.priceIndex=S.priceIndex;}
+  save();render(true);
+ }
+};
+const fxPreviousMarketTrade=marketTrade;
+marketTrade=function(key,mode){
+ if(blocked())return;
+ const qty=Number($('#qty-'+key)?.value||10),base=marketValue(key);
+ if(!Number.isFinite(qty)||qty<=0||qty>100000)return toast('Укажите количество от 1 до 100 000');
+ if(mode==='buy'){
+  const total=base*fxImportFactor()*qty/1000000;
+  if(S.money<total)return toast(`С учётом курса нужно ${usd(total*1000000)}. В казне недостаточно средств.`);
+  if(worldExportable(key)+1e-8<qty)return toast(`На мировом рынке недостаточно ${commodityLabel(key)}. Доступно: ${fmt(worldExportable(key))}`);
+  takeWorldSupply(key,qty);S.money-=total;S.commodities[key]=(S.commodities[key]||0)+qty;S.importsUsd+=total;
+  S.trust=clamp((S.trust||55)-Math.max(0,fxImportFactor()-1)*.025);
+  log(`Импорт ${commodityLabel(key)}: ${fmt(qty)} ед. Цена с валютной надбавкой ${usd(total*1000000)} (примерно ${fxFmt(base*fxImportFactor()/S.fxUsd)} ${S.currencyCode} за единицу).`);
+ }else{
+  if((S.commodities[key]||0)<qty)return toast('На складе недостаточно товара');
+  const revenue=base*fxExportFactor()*qty/1000000*.94;
+  S.commodities[key]-=qty;S.worldMarketPool[key]=(S.worldMarketPool[key]||0)+qty;S.money+=revenue;S.exportsUsd+=revenue;
+  log(`Экспорт ${commodityLabel(key)}: ${fmt(qty)} ед., выручка ${usd(revenue*1000000)} с учётом валютной конкурентоспособности.`);
+ }
+ S.marketTurn=(S.marketTurn||0)+1;save();render();toast(mode==='buy'?'Импорт оплачен с учётом валютного курса':'Экспорт продан с учётом конкурентоспособности валюты');
+};
+window.marketTrade=marketTrade;
+const fxBaseStats=stats;
+stats=function(){
+ fxBaseStats();
+ const cash=document.querySelector('#stats .stat b');
+ const label=document.querySelector('#stats .stat small');
+ if(cash)cash.textContent=`${fmt(S.money)} млн USD · ${fxFmt(S.money/Math.max(FX_MIN,S.fxUsd))} млн ${S.currencyCode}`;
+ if(label)label.textContent='Казна (USD / NVR)';
+};
+function fxChartSvg(){
+ const data=S.fxHistory.slice(-60);if(data.length<2)return '<p class="muted">График появится после нескольких игровых месяцев.</p>';
+ const logs=data.map(x=>Math.log10(Math.max(FX_MIN,Math.min(FX_MAX,x.rate))));
+ let lo=Math.min(...logs),hi=Math.max(...logs);if(hi-lo<.05){lo-=.05;hi+=.05;}
+ const pts=logs.map((v,i)=>`${30+i*740/(logs.length-1)},${225-(v-lo)/(hi-lo)*195}`).join(' ');
+ const labels=[fxFmt(Math.pow(10,hi)),fxFmt(Math.pow(10,(hi+lo)/2)),fxFmt(Math.pow(10,lo))];
+ return `<svg viewBox="0 0 800 260" role="img" aria-label="История курса новара к доллару США" style="width:100%;height:auto;background:#101a20;border-radius:10px"><g stroke="#ffffff" stroke-opacity=".12"><path d="M30 30H770M30 127H770M30 225H770"/></g><polyline points="${pts}" fill="none" stroke="#62c99a" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><g fill="#b9c8d0" font-size="12"><text x="32" y="20">${labels[0]} USD</text><text x="32" y="117">${labels[1]} USD</text><text x="32" y="215">${labels[2]} USD</text><text x="30" y="248">${months[data[0].month]} ${data[0].year}</text><text x="770" y="248" text-anchor="end">${months[data[data.length-1].month]} ${data[data.length-1].year}</text></g></svg>`;
+}
+const fxPreviousRender=render;
+render=function(auto){
+ if(tab==='currency'){
+  if(!Number.isFinite(S.fxUsd)||S.fxUsd<=0)S.fxUsd=1;if(!Array.isArray(S.fxHistory))S.fxHistory=[];if(!S.fxHistory.length)S.fxHistory.push({year:S.year,month:S.month,rate:S.fxUsd});
+  const usdPerUnit=S.fxUsd,unitsPerUsd=1/Math.max(FX_MIN,usdPerUnit);
+  const wage=2500*S.nominalWageIndex/100,basket=1000*S.priceIndex/100,real=fxRealWage();
+  const change=S.fxLastChange||0,changeColor=change>0?'#ef9a58':'#55c58a';
+  const importFactor=fxImportFactor(),exportFactor=fxExportFactor();
+  const body=`<p class="muted">Национальная валюта плавающая. Начальный курс новой кампании: 1 ${S.currencyCode} = 1 USD. Положительная динамика означает укрепление новара, отрицательная — ослабление. Казна и бухгалтерские расчёты сохранены в USD, а торговля, импортные цены и покупательная способность учитывают курс.</p>
+  <div class="cards"><div class="mini"><small>Стоимость 1 ${S.currencyCode}</small><b style="font-size:1.5rem">${fxFmt(usdPerUnit)} USD</b><span class="muted">1 USD = ${fxFmt(unitsPerUsd)} ${S.currencyCode}</span></div><div class="mini"><small>Изменение за месяц</small><b style="color:${changeColor}">${change>0?'+':''}${change.toFixed(3)}%</b><span class="muted">${change<0?'Валюта укрепилась':change>0?'Валюта ослабла':'Курс почти не изменился'}</span></div><div class="mini"><small>Резервы центробанка</small><b>${fmt(S.fxReserves)} млн USD</b><span class="muted">Средства для валютных интервенций</span></div><div class="mini"><small>Ключевая ставка</small><b>${S.keyRate.toFixed(1)}%</b><span class="muted">Влияет на инфляцию, спрос и курс</span></div></div>
+  ${card('История национальной валюты',fxChartSvg()+`<p class="muted">График показывает USD за 1 ${S.currencyCode}; вертикальная шкала логарифмическая, поэтому видны и очень слабые, и очень сильные валюты. История хранит до 500 игровых месяцев.</p>`)}
+  ${card('Центральный банк',`<div class="mini"><b>Ключевая процентная ставка: <span id="keyRateValue">${S.keyRate.toFixed(1)}%</span></b><input type="range" min="0" max="30" step="0.5" value="${S.keyRate}" oninput="setKeyRate(this.value)" style="width:100%"><div class="muted">Высокая ставка обычно поддерживает курс и сдерживает инфляцию, но тормозит инвестиции и экономический рост. Низкая ставка стимулирует спрос, но может ослаблять валюту.</div></div><div class="actions"><button class="primary" onclick="supportCurrency()">Поддержать новар · 500 млн USD резервов</button></div><p class="muted">Интервенция укрепляет курс примерно на 4%, но расходует валютные резервы. Частые интервенции истощают резервы.</p>`)}
+  ${card('Цены и население',`<div class="cards"><div class="mini"><small>Средняя зарплата</small><b>${fxFmt(wage)} ${S.currencyCode}/мес.</b></div><div class="mini"><small>Потребительская корзина</small><b>${fxFmt(basket)} ${S.currencyCode}</b></div><div class="mini"><small>Индекс реальной зарплаты</small><b style="color:${real>=100?'#55c58a':'#ef9a58'}">${real.toFixed(1)}</b><span class="muted">Стартовое значение = 100</span></div><div class="mini"><small>Индекс цен</small><b>${S.priceIndex.toFixed(1)}</b><span class="muted">Инфляция + перенос курса в цены</span></div></div><p>При ослаблении валюты импортные товары дорожают в новарах. Цены внутри страны постепенно подтягиваются вслед за импортом. Зарплаты растут медленнее, поэтому покупательная способность может снижаться. При укреплении валюты импорт дешевеет, а реальная зарплата со временем может вырасти.</p>`)}
+  ${card('Как курс влияет на торговлю',`<div class="cards"><div class="mini"><b>Импортная надбавка</b>${importFactor.toFixed(2)}×<span class="muted">Слабая валюта делает закупки за рубежом дороже в USD-эквиваленте</span></div><div class="mini"><b>Конкурентоспособность экспорта</b>${exportFactor.toFixed(2)}×<span class="muted">Ослабление валюты помогает экспортёрам конкурировать, укрепление — снижает это преимущество</span></div></div><p class="muted">Курс пересчитывается каждый игровой месяц с учётом инфляции, доверия рынков, долга, бюджетного и торгового баланса, стабильности, ключевой ставки и резервов. Допустимый диапазон: 0,000001–1 000 000 USD за 1 ${S.currencyCode}.</p>`)}
+  <div class="mini"><b>Быстрый ориентир</b><br>Сейчас за 1 доллар можно получить ${fxFmt(unitsPerUsd)} ${S.currencyCode}. За 100 USD — ${fxFmt(unitsPerUsd*100)} ${S.currencyCode}. За 1 000 ${S.currencyCode} — ${fxFmt(1000*usdPerUnit)} USD.</div>`;
+  $('#content').innerHTML=`<div class="grid">${body}</div>`;stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
+ }
+ if(tab==='market'){
+  let rows=COMMODITIES.map(x=>{let k=x[1],available=worldExportable(k),base=marketValue(k),effective=base*fxImportFactor();return `<tr><td><b>${x[0]}</b><br><small class="muted">${x[3]}</small></td><td>${usd(effective)}</td><td>${fxFmt(effective/S.fxUsd)} ${S.currencyCode}</td><td>${fmt(S.commodities[k]||0)}</td><td>${fmt(available)}</td><td><input id="qty-${k}" type="number" min="1" max="100000" value="10" style="width:85px"></td><td><button class="good" onclick="marketTrade('${k}','buy')">Купить</button> <button onclick="marketTrade('${k}','sell')">Продать</button></td></tr>`}).join('');
+  $('#content').innerHTML=`<div class="grid">${card('Мировой товарный рынок',`<p>Базовая стоимость товаров формируется на мировом рынке в USD. Для закупок применяется валютная надбавка: <b>${fxImportFactor().toFixed(2)}×</b>. Цена в национальной валюте показывает, сколько новаров требуется за единицу товара. Слабый курс делает импорт дороже, сильный — дешевле. Казна: <b>${usd(S.money*1000000)}</b> · ${fxFmt(localMoneyFromUsd(S.money))} ${S.currencyCode}.</p><div style="overflow:auto"><table><thead><tr><th>Товар</th><th>Цена импорта USD</th><th>Цена в ${S.currencyCode}</th><th>На складе</th><th>Доступно в мире</th><th>Количество</th><th>Операция</th></tr></thead><tbody>${rows}</tbody></table></div>`)}</div>`;
+  stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
+ }
+ fxPreviousRender(auto);
 };
 
 ensure();render();})();
