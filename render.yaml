@@ -11,3 +11,5 @@ services:
         sync: false
       - key: WEBAPP_URL
         sync: false
+      - key: MINI_APP_SHORT_NAME
+        sync: false

@@ -12,11 +12,14 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 
 BASE = Path(__file__).parent
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "").lstrip("@")
+MINI_APP_SHORT_NAME = os.environ.get("MINI_APP_SHORT_NAME", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "").rstrip("/")
 PORT = int(os.environ.get("PORT", "8000"))
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Mini App direct links pass draw_<ROOMCODE> as start_param.
     keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🎨 Paint Studio", web_app=WebAppInfo(url=WEBAPP_URL + "/"))],
         [InlineKeyboardButton("🏛 Симулятор Страны", web_app=WebAppInfo(url=WEBAPP_URL + "/game"))],
@@ -24,13 +27,41 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выбери, что открыть:", reply_markup=keyboard)
 
 
+async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Post a group invitation that opens the drawing Mini App in Telegram."""
+    if not update.effective_chat:
+        return
+    if not BOT_USERNAME or not MINI_APP_SHORT_NAME:
+        await update.effective_message.reply_text(
+            "🎨 Чтобы запустить игру в группе, администратору нужно настроить "
+            "MINI_APP_SHORT_NAME в Render, а Mini App — в @BotFather."
+        )
+        return
+    room_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
+    ROOMS.setdefault(room_id, {"clients": set(), "players": {}, "drawer": None,
+                               "word": None, "round": 0, "ends": 0, "image": None})
+    link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=draw_{room_id}"
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🎨 Войти и играть", url=link)]])
+    await update.effective_message.reply_text(
+        "🎨 *Угадай, что я нарисовал!\n\n*"
+        "Нажмите кнопку, чтобы войти в игровую комнату.\n"
+        "Когда соберутся минимум два игрока, один начнёт рисовать, остальные будут угадывать!",
+        reply_markup=keyboard, parse_mode="Markdown"
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global BOT_USERNAME
     tg = None
     if BOT_TOKEN and WEBAPP_URL:
         tg = Application.builder().token(BOT_TOKEN).build()
         tg.add_handler(CommandHandler("start", start))
+        tg.add_handler(CommandHandler("draw", draw_command))
         await tg.initialize()
+        if not BOT_USERNAME:
+            me = await tg.bot.get_me()
+            BOT_USERNAME = me.username or ""
         await tg.start()
         await tg.updater.start_polling(drop_pending_updates=True)
     else:

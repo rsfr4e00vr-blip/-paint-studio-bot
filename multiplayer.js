@@ -24,13 +24,13 @@ function connect(code){
    renderPlayers(m.players);
   } else if(m.type==="players")renderPlayers(m.players);
   else if(m.type==="round"){
-   isDrawer=false;
+   isDrawer=false;$("#stage").style.pointerEvents="none";
    $("#roundStatus").textContent="🎨 Рисует: "+m.drawer+" · "+m.seconds+" сек.";
    $("#wordCard").textContent=isDrawer?"Ждём секретное слово…":"Угадывай, что рисуют!";
    $("#gameChat").innerHTML="";
    if(!isDrawer)notice("Раунд начался — пиши догадки в чат!");
   } else if(m.type==="your_word"){
-   isDrawer=true;$("#wordCard").textContent="ТВОЁ СЛОВО: "+m.word;
+   isDrawer=true;$("#stage").style.pointerEvents="auto";$("#wordCard").textContent="ТВОЁ СЛОВО: "+m.word;
    notice("Нарисуй это слово, не называя его!");
   } else if(m.type==="canvas")drawRemote(m.data);
   else if(m.type==="clear"){const c=canvas.getContext("2d");c.clearRect(0,0,canvas.width,canvas.height);}
@@ -48,11 +48,21 @@ function drawRemote(data){applyingRemote=true;const im=new Image();im.onload=()=
 $("#roomCreate").onclick=()=>connect(Math.random().toString(36).slice(2,7).toUpperCase());
 $("#roomJoin").onclick=()=>{const c=$("#roomCode").value.trim();if(c.length<3)return notice("Введи код комнаты.");connect(c);};
 $("#roundStart").onclick=()=>send({type:"start"});
-$("#roomLeave").onclick=()=>{if(socket)socket.close();socket=null;isDrawer=false;$("#multiGame").hidden=true;$("#multiSetup").hidden=false;};
+$("#roomLeave").onclick=()=>{if(socket)socket.close();socket=null;isDrawer=false;$("#stage").style.pointerEvents="auto";$("#multiGame").hidden=true;$("#multiSetup").hidden=false;};
 $("#canvasClear").onclick=()=>{if(isDrawer){const c=canvas.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,canvas.width,canvas.height);send({type:"clear"});syncCanvas();}};
 function guess(){const v=$("#guessInput").value.trim();if(v){send({type:"guess",text:v});$("#guessInput").value="";}}
 $("#guessSend").onclick=guess;$("#guessInput").addEventListener("keydown",e=>{if(e.key==="Enter")guess();});
 function syncCanvas(){if(!isDrawer||!socket||socket.readyState!==1||applyingRemote)return;try{send({type:"canvas",data:canvas.toDataURL("image/jpeg",.55)});}catch{}}
 $("#stage").addEventListener("pointerup",()=>{if(isDrawer)setTimeout(syncCanvas,100);},true);
 $("#stage").addEventListener("pointercancel",()=>{if(isDrawer)setTimeout(syncCanvas,100);},true);
+// Telegram Mini App direct-link parameter: draw_<ROOMCODE>.
+const tg=window.Telegram&&Telegram.WebApp;
+let startParam=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||new URLSearchParams(location.search).get("startapp")||"";
+if(startParam.startsWith("draw_")){
+ const code=startParam.slice(5).toUpperCase();
+ show();$("#roomCode").value=code;
+ const user=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;
+ if(user&&user.first_name)$("#playerName").value=user.first_name.slice(0,24);
+ connect(code);
+}
 })();
