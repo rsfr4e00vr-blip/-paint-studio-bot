@@ -33,7 +33,7 @@ function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'
 function card(title,body){return `<section class="panel"><h2>${title}</h2>${body}</section>`}
 function render(auto){stats();if(auto&&(down||(document.activeElement&&document.activeElement.type==='range')))return;let c='';
 if(tab==='overview')c=`<div class="grid">${warnBanner()}<section class="panel wide"><h2>Карта страны</h2>${mapHtml()}</section>${card('Государство',`<div class="cards"><div class="mini"><b>${S.name}</b>Форма правления: ${S.gov}<br>Лидер: ${S.leader}<br>Партия: ${S.party}<br>Сложность: <b>${difficulty().label}</b></div><div class="mini"><b>Состояние страны</b>${bar('Стабильность',S.stability)}${bar('Одобрение',S.approval)}${bar('Легитимность',S.legitimacy)}</div></div>`)}${card('Национальные ресурсы',`<div class="cards">${[['Продовольствие',S.food],['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo],['Энергия',S.energy],['Технологии',S.tech]].map(x=>`<div class="mini"><b>${x[0]}</b>${x[1]} / 100<div class="bar"><i style="width:${clamp(x[1])}%"></i></div></div>`).join('')}</div>`)}${card('Последние события',`<div class="log">${S.log.slice(0,9).map(x=>`<div>${x}</div>`).join('')}</div>`)}${card('Быстрые действия',`<div class="actions"><button onclick="act('roads')">Построить дороги (500 млн)</button><button onclick="act('aid')">Помощь населению (300 млн)</button><button onclick="act('reform')">Государственная реформа (700 млн)</button></div>`)}</div>`;
-if(tab==='economy')c=`<div class="grid">${card('Экономика',`<div class="cards"><div class="mini">Доходы в месяц <b>${fmt(income())} млн</b></div><div class="mini">Расходы в месяц <b>${fmt(expenses())} млн</b></div><div class="mini">Государственный долг <b>${fmt(S.debt)} млн</b></div><div class="mini">Инфляция <b>${S.inflation}%</b></div></div>${bar('Занятость',S.employment)}<div class="row"><button onclick="act('industry')">Развивать промышленность · 800 млн</button><button onclick="act('trade')">Торговое соглашение · 200 млн</button><button onclick="act('debt')">Погасить 1000 млн долга</button></div>`)}${card('Бюджетные настройки',`<div class="row"><label>Налоговая ставка <b id="taxv">${S.tax}%</b></label><input type="range" min="5" max="50" value="${S.tax}" oninput="setv('tax',this.value,'taxv','%')"></div><div class="row"><label>Здравоохранение <b id="healthv">${S.health}%</b></label><input type="range" min="0" max="35" value="${S.health}" oninput="setv('health',this.value,'healthv','%')"></div><div class="row"><label>Образование <b id="educationv">${S.education}%</b></label><input type="range" min="0" max="35" value="${S.education}" oninput="setv('education',this.value,'educationv','%')"></div><div class="row"><label>Оборона <b id="defensev">${S.defense}%</b></label><input type="range" min="0" max="45" value="${S.defense}" oninput="setv('defense',this.value,'defensev','%')"></div><button class="primary" onclick="saveBudget()">Применить бюджет</button>`)}${budCard()}</div>`;
+if(tab==='economy')c=`<div class="grid">${card('Экономика',`<div class="cards"><div class="mini">Доходы в месяц <b>${fmt(income())} млн</b></div><div class="mini">Расходы в месяц <b>${fmt(expenses())} млн</b></div><div class="mini">Государственный долг <b>${fmt(S.debt)} млн</b></div><div class="mini">Инфляция <b>${S.inflation}%</b></div></div>${bar('Занятость',S.employment)}<div class="row"><button onclick="act('industry')">Развивать промышленность · 800 млн</button><button onclick="act('trade')">Торговое соглашение · 200 млн</button><button onclick="act('debt')">Погасить 1000 млн долга</button></div>`)}${card('Бюджетные настройки',`<div class="row"><label>Налоговая ставка <b id="taxv">${S.tax}%</b></label><input type="range" min="5" max="50" value="${S.tax}" oninput="setv('tax',this.value,'taxv','%')"></div><div class="row"><label>Здравоохранение <b id="healthv">${S.health}%</b></label><input type="range" min="0" max="35" value="${S.health}" oninput="setv('health',this.value,'healthv','%')"></div><div class="row"><label>Образование <b id="educationv">${S.education}%</b></label><input type="range" min="0" max="35" value="${S.education}" oninput="setv('education',this.value,'educationv','%')"></div><div class="row"><label>Оборона <b id="defensev">${S.defense}%</b></label><input type="range" min="0" max="45" value="${S.defense}" oninput="setv('defense',this.value,'defensev','%')"></div><button class="primary" onclick="saveBudget()">Применить бюджет</button>`)}${taxCard()}${budCard()}</div>`;
 if(tab==='military')c=`<div class="grid">${card('Вооружённые силы',`<div class="cards">${[['Сухопутные войска',fmt(S.army)+' чел.'],['Флот',S.navy+' кораблей'],['Авиация',S.air+' эскадрилий'],['Подготовка',S.training+'%'],['Боевой дух',S.morale+'%'],['Военная угроза',S.threat+'%']].map(x=>`<div class="mini">${x[0]}<b>${x[1]}</b></div>`).join('')}</div>${bar('Боевой дух',S.morale)}<div class="actions"><button onclick="act('recruit')">Набрать 5 000 солдат · 400 млн</button><button onclick="act('train')">Военные учения · 250 млн</button><button onclick="act('equipment')">Закупить вооружение · 500 млн</button><button onclick="act('mobilize')">Мобилизация</button><button class="danger" onclick="act('demobilize')">Сократить армию</button></div><p>Состояние: <b>${S.war?'ВОЙНА':'Мирное время'}</b></p><button class="${S.war?'good':'danger'}" onclick="act('war')">${S.wars&&S.wars.length?'Заключить мир со всеми':S.martial?'Отменить военное положение':'Ввести военное положение'}</button>`)}${card('Военные запасы',`<div class="cards">${[['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo]].map(x=>`<div class="mini">${x[0]} <b>${x[1]}/100</b></div>`).join('')}</div>`)}</div>`;
 if(tab==='politics')c=`<div class="grid">${card('Твоя партия',`<div class="mini party-card"><b>🎖 ${S.playerParty}</b>Ты играешь за эту партию. Если она проиграет выборы и потеряет власть — кампания будет проиграна.</div><p>Правящая партия: <b>${S.party}</b></p><p>Глава правительства: <b>${S.leader}</b></p><p>До выборов: <b>${S.election} мес.</b></p><div class="actions"><button class="good" onclick="campaignAction('rally')">Провести митинг · 250 млн</button><button onclick="campaignAction('program')">Опубликовать программу · 400 млн</button><button onclick="act('speech')">Обращение к нации</button><button onclick="act('law')">Принять социальный закон</button><button class="primary" onclick="act('election')">Провести досрочные выборы</button><button onclick="act('security')">Усилить охрану правительства</button></div>${bar('Одобрение правительства',S.approval)}${bar('Риск переворота',S.coupRisk)}${S.grace>0?`<p class="muted">🛡 Защитный срок: ещё ${S.grace} мес. — отставка не грозит</p>`:S.crisis>0?`<p class="muted">⚠️ Угроза отставки (${S.crisisWhy||''}): ${S.crisis} мес. подряд. После 4-го месяца власть могут сменить</p>`:''}</div>`)}${card('Политические партии и парламент',`<div class="cards">${S.parties.slice().sort((a,b)=>b.support-a.support).map(p=>`<div class="mini ${p.name===S.playerParty?'party-card':''}"><b>${p.name} ${p.name===S.playerParty?'★ ТВОЯ ПАРТИЯ':''}</b>${p.ideology}<br>Поддержка: <b>${Math.round(p.support)}%</b> · Мест: ${p.seats}<div class="bar"><i style="width:${clamp(p.support)}%"></i></div></div>`).join('')}</div><p class="action-note">Рейтинг партий меняется каждый месяц в зависимости от экономики, стабильности и решений правительства.</p>`)}</div>`;
 if(tab==='charts')c=`<div class="grid">${card('Экономика: рост и падение',`<div class="chart-wrap"><canvas id="chartEconomy"></canvas></div><p class="action-note">ВВП, казна и государственный долг. История последних 60 месяцев.</p>`)}${card('Политика и общество',`<div class="chart-wrap"><canvas id="chartPolitics"></canvas></div><p class="action-note">Поддержка твоей партии, одобрение правительства и стабильность.</p>`)}${card('Население и ресурсы',`<div class="chart-wrap"><canvas id="chartPopulation"></canvas></div><p class="action-note">Население, продовольствие и топливо.</p>`)}</div>`;
@@ -750,7 +750,7 @@ function evTab(){
 
 /* ------------------------ ИНИЦИАЛИЗАЦИЯ ------------------------ */
 function ensureHoi(){
- const d={pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0}};
+ const d={pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0}};
  for(const k in d)if(S[k]==null)S[k]=d[k];
  if(S.event&&!S.event.id)S.event=null;
  if(!S.regions.find(r=>r.name==='Центральный округ'))S.regions.push({name:'Центральный округ',pop:1100000,wealth:58,loyalty:66,unrest:15,industry:52,infra:62,resource:'Агро'});
@@ -811,6 +811,35 @@ function budCard(){
  return card('📊 Расширенный бюджет',`<p class="muted">Норма — значение, при котором ничего не меняется. Выше нормы — деньги уходят, но растут показатели; ниже — экономия, но показатели падают (сильнее). Сейчас: <b>${c>=0?'+':'−'}${fmt(Math.abs(c))} млн/мес</b> к расходам.</p>`+BUD.map(B=>{const v=bv(B),d=v-B.base;return `<div class="row"><label>${B.n} <b id="bud_${B.k}">${v}% (${d>=0?'+':'−'}${Math.abs(d*BUDC)} млн/мес)</b></label><input type="range" min="0" max="${B.max}" step="1" value="${v}" oninput="H.bud('${B.k}',this.value,'bud_${B.k}')" onchange="save()"><small class="muted">норма ${B.base}% · ${hintFx(Object.fromEntries(Object.entries(B.fx).map(([k,x])=>[k,x*100/100])))} за пункт в месяц</small></div>`}).join('')+`<div class="actions"><button class="primary" onclick="H.budSave()">Применить</button><button onclick="H.budReset()">Сбросить к норме</button></div>`);
 }
 
+
+/* ------------------------ НАЛОГИ (13 видов) ------------------------ */
+const TAX=[
+ {k:'vat',n:'НДС',base:10,max:30,rev:18,fx:{inflation:.04,approval:-.03},g:{workers:-.8,pens:-.8}},
+ {k:'corp',n:'Налог на прибыль бизнеса',base:15,max:40,rev:18,fx:{trust:-.05,'gdp%':-.008},g:{biz:-1.5}},
+ {k:'income',n:'Подоходный налог',base:12,max:35,rev:20,fx:{approval:-.04,employment:-.02},g:{workers:-1.2,pens:-.3}},
+ {k:'excise',n:'Акцизы (алкоголь, табак, топливо)',base:8,max:30,rev:10,fx:{approval:-.015,stability:-.01},g:{workers:-.4}},
+ {k:'prop',n:'Налог на недвижимость',base:5,max:25,rev:10,fx:{approval:-.02},g:{pens:-.8,biz:-.4}},
+ {k:'lux',n:'Налог на роскошь',base:3,max:30,rev:6,fx:{trust:-.03},g:{biz:-.8}},
+ {k:'cust',n:'Таможенные пошлины',base:5,max:30,rev:8,fx:{inflation:.02,rel:-.04},g:{biz:-.5,farm:-.3}},
+ {k:'land',n:'Земельный налог',base:4,max:25,rev:7,fx:{food:-.04},g:{farm:-1.2}},
+ {k:'res',n:'Рента на ресурсы',base:5,max:40,rev:12,fx:{'gdp%':-.006,steel:-.03},g:{biz:-.6}},
+ {k:'soc',n:'Страховые взносы',base:10,max:35,rev:16,fx:{employment:-.03},g:{biz:-.5,workers:-.4}},
+ {k:'eco',n:'Экологический сбор',base:2,max:25,rev:5,fx:{'gdp%':-.004,energy:-.02},g:{biz:-.5,stud:.3}},
+ {k:'trans',n:'Транзитные сборы',base:3,max:20,rev:6,fx:{rel:-.03},g:{}},
+ {k:'fin',n:'Налог на финансовые операции',base:1,max:15,rev:5,fx:{trust:-.06},g:{biz:-.7}}];
+const txv=T=>{const v=S.tx[T.k];return v==null?T.base:v};
+const taxRev=()=>Math.round(TAX.reduce((a,T)=>a+(txv(T)-T.base)*T.rev,0)*S.gdp/42000);
+function taxTick(){
+ TAX.forEach(T=>{const d=txv(T)-T.base;if(!d)return;const m=d<0?.7:1,o={};for(const k in T.fx)o[k]=T.fx[k]*d*m;ch(o,false)});
+}
+H.tax=(k,v,id)=>{const T=TAX.find(x=>x.k===k);S.tx[k]=Math.round(+v);const d=S.tx[k]-T.base,e=document.getElementById(id);if(e)e.textContent=S.tx[k]+'% ('+(d>=0?'+':'−')+Math.abs(Math.round(d*T.rev*S.gdp/42000))+' млн/мес)'};
+H.taxSave=()=>{save();render();toast('Налоги применены')};
+H.taxReset=()=>{S.tx={};save();render();toast('Налоги сброшены к норме')};
+function taxCard(){
+ const r=taxRev();
+ return card('💰 Налоги',`<p class="muted">Кроме общей ставки можно настроить 13 отдельных налогов. На норме ничего не меняется. Повышение даёт деньги, но бьёт по одобрению, инфляции, бизнесу или группам населения; снижение теряет доход, но улучшает показатели (слабее). Сейчас: <b>${r>=0?'+':'−'}${fmt(Math.abs(r))} млн/мес</b> к доходу.</p>`+TAX.map(T=>{const v=txv(T),d=v-T.base;return `<div class="row"><label>${T.n} <b id="tx_${T.k}">${v}% (${d>=0?'+':'−'}${Math.abs(Math.round(d*T.rev*S.gdp/42000))} млн/мес)</b></label><input type="range" min="0" max="${T.max}" step="1" value="${v}" oninput="H.tax('${T.k}',this.value,'tx_${T.k}')" onchange="save()"><small class="muted">норма ${T.base}% · за пункт в месяц: ${hintFx(T.fx)}${Object.keys(T.g).length?' · '+Object.keys(T.g).map(k=>GR[k][1]+' '+(T.g[k]<0?'недовольны':'довольны')).join(', '):''}</small></div>`}).join('')+`<div class="actions"><button class="primary" onclick="H.taxSave()">Применить</button><button onclick="H.taxReset()">Сбросить к норме</button></div>`);
+}
+
 /* ------------------------ ЗАВОДЫ И СТРОЙКА ------------------------ */
 const BUILD={civ:{n:'Гражданский завод',c:500,m:4,t:'+10 млн/мес к доходу',ic:'🏭'},mil:{n:'Военный завод',c:450,m:4,t:'Выпуск вооружения и боеприпасов · −6 млн/мес, тратит сталь',ic:'⚙️'},dock:{n:'Верфь',c:600,m:5,t:'Нужна для кораблей (до 6 кораблей на верфь)',ic:'⚓'},ship:{n:'Боевой корабль',c:700,m:5,t:'Флот +1',ic:'🚢'},sq:{n:'Авиаэскадрилья',c:550,m:4,t:'Авиация +2 (нужно 4+ воен. завода)',ic:'✈️'},fort:{n:'Укрепрайон',c:350,m:3,t:'Угроза −5, боевой дух +1',ic:'🧱'}};
 const bslotsN=()=>S.bslots+(S.flags.bs?1:0)+advSum('bs');
@@ -840,7 +869,7 @@ function prodTick(){
  S.ammo=clamp(S.ammo+f*.12*(1-S.ammo/110)-.12);
 }
 const incMult=()=>(ECOL[S.law.eco]||ECOL.civ).inc*(1+techSum('ic')+advSum('ic'));
-const incFlat=()=>(S.civ-18)*10+S.puppets.length*70;
+const incFlat=()=>(S.civ-18)*10+S.puppets.length*70+taxRev();
 const expFlat=()=>(S.mil-6)*6+(S.dock-2)*4+budCost();
 
 /* ------------------------ НАЦИОНАЛЬНЫЕ ЦЕЛИ ------------------------ */
@@ -1129,6 +1158,7 @@ function grTick(){
   mil:50+(S.morale-60)*.5+(S.defense-15)*1.2+(S.equipment-50)*.15,
   farm:50+(S.food-70)*.4-(S.tax-20)*.5};
  for(const id in S.bills){const b=S.bills[id];if(b.st!=='adopted')continue;const B=BILLS.find(x=>x.id===id);if(!B)continue;for(const k in B.st)t[k]+=B.st[k]*8}
+ TAX.forEach(T=>{const d=txv(T)-T.base;for(const k in T.g)t[k]+=d*T.g[k]*(d<0?.7:1)});
  let sum=0;
  for(const k in GR){
   const old=g[k];g[k]=clamp(g[k]+(clamp(t[k])-g[k])*.12);sum+=g[k];
@@ -1275,7 +1305,7 @@ function hoiTick(){
  S.approval=clamp(S.approval+(C.app||0)+(L.app||0));S.stability=clamp(S.stability+(L.stab||0));
  const cap=C.cap*(1+(DOCS[S.doc]?DOCS[S.doc].cap||0:0))*S.pop;
  if(S.army<cap)S.army+=Math.round(Math.min(cap-S.army,S.pop*.0005));
- budTick();billsTick();grTick();mkTick();prodTick();buildTick();focusTick();researchTick();justTick();warTick();puppetTick();
+ budTick();taxTick();billsTick();grTick();mkTick();prodTick();buildTick();focusTick();researchTick();justTick();warTick();puppetTick();
  S.war=S.wars.length>0||!!S.martial;
  clampFix();
  evTick();
