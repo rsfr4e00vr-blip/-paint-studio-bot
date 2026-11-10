@@ -50,17 +50,17 @@ def paint():
 
 @app.get("/game")
 def game():
-    return FileResponse(BASE / "game.html", headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+    return FileResponse(BASE / "game.html")
 
 
 @app.get("/style.css")
 def game_css():
-    return FileResponse(BASE / "style.css", media_type="text/css", headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+    return FileResponse(BASE / "style.css", media_type="text/css")
 
 
 @app.get("/game.js")
 def game_js():
-    return FileResponse(BASE / "game.js", media_type="application/javascript", headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
+    return FileResponse(BASE / "game.js", media_type="application/javascript")
 
 
 @app.get("/health")
