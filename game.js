@@ -161,15 +161,15 @@ E('reconstruction','Война','План восстановления посл�
 // More variety through context-specific variants: the base scenarios remain balanced, variants alter scale.
 const EVENT_FLAVOURS=['в столичном округе','в северных районах','на востоке страны','в южных провинциях','в западных городах','среди малого бизнеса','в парламенте','на внешних рынках'];
 EVENT_POOL.slice().forEach((ev,i)=>{let f=EVENT_FLAVOURS[i%EVENT_FLAVOURS.length];EVENT_POOL.push({...ev,id:ev.id+'_v',title:ev.title+' '+f,text:ev.text+' Ситуация развивается по местному сценарию.'});if(i<24)EVENT_POOL.push({...ev,id:ev.id+'_alt',title:ev.title+' (новый поворот)',text:ev.text+' В этот раз последствия затронут сразу несколько сфер.'})});
-function eventChance(){let base=.19;if(S.war)base+=.045;if(S.stability<35)base+=.035;if(S.inflation>18||S.food<35)base+=.025;return Math.min(.34,base*difficulty().unrest)}
-function makeEvent(){let seen=S.eventSeen||[],pool=EVENT_POOL.filter(e=>!seen.includes(e.id));if(!pool.length)pool=EVENT_POOL;let e=pick(pool);let region=pick(S.regions||[]);let rel=pick(S.relations||[]);return {...e,id:e.id,title:e.title,text:e.text+(region?` Затронут регион: ${region.name}.`:''),region:region?region.name:null,relation:rel?rel.name:null}}
+function eventChance(){if((S.eventCooldown||0)>0)return 0;return 1}
+function makeEvent(){let seen=S.eventSeen||[],pool=EVENT_POOL.filter(e=>!seen.includes(e.id));if(!pool.length)pool=EVENT_POOL;let e=pick(pool);let region=pick(S.regions||[]);let rel=pick(S.relations||[]);S.eventCooldown=3+Math.floor(Math.random()*4);return {...e,id:e.id,title:e.title,text:e.text+(region?` Затронут регион: ${region.name}.`:''),region:region?region.name:null,relation:rel?rel.name:null}}
 function applyEventEffects(list){for(const [k,v] of list){let n=Number(v)||0;switch(k){case'money':S.money=Math.max(0,S.money+n);break;case'debt':S.debt=Math.max(0,S.debt+n);break;case'gdp':S.gdp=Math.max(100,S.gdp+n);break;case'pop':S.pop=Math.max(100000,Math.round(S.pop*(1+n/100)));break;case'relations':if(S.event?.relation){let r=S.relations.find(x=>x.name===S.event.relation);if(r)r.value=clamp(r.value+n,-100,100)}else S.relations.forEach(r=>r.value=clamp(r.value+n*.35,-100,100));break;case'party':{let p=S.parties.find(x=>x.name===S.playerParty);if(p)p.support=clamp(p.support+n,2,75);break}case'unrest':S.regions.forEach(r=>r.unrest=clamp(r.unrest+n,0,100));break;case'loyalty':{let r=S.regions.find(x=>x.name===S.event?.region)||S.regions[0];if(r)r.loyalty=clamp(r.loyalty+n);break}case'infra':S.regions.forEach(r=>r.infra=clamp(r.infra+n));break;case'industry':S.industry=clamp((S.industry||50)+n);break;case'health':S.health=clamp(S.health+n,0,30);break;case'training':S.training=clamp(S.training+n);break;case'morale':S.morale=clamp(S.morale+n);break;case'ammo':case'equipment':case'food':case'fuel':case'energy':case'tech':case'employment':case'inflation':case'stability':case'approval':case'legitimacy':case'trust':case'coupRisk':case'threat':case'army':S[k]=clamp((S[k]||0)+n,k==='inflation'?0:0,k==='army'?300000:100);break;default:break}}}
 function monthTick(){if(S.campaignOver)return;S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+clamp((S.tech/30000)+(S.employment-90)/18000-(Math.max(0,S.inflation-8)/9000)-(S.debt>S.gdp*.55?.0015:0),-.012,.008))); S.pop=Math.max(100000,Math.round(S.pop*(1+clamp((S.food-45)/1800000,-.001,.0012))));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.warMonths=(S.warMonths||0)+1;S.warExhaustion=clamp((S.warExhaustion||0)+.8+(S.food<35?1:0)+(S.money<500?1:0));S.ammo=clamp(S.ammo-1.35);S.equipment=clamp(S.equipment-.45);S.morale=clamp(S.morale-.25);S.threat=clamp(S.threat+.55);if(S.warExhaustion>65){S.approval=clamp(S.approval-.7);S.stability=clamp(S.stability-.35)}}else{S.warMonths=0;S.warExhaustion=Math.max(0,(S.warExhaustion||0)-2)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(!S.event&&Math.random()<eventChance())S.event=makeEvent();if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
 window.resolveEvent=choice=>{if(!S.event)return;let ev=S.event,opt=ev.choices&&ev.choices[choice];if(!opt)return;applyEventEffects(opt.effects||[]);log(`Событие «${ev.title}»: ${opt.label}.`);say(`${ev.title}: ${opt.label}`,'📰');S.eventSeen=S.eventSeen||[];S.eventSeen.unshift(ev.id);S.eventSeen=S.eventSeen.slice(0,14);if(ev.chain&&Math.random()<.45){let follow=EVENT_POOL.find(x=>x.id===ev.chain);if(follow)S.event={...follow,title:follow.title+' — последствия',text:'Последствия предыдущего решения стали заметны. Выберите дальнейший курс.'}}else S.event=null;clampFix();save();render()};
 window.exportSave=()=>{let blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='novaria-save.json';a.click();URL.revokeObjectURL(a.href)};
 window.importSave=()=>{let f=$('#importfile').files[0];if(!f){toast('Выберите файл');return}let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.regions||!x.parties)throw 0;S={...initial(),...x};save();render();toast('Сохранение загружено')}catch{toast('Неверный файл сохранения')}};r.readAsText(f)};
-window.resetGame=()=>{ask('Начать новую кампанию? Текущий прогресс будет удалён.',()=>{stop();S=initial();ensure();S.difficulty=selectedDifficulty||'normal';if(S.difficulty==='story'){S.money=26000;S.approval=72;S.stability=78;S.parties[0].support=42;S.parties[1].support=22;S.parties[2].support=19;S.parties[3].support=17}else if(S.difficulty==='easy'){S.money=22000;S.approval=67;S.stability=73;S.parties[0].support=38;S.parties[1].support=23;S.parties[2].support=20;S.parties[3].support=19}else if(S.difficulty==='hard'){S.money=14500;S.approval=54;S.stability=59;S.parties[0].support=30;S.parties[1].support=28;S.parties[2].support=22;S.parties[3].support=20}else if(S.difficulty==='expert'){S.money=10500;S.approval=47;S.stability=50;S.parties[0].support=29;S.parties[1].support=27;S.parties[2].support=24;S.parties[3].support=20}S.history=[];let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());save();document.getElementById('gameover')?.remove();tab='overview';render();window.scrollTo(0,0);toast('Новая кампания: '+difficulty().label)})};
-function play(){if(running||S.campaignOver){if(S.campaignOver)toast('Кампания завершена — начни новую игру');return}running=true;timer=setInterval(monthTick,+$('#speed').value);stats()}
+window.resetGame=()=>{ask('Начать новую кампанию? Текущий прогресс будет удалён.',()=>{stop();S=initial();ensure();initializeResourceEconomy();S.difficulty=selectedDifficulty||'normal';if(S.difficulty==='story'){S.money=26000;S.approval=72;S.stability=78;S.parties[0].support=42;S.parties[1].support=22;S.parties[2].support=19;S.parties[3].support=17}else if(S.difficulty==='easy'){S.money=22000;S.approval=67;S.stability=73;S.parties[0].support=38;S.parties[1].support=23;S.parties[2].support=20;S.parties[3].support=19}else if(S.difficulty==='hard'){S.money=14500;S.approval=54;S.stability=59;S.parties[0].support=30;S.parties[1].support=28;S.parties[2].support=22;S.parties[3].support=20}else if(S.difficulty==='expert'){S.money=10500;S.approval=47;S.stability=50;S.parties[0].support=29;S.parties[1].support=27;S.parties[2].support=24;S.parties[3].support=20}S.history=[];let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());save();document.getElementById('gameover')?.remove();tab='overview';render();window.scrollTo(0,0);toast('Новая кампания: '+difficulty().label)})};
+function play(){if(S.event){pause();showDecisionModal();toast('Сначала примите решение по событию');return}if(running||S.campaignOver){if(S.campaignOver)toast('Кампания завершена — начни новую игру');return}running=true;timer=setInterval(monthTick,+$('#speed').value);stats()}
 function pause(){running=false;clearInterval(timer);timer=null;stats()}
 function stop(){pause();$('#speed').value='1800';toast('Время остановлено, скорость сброшена до 1×')}
 $('#play').onclick=play;$('#pause').onclick=pause;$('#stop').onclick=stop;$('#step').onclick=()=>{pause();monthTick()};$('#speed').onchange=()=>{if(running){pause();play()}};
@@ -179,7 +179,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
 const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
 function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust}}
-const C0=[['Аркания',15,65,.4,'Торговая держава'],['Белория',48,42,.2,'Дружелюбный сосед'],['Тарвия',-20,80,.8,'Милитаристы'],['Дорвин',5,55,.5,'Союз торговцев'],['Силезия',-5,38,.3,'Горная республика'],['Мерейя',25,48,.2,'Морская федерация'],['Остмарк',-35,70,.7,'Имперские амбиции']];
+// AI-поведение привязано только к реальным государствам из списка ниже.
+const C0=[['США',15,88,.25,'Крупная торговая держава'],['Канада',48,70,.18,'Дружелюбный сосед'],['Мексика',5,56,.25,'Региональный партнёр'],['Бразилия',10,64,.22,'Крупная экономика'],['Великобритания',12,75,.30,'Международный партнёр'],['Германия',20,83,.18,'Промышленная держава'],['Франция',8,78,.25,'Европейский партнёр']];
 
 const CDM={speech:3,law:6,aid:2,trade:4,security:3,rally:2,program:4,reform:4,industry:3,roads:2};
 const cdLeft=k=>((S.cd||{})[k])||0;
@@ -342,7 +343,7 @@ const COMMODITIES=[
 ];
 const BASE_STOCK={food:720,fish:160,meat:130,dairy:190,wood:260,coal:310,oil:480,gas:380,uranium:18,iron:400,steel:210,copper:95,aluminum:140,lithium:22,rare:12,fertilizer:160,medicine:45,electronics:32,cars:28,machinery:35,textile:120,water:900,power:600};
 if(!S.worldCountries)S.worldCountries=WORLD_COUNTRIES.map((c,i)=>({name:c[0],currency:c[1],usd:c[2],power:c[3],relation:Math.round((Math.random()*50)-20),trade:0}));
-else S.worldCountries=S.worldCountries.map((c,i)=>({...c,...(WORLD_COUNTRIES[i]||{})}));
+else S.worldCountries=WORLD_COUNTRIES.map((base,i)=>{const old=S.worldCountries.find(x=>x.name===base[0])||S.worldCountries[i]||{};return {name:base[0],currency:base[1],usd:base[2],power:base[3],relation:Number.isFinite(old.relation)?old.relation:Math.round(Math.random()*40-10),trade:old.trade||0,agreement:old.agreement||0,stocks:old.stocks,production:old.production,consumption:old.consumption,deposits:old.deposits}});
 if(!S.commodities)S.commodities=Object.fromEntries(COMMODITIES.map(c=>[c[1],BASE_STOCK[c[1]]||100]));
 if(!S.marketPrices)S.marketPrices=Object.fromEntries(COMMODITIES.map(c=>[c[1],c[2]]));
 if(!S.marketHistory)S.marketHistory=[];
@@ -353,6 +354,74 @@ if(!S.iron)S.iron=400;if(!S.copper)S.copper=95;if(!S.aluminum)S.aluminum=140;if(
 if(!S.rare)S.rare=12;if(!S.fertilizer)S.fertilizer=160;if(!S.medicine)S.medicine=45;if(!S.electronics)S.electronics=32;
 if(!S.cars)S.cars=28;if(!S.machinery)S.machinery=35;if(!S.textile)S.textile=120;if(!S.water)S.water=900;if(!S.power)S.power=600;
 // Обновляем старые вымышленные дипломатические названия реальными странами, сохраняя значения отношений.
+
+/* ===== СБАЛАНСИРОВАННАЯ РЕСУРСНАЯ ЭКОНОМИКА v3 =====
+   Запасы конечны: страны добывают, потребляют и экспортируют ресурсы.
+   Все количества указаны в единицах товара из таблицы COMMODITIES за месяц. */
+const RESOURCE_KEYS=COMMODITIES.map(x=>x[1]);
+const EXTRACTIVE_KEYS=['coal','oil','gas','uranium','iron','copper','aluminum','lithium','rare'];
+const PROD_BASE={food:30,fish:6,meat:5,dairy:6,wood:5,coal:5,oil:7,gas:4,uranium:.012,iron:6,steel:4,copper:.8,aluminum:.7,lithium:.025,rare:.008,fertilizer:2,medicine:.35,electronics:.15,cars:.1,machinery:.2,textile:.9,water:28,power:70};
+const CONS_BASE={food:24,fish:5,meat:4,dairy:5,wood:4,coal:4,oil:9,gas:6,uranium:.018,iron:4,steel:4,copper:1.2,aluminum:1.4,lithium:.045,rare:.012,fertilizer:2,medicine:.5,electronics:.25,cars:.15,machinery:.3,textile:1.2,water:25,power:55};
+const COUNTRY_BONUS={
+ 'США':['food','oil','gas','cars','electronics','power','machinery'], 'Канада':['wood','uranium','oil','gas','iron','power'],
+ 'Мексика':['oil','food','textile','cars'], 'Бразилия':['food','meat','wood','iron','water'], 'Великобритания':['gas','medicine','machinery'],
+ 'Германия':['steel','cars','machinery','medicine','electronics'], 'Франция':['food','power','medicine','cars'], 'Италия':['food','cars','textile','machinery'],
+ 'Польша':['coal','food','steel','copper'], 'Украина':['food','iron','steel','power','fertilizer'], 'Швейцария':['medicine','machinery','electronics'],
+ 'Норвегия':['oil','gas','fish','power'], 'Швеция':['wood','iron','steel','copper'], 'Турция':['textile','food','steel'],
+ 'Китай':['electronics','steel','rare','textile','cars','machinery'], 'Япония':['cars','electronics','machinery','steel'],
+ 'Южная Корея':['electronics','cars','steel','machinery'], 'Индия':['food','textile','medicine','steel'], 'Австралия':['iron','coal','uranium','lithium'],
+ 'Саудовская Аравия':['oil','gas'], 'ОАЭ':['oil','gas','aluminum'], 'ЮАР':['coal','rare','iron','platinum'],
+ 'Египет':['food','gas','textile'], 'Индонезия':['coal','oil','fish','wood'], 'Аргентина':['food','meat'],
+ 'Чили':['copper','lithium'], 'Нидерланды':['dairy','power','machinery','electronics'], 'Испания':['food','fish','textile','cars']
+};
+const RESOURCE_RESERVE={food:180,fish:35,meat:30,dairy:35,wood:45,coal:55,oil:75,gas:65,uranium:3,iron:65,steel:40,copper:18,aluminum:22,lithium:4,rare:2,fertilizer:25,medicine:8,electronics:6,cars:5,machinery:7,textile:20,water:150,power:100};
+function resourceFmt(n){return Number(n||0).toLocaleString('ru-RU',{maximumFractionDigits:3})}
+function stable01(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return (h>>>0)/4294967295}
+function countryResourceProfile(country){
+ const bonus=COUNTRY_BONUS[country.name]||[];const scale=.55+(country.power||55)/100*.9;
+ const stocks={},production={},consumption={},deposits={};
+ COMMODITIES.forEach(x=>{const k=x[1],r=stable01(country.name+':'+k),special=bonus.includes(k)?1.9:1;
+  stocks[k]=Math.max(0,Math.round((BASE_STOCK[k]||50)*scale*(.65+r*.85)*(bonus.includes(k)?1.25:1)));
+  production[k]=+(((PROD_BASE[k]||1)*(.35+(country.power||55)/100*.75)*(.65+r*.8)*special).toFixed(3));
+  consumption[k]=+(((CONS_BASE[k]||1)*(.55+(country.power||55)/100*.65)*(.75+(1-r)*.5)).toFixed(3));
+  if(EXTRACTIVE_KEYS.includes(k))deposits[k]=Math.round(production[k]*(240+r*720));
+ });return {stocks,production,consumption,deposits};
+}
+function initializeResourceEconomy(){
+ if(!S.commodities)S.commodities=Object.fromEntries(COMMODITIES.map(c=>[c[1],BASE_STOCK[c[1]]||100]));
+ if(!S.marketPrices)S.marketPrices=Object.fromEntries(COMMODITIES.map(c=>[c[1],c[2]]));
+ if(!S.marketHistory)S.marketHistory=[];if(!S.marketTurn)S.marketTurn=0;
+ if(!S.worldCountries)S.worldCountries=WORLD_COUNTRIES.map(c=>({name:c[0],currency:c[1],usd:c[2],power:c[3],relation:0,trade:0}));
+ if(!S.resourceProduction)S.resourceProduction=Object.fromEntries(RESOURCE_KEYS.map(k=>[k,+(PROD_BASE[k]*(.82+stable01('Novaria:'+k)*.36)).toFixed(3)]));
+ if(!S.resourceConsumption)S.resourceConsumption={...CONS_BASE};
+ if(!S.resourceDeposits)S.resourceDeposits=Object.fromEntries(EXTRACTIVE_KEYS.map(k=>[k,Math.round((S.resourceProduction[k]||0)*(300+stable01('Novaria-deposit:'+k)*600))]));
+ if(!S.resourceShortages)S.resourceShortages={};
+ if(!S.worldMarketPool)S.worldMarketPool=Object.fromEntries(RESOURCE_KEYS.map(k=>[k,0]));
+ S.worldCountries.forEach(c=>{if(!c.stocks||!c.production||!c.consumption){const profile=countryResourceProfile(c);c.stocks=c.stocks||profile.stocks;c.production=c.production||profile.production;c.consumption=c.consumption||profile.consumption;c.deposits=c.deposits||profile.deposits;}});
+ S.worldCountries.forEach(c=>{if(!c.deposits){c.deposits=countryResourceProfile(c).deposits;}});
+}
+initializeResourceEconomy();
+function marketPoolCap(key){const worldNeed=S.worldCountries.reduce((sum,c)=>sum+(c.consumption?.[key]||0),0);return Math.max((BASE_STOCK[key]||50)*8,worldNeed*6)}
+function addMarketSurplus(key,amount){if(amount<=0)return;const current=S.worldMarketPool[key]||0,cap=marketPoolCap(key);S.worldMarketPool[key]=Math.min(cap,current+amount)}
+function worldExportable(key){return (S.worldMarketPool[key]||0)+S.worldCountries.reduce((sum,c)=>sum+Math.max(0,(c.stocks?.[key]||0)-Math.max(RESOURCE_RESERVE[key]||0,(c.consumption?.[key]||0)*3)),0)}
+function takeWorldSupply(key,qty){let left=qty,pool=Math.min(left,S.worldMarketPool[key]||0);S.worldMarketPool[key]=(S.worldMarketPool[key]||0)-pool;left-=pool;
+ const sellers=S.worldCountries.slice().sort((a,b)=>((b.stocks?.[key]||0)-(b.consumption?.[key]||0)*3)-((a.stocks?.[key]||0)-(a.consumption?.[key]||0)*3));
+ for(const c of sellers){if(left<=.000001)break;let reserve=Math.max(RESOURCE_RESERVE[key]||0,(c.consumption?.[key]||0)*3),available=Math.max(0,(c.stocks?.[key]||0)-reserve),take=Math.min(left,available);c.stocks[key]-=take;left-=take;}
+ return left<=.000001;
+}
+function resourceMonthTick(){
+ let shortages=0,shortCost=0;
+ for(const k of RESOURCE_KEYS){const before=S.commodities[k]||0;let prod=S.resourceProduction[k]||0;if(EXTRACTIVE_KEYS.includes(k)){let reserve=S.resourceDeposits[k]||0;prod=Math.min(prod,reserve);S.resourceDeposits[k]=Math.max(0,reserve-prod)}const need=(S.resourceConsumption[k]||0)*(S.war&&['food','oil','power','steel'].includes(k)?1.18:1);const available=before+prod,used=Math.min(available,need),deficit=Math.max(0,need-available);let nextStock=Math.max(0,available-used);const playerCap=Math.max((BASE_STOCK[k]||50)*4,need*18);if(nextStock>playerCap){addMarketSurplus(k,nextStock-playerCap);nextStock=playerCap}S.commodities[k]=nextStock;
+  // При избытке после внутреннего потребления запасы постепенно пополняются; при дефиците возникает нехватка.
+  if(deficit>0){S.resourceShortages[k]=(S.resourceShortages[k]||0)+1;shortages++;shortCost+=deficit/Math.max(1,need)}else S.resourceShortages[k]=Math.max(0,(S.resourceShortages[k]||0)-.5);
+ }
+ // У стран мира своя добыча, собственное потребление и конечные склады.
+ S.worldCountries.forEach(c=>{for(const k of RESOURCE_KEYS){let stock=c.stocks[k]||0,prod=c.production[k]||0,need=c.consumption[k]||0;if(EXTRACTIVE_KEYS.includes(k)){let reserve=c.deposits?.[k]||0;prod=Math.min(prod,reserve);c.deposits[k]=Math.max(0,reserve-prod)}let nextStock=Math.max(0,stock+prod-need),warehouseCap=Math.max((BASE_STOCK[k]||50)*4,need*18);if(nextStock>warehouseCap){addMarketSurplus(k,nextStock-warehouseCap);nextStock=warehouseCap}c.stocks[k]=nextStock;}});
+ if(shortages){let severity=Math.min(1,shortCost/Math.max(1,shortages));S.gdp=Math.max(100,S.gdp*(1-Math.min(.006,.0015*shortages)));S.employment=clamp(S.employment-.12*shortages,0,100);S.stability=clamp(S.stability-.18*shortages);S.approval=clamp(S.approval-.12*shortages);S.inflation=clamp(S.inflation+.08*shortages,0,100);if(S.month%3===0)log(`Ресурсный дефицит: нехватка ${shortages} категорий сырья и товаров. Экономика теряет темп.`)}
+ // Мировой спрос и ограниченное предложение влияют на цену.
+ COMMODITIES.forEach(x=>{const k=x[1],supply=worldExportable(k),p=S.marketPrices[k]||x[2],pressure=supply<20?.018:supply<100?.009:supply>1500?-.012:supply>600?-.005:0;S.marketPrices[k]=Math.max(x[2]*.3,Math.min(x[2]*4,p*(1+pressure+(Math.random()-.5)*.018)));});
+}
+
 const oldRelations=S.relations||[];
 S.relations=WORLD_COUNTRIES.slice(0,18).map((c,i)=>({
  name:c[0],value:oldRelations[i]?.value??Math.round((Math.random()*40)-10),
@@ -371,7 +440,7 @@ function marketTrade(key,mode){
    S.money-=total;S.commodities[key]=(S.commodities[key]||0)+qty;
  }else{
    if((S.commodities[key]||0)<qty)return toast('На складе недостаточно товара');
-   S.commodities[key]-=qty;S.money+=Math.round(total*.94);
+   S.commodities[key]-=qty;S.money+=total*.94;
  }
  S.trust=clamp((S.trust||55)+(mode==='buy'?0.12:-0.08));S.marketTurn++;
  log(`${mode==='buy'?'Закупка':'Продажа'}: ${commodityLabel(key)} — ${fmt(qty)} ед., ${usd(total*1000000)}.`);
@@ -403,7 +472,7 @@ render=function(auto){
   stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
  }
  if(tab==='world'){
-  let rows=S.worldCountries.map((c,i)=>`<tr><td><b>${c.name}</b><br><small class="muted">${c.power>=80?'Крупная экономика':c.power>=65?'Развитая экономика':'Региональный партнёр'}</small></td><td>${c.currency}</td><td>${usd(c.usd)} за 1 ед.</td><td>${Math.round(c.relation)} / 100</td><td><button onclick="worldAction(${i},'talk')">Переговоры</button> <button onclick="worldAction(${i},'trade')">Торговля</button><button onclick="worldAction(${i},'aid')">Помощь</button><button onclick="worldAction(${i},'agreement')">Соглашение</button></td></tr>`).join('');
+  let rows=S.worldCountries.map((c,i)=>{let top=Object.entries(c.production||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${commodityLabel(k)} +${resourceFmt(v)}/мес.`).join(', ');let detail=COMMODITIES.map(x=>`<div>${x[0]}: запас ${resourceFmt(c.stocks?.[x[1]]||0)} · производство +${resourceFmt(c.production?.[x[1]]||0)}/мес. · потребление −${resourceFmt(c.consumption?.[x[1]]||0)}/мес.${EXTRACTIVE_KEYS.includes(x[1])?' · месторождения '+resourceFmt(c.deposits?.[x[1]]||0):''}</div>`).join('');return `<tr><td><b>${c.name}</b><br><small class="muted">${c.power>=80?'Крупная экономика':c.power>=65?'Развитая экономика':'Региональный партнёр'} · Производит: ${top}</small><details><summary>Все ресурсы и запасы</summary><div class="muted">${detail}</div></details></td><td>${c.currency}</td><td>${usd(c.usd)} за 1 ед.</td><td>${Math.round(c.relation)} / 100</td><td><button onclick="worldAction(${i},'talk')">Переговоры</button> <button onclick="worldAction(${i},'trade')">Торговля</button><button onclick="worldAction(${i},'aid')">Помощь</button><button onclick="worldAction(${i},'agreement')">Соглашение</button></td></tr>`}).join('');
   $('#content').innerHTML=`<div class="grid">${card('Международная система',`<p>В игре представлены реальные государства. Все бюджеты, цены, торговые сделки и национальная казна считаются в долларах США. Курсы валют ниже — игровые справочные коэффициенты к USD, не биржевые котировки реального времени.</p><div style="overflow:auto"><table><thead><tr><th>Государство</th><th>Валюта</th><th>Курс к USD</th><th>Отношения</th><th>Действия</th></tr></thead><tbody>${rows}</tbody></table></div>`)}</div>`;
   stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
  }
@@ -418,11 +487,11 @@ monthTick=function(){
 function showDecisionModal(){
  if(!S.event||document.getElementById('decisionModal'))return;
  pause();let ev=S.event,d=document.createElement('div');d.id='decisionModal';d.className='gameover';d.style.zIndex='80';
- d.innerHTML=`<div class="gameover-box" style="max-height:90vh;overflow:auto"><div class="pill">⏸ ИГРА ПРИОСТАНОВЛЕНА · ${ev.cat||'Событие'}</div><h2>${ev.title}</h2><p>${ev.text}</p><p>Решение повлияет на бюджет, общество, рынки или международные отношения. Выберите вариант:</p><div class="actions">${(ev.choices||[]).map((o,i)=>`<button class="${i===0?'primary':'good'}" style="display:block;width:100%;margin:8px 0;white-space:normal" onclick="resolveEvent(${i})">${o.label}</button>`).join('')}</div><p class="muted">Время продолжится только после вашего решения и нажатия «Играть».</p></div>`;
+ d.innerHTML=`<div class="gameover-box" style="max-height:90vh;overflow:auto"><div class="pill">⏸ ИГРА ПРИОСТАНОВЛЕНА · ${ev.cat||'Событие'}</div><h2>${ev.title}</h2><p>${ev.text}</p><p>Решение повлияет на бюджет, общество, рынки или международные отношения. Выберите вариант:</p><div class="actions">${(ev.choices||[]).map((o,i)=>`<button class="${i===0?'primary':'good'}" style="display:block;width:100%;margin:8px 0;white-space:normal" onclick="resolveEvent(${i})">${o.label}</button>`).join('')}</div><p class="muted">После выбора решение применится, а игра автоматически продолжится.</p></div>`;
  document.body.appendChild(d);
 }
 const baseResolveEvent=window.resolveEvent;
-window.resolveEvent=function(choice){baseResolveEvent(choice);document.getElementById('decisionModal')?.remove();pause();};
+window.resolveEvent=function(choice){if(!S.event)return;const previous=S.event;baseResolveEvent(choice);document.getElementById('decisionModal')?.remove();if(S.event){pause();showDecisionModal();return}S.eventCooldown=3+Math.floor(Math.random()*4);if(!S.campaignOver&&!S.out){play();toast('Решение принято. Время продолжает идти.')}else pause();};
 const baseOuster=ouster;
 ouster=function(cause){
  // Вместо мгновенного конца — парламентский кризис и шанс сформировать коалицию.
@@ -437,6 +506,8 @@ ouster=function(cause){
 const baseAddonTick=addonTick;
 addonTick=function(){
  baseAddonTick();
+ // Между обычными событиями проходит не менее 3 и не более 6 игровых месяцев.
+ if(!S.event&&S.eventCooldown>0)S.eventCooldown--;
  // Умеренная динамика цен: спрос, сезонность и мировые потрясения.
  S.marketTurn=(S.marketTurn||0)+1;
  COMMODITIES.forEach(x=>{
@@ -453,6 +524,45 @@ addonTick=function(){
  }
 };
 const originalMonthTickForDecision=monthTick;
+if(!Number.isFinite(S.eventCooldown))S.eventCooldown=3;
 window.addEventListener('load',()=>{if(S.event){pause();showDecisionModal()}});
+
+
+// Торговля теперь ограничена реальными экспортными остатками других стран.
+marketTrade=function(key,mode){
+ if(blocked())return;const item=COMMODITIES.find(c=>c[1]===key);if(!item)return;
+ const qty=Number($('#qty-'+key)?.value||10);if(!Number.isFinite(qty)||qty<=0||qty>100000)return toast('Укажите корректное количество');
+ const price=marketValue(key),total=price*qty/1000000;
+ if(mode==='buy'){
+  if(S.money<total)return toast('Недостаточно средств в казне');
+  if(worldExportable(key)+1e-8<qty)return toast(`На мировом рынке недостаточно ${item[0]}. Доступно: ${fmt(worldExportable(key))} ${item[3]}`);
+  takeWorldSupply(key,qty);S.money-=total;S.commodities[key]=(S.commodities[key]||0)+qty;
+ }else{
+  if((S.commodities[key]||0)<qty)return toast('На складе недостаточно товара');
+  S.commodities[key]-=qty;S.worldMarketPool[key]=(S.worldMarketPool[key]||0)+qty;S.money+=total*.94;
+ }
+ S.trust=clamp((S.trust||55)+(mode==='buy'?.12:-.08));S.marketTurn++;
+ log(`${mode==='buy'?'Импорт':'Экспорт'}: ${commodityLabel(key)} — ${fmt(qty)} ед., ${usd(total*1000000)}.`);
+ save();render();toast(mode==='buy'?'Товар закуплен из конечных запасов мирового рынка':'Товар продан на мировой рынок');
+};window.marketTrade=marketTrade;
+window.investResource=function(key){if(blocked())return;if(!RESOURCE_KEYS.includes(key))return;const cost=250;if(S.money<cost)return toast('Недостаточно средств: нужно 250 млн');S.money-=cost;S.resourceProduction[key]=+((S.resourceProduction[key]||0)*1.15+.01).toFixed(3);S.industry=clamp((S.industry||50)+.3);S.gdp+=12;log(`Инвестиции в отрасль «${commodityLabel(key)}»: месячная производительность увеличена на 15%.`);save();render();toast('Производство модернизировано; проверьте баланс запасов и месторождений')};
+const economyAddonTick=addonTick;
+addonTick=function(){economyAddonTick();resourceMonthTick()};
+// Показываем не только остатки, но и ежемесячный баланс производства и потребления.
+const economyRender=render;
+render=function(auto){
+ if(tab==='resources'){
+  let cards=COMMODITIES.map(x=>{let k=x[1],stock=S.commodities[k]||0,prod=S.resourceProduction[k]||0,need=S.resourceConsumption[k]||0,net=prod-need,ratio=need>0?stock/need:99;return `<div class="mini"><b>${x[0]}</b><div>Запас: <strong>${fmt(stock)} ${x[3]}</strong></div><div class="muted">Добыча/выпуск: +${resourceFmt(prod)} в месяц</div><div class="muted">Потребление: −${resourceFmt(need)} в месяц</div>${EXTRACTIVE_KEYS.includes(k)?`<div class="muted">Подземные запасы: ${resourceFmt(S.resourceDeposits[k]||0)} ${x[3]}</div>`:''}<div class="muted">Баланс: <b style="color:${net>=0?'#55c58a':'#ef9a58'}">${net>=0?'+':''}${resourceFmt(net)} / мес.</b></div><div class="muted">Хватит примерно на: ${ratio>=99?'долго':fmt(ratio)+' мес.'}</div><div class="bar"><i style="width:${clamp(stock/Math.max(1,(BASE_STOCK[k]||100)*3)*100)}%"></i></div><button onclick="investResource('${k}')">Развить производство · 250 млн</button></div>`}).join('');
+  const deficits=COMMODITIES.filter(x=>(S.commodities[x[1]]||0)<(S.resourceConsumption[x[1]]||0)*2).map(x=>x[0]);
+  $('#content').innerHTML=`<div class="grid">${card('Национальные запасы и производство',`<p class="muted">Каждый месяц страна добывает и производит ресурсы, а население и предприятия их потребляют. Запасы конечны. Если потребление выше производства, склад постепенно опустеет; дефицит ухудшает экономику и общественную стабильность.</p><div class="mini"><b>Текущий баланс</b><br>Ресурсов с запасом менее чем на два месяца: <b>${deficits.length}</b>${deficits.length?'<br><span style="color:#e6a15b">Внимание: '+deficits.join(', ')+'</span>':'<br><span style="color:#55c58a">Критического дефицита нет</span>'}</div><div class="cards">${cards}</div>`)}</div>`;
+  stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
+ }
+ if(tab==='market'){
+  let rows=COMMODITIES.map(x=>{let available=worldExportable(x[1]);return `<tr><td><b>${x[0]}</b><br><small class="muted">${x[3]}</small></td><td>${usd(marketValue(x[1]))}</td><td>${fmt(S.commodities[x[1]]||0)}</td><td>${fmt(available)}</td><td><input id="qty-${x[1]}" type="number" min="1" max="100000" value="10" style="width:85px"></td><td><button class="good" onclick="marketTrade('${x[1]}','buy')">Купить</button> <button onclick="marketTrade('${x[1]}','sell')">Продать</button></td></tr>`}).join('');
+  $('#content').innerHTML=`<div class="grid">${card('Мировой товарный рынок',`<p>Все расчёты ведутся в <b>долларах США (USD)</b>. Мировое предложение ограничено экспортными остатками 28 государств и товарами, которые выставили на продажу другие участники. Нельзя купить больше, чем реально доступно. Продажа приносит 94% ориентировочной стоимости. Казна: <b>${usd(S.money*1000000)}</b>.</p><div style="overflow:auto"><table><thead><tr><th>Товар</th><th>Цена USD</th><th>На складе</th><th>Доступно в мире</th><th>Количество</th><th>Операция</th></tr></thead><tbody>${rows}</tbody></table></div>`)}</div>`;
+  stats();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));return;
+ }
+ economyRender(auto);
+};
 
 ensure();render();})();
