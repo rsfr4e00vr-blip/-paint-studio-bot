@@ -130,3 +130,19 @@ select,input,textarea{background:#111719!important;border:1px solid #414b4d!impo
 .notice{background:#242c2d!important;border:1px solid #b49a67!important;border-radius:8px!important;color:#eee7d7!important}
 .gameover-box{background:#1b2224!important;border:1px solid #b49a67!important;border-radius:12px!important}
 @media(max-width:760px){main{padding:8px 8px 28px}.tabbar{top:54px;grid-template-columns:repeat(3,minmax(0,1fr))!important}.tabbar button{font-size:11px!important;padding:8px 4px!important}.subtabbar{top:148px;padding-top:6px}.topline{grid-template-columns:repeat(2,minmax(0,1fr))}.stat{min-width:0}.stat b{font-size:15px}.timebar{gap:5px}.timebar button{padding:8px 7px!important}.panel{padding:11px!important}.grid{grid-template-columns:1fr}}
+
+/* ===== Ukraine map and expanded tax policy ===== */
+.hoimap .mapcity{font:600 10px/1 system-ui,sans-serif;fill:#f1e6c9;paint-order:stroke;stroke:#101719;stroke-width:2.5px;stroke-linejoin:round;pointer-events:none}
+.hoimap .map-caption{font:600 13px/1 system-ui,sans-serif;letter-spacing:.16em;fill:#d9c89f;opacity:.9}
+.oblast-list{margin-top:14px;padding:12px;background:#111819;border:1px solid #394344;border-radius:9px}
+.oblast-list>b{display:block;margin-bottom:9px;color:#d7c18f}
+.oblast-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.oblast-chip{display:block;padding:6px 8px;background:#1b2425;border:1px solid #344143;border-radius:6px;color:#d5d9d3;font-size:12px}
+.tax-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.tax-control{background:#12191b;border:1px solid #354143;border-radius:8px;padding:9px}
+.tax-control label{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:#cbd1cb}
+.tax-control label b{color:#d5bd88;white-space:nowrap}
+.tax-control input{width:100%;accent-color:#b49a67}
+.tax-preview{display:flex;flex-direction:column;gap:5px;margin-top:12px}
+.tax-preview span{font-size:20px;font-weight:700;color:#d7c18f}
+@media(max-width:760px){.oblast-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tax-grid{grid-template-columns:1fr}.maplegend{font-size:11px}}
