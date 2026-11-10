@@ -1,0 +1,12 @@
+
+#multiOpen{background:#385c83;border-color:#739cc7;font-weight:700}
+.multi-box{display:none;position:fixed;z-index:30;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:88dvh;overflow:auto;background:#171c27;color:#f4f2ed;border:1px solid #647b9b;box-shadow:0 18px 70px #000d;padding:15px;font:14px system-ui;border-radius:14px}
+.multi-head,.multi-info,.multi-actions,.guess-row{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.multi-head{font-size:17px;margin-bottom:12px}.multi-box input{min-width:0;flex:1;width:100%;padding:11px;background:#0e1420;color:white;border:1px solid #52627b;border-radius:8px;margin:4px 0}
+.multi-actions{justify-content:flex-start;margin:10px 0}.multi-box button{padding:9px 12px;border-radius:8px}.multi-primary{background:#b78936!important;color:#17120a!important;font-weight:800}
+.multi-info{background:#0d1420;padding:9px;margin:8px 0}.word-card{padding:13px;background:#293a50;text-align:center;font-size:18px;font-weight:800;margin:9px 0;border:1px solid #607b9d;min-height:48px}
+.multi-columns{display:grid;grid-template-columns:1fr 1.3fr;gap:12px;margin-top:10px}.multi-columns>div{min-width:0;background:#101722;padding:10px;border:1px solid #39485d}
+#playerList,#gameChat{max-height:180px;overflow:auto;font-size:13px;margin-top:8px}#playerList div,#gameChat div{padding:5px 2px;border-bottom:1px solid #344052;overflow-wrap:anywhere}
+.guess-row{display:flex;gap:5px}.guess-row input{flex:1}.guess-row button{flex:none}
+#multiNotice{color:#ffd47d;margin-top:8px;min-height:18px;font-size:12px}
+@media(max-width:500px){.multi-columns{grid-template-columns:1fr}.multi-box{padding:12px}.multi-box .multi-actions button{flex:1}}
