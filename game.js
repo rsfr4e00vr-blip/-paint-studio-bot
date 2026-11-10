@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=s=>document.querySelector(s), clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v)), fmt=n=>Math.round(n).toLocaleString('ru-RU'), months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-const initial=()=>({name:'Украина',currencyName:'гривна',currencyCode:'UAH',fxUsd:1/47,fxBaseUsd:1/47,fxReserves:8000,keyRate:7,nominalWageIndex:100,priceIndex:100,importsUsd:0,exportsUsd:0,fxHistory:[],fxLastChange:0,fxLastGdp:200000,month:0,year:1,money:12000,debt:0,pop:37000000,gdp:200000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:15.5,taxPolicy:{income:18,vat:20,corporate:18,excise:8,property:1,customs:5,payroll:5},taxApplied:15.5,deficitMonths:0,tradeDeficitMonths:0,health:12,education:12,defense:15,society:{pensions:50,benefits:50,housing:50,transport:50,culture:50,environment:50,safety:50,sports:50,family:50,employment:50,digital:50,regions:50},industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Центральный макрорегион',pop:7000000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный макрорегион',pop:6500000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточный макрорегион',pop:8500000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южный макрорегион',pop:7500000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный макрорегион',pop:7500000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[{name:'Аркания',value:15,power:65},{name:'Белория',value:48,power:42},{name:'Тарвия',value:-20,power:80}],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
+const initial=()=>({name:'Украина',currencyName:'гривна',currencyCode:'UAH',fxUsd:1/47,fxBaseUsd:1/47,fxReserves:8000,keyRate:7,nominalWageIndex:100,priceIndex:100,importsUsd:0,exportsUsd:0,fxHistory:[],fxLastChange:0,fxLastGdp:200000,month:0,year:1,money:12000,debt:0,pop:37000000,gdp:200000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:15.5,taxPolicy:{income:18,vat:20,corporate:18,excise:8,property:1,customs:5,payroll:5},taxApplied:15.5,deficitMonths:0,tradeDeficitMonths:0,health:12,education:12,defense:15,society:{pensions:50,benefits:50,housing:50,transport:50,culture:50,environment:50,safety:50,sports:50,family:50,employment:50,digital:50,regions:50,healthcare:50,schools:50,universities:50,vocational:50,science:50,childcare:50,disability:50,eldercare:50,mentalwell:50,roads:50,rail:50,water:50,waste:50,internet:50,justice:50,courts:50,anticorruption:50,publicadmin:50,consumer:50,labour:50,smalltowns:50,urban:50,agriculture:50,innovation:50,tourism:50,youth:50,publicmedia:50,library:50,fire:50,emergency:50,accessibility:50},welfare:50,poverty:22,infrastructure:52,justiceQuality:50,serviceQuality:50,environmentQuality:50,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Центральный макрорегион',pop:7000000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный макрорегион',pop:6500000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточный макрорегион',pop:8500000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южный макрорегион',pop:7500000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный макрорегион',pop:7500000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[{name:'Аркания',value:15,power:65},{name:'Белория',value:48,power:42},{name:'Тарвия',value:-20,power:80}],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
 let S;try{S={...initial(),...JSON.parse(localStorage.getItem('novariaSave')||'{}')}}catch{S=initial()}if(!Array.isArray(S.regions)||!Array.isArray(S.parties)||!Array.isArray(S.relations))S=initial();
 S.name='Украина';S.currencyName='гривна';S.currencyCode='UAH';
 // Миграция старого стартового сохранения v7 с ошибочным курсом 1:1.
@@ -94,25 +94,55 @@ function taxYieldRate(policy=S.taxPolicy){return Object.keys(TAX_WEIGHTS).reduce
 let taxDraft={...S.taxPolicy};
 window.setTax=function(k,v){if(!(k in TAX_WEIGHTS))return;taxDraft[k]=Number(v);const out=document.getElementById('taxPreview');if(out)out.textContent=taxYieldRate(taxDraft).toFixed(1)+'% эффективной ставки';const n=document.getElementById('tax-'+k+'-value');if(n)n.textContent=Number(v).toFixed(k==='property'?1:0)+'%'};
 const SOCIETY_POLICIES=[
- ['pensions','Пенсии и поддержка пожилых','Пенсионные выплаты, уровень жизни пожилых и нагрузка на бюджет.'],
- ['benefits','Социальная помощь','Поддержка малообеспеченных семей; снижает бедность, но требует расходов.'],
- ['housing','Жилищная политика','Доступность жилья, строительство и миграционная привлекательность.'],
- ['transport','Общественный транспорт','Мобильность работников, доступность рабочих мест и производительность.'],
- ['culture','Культура и наследие','Культурные учреждения, общественная сплочённость и привлекательность регионов.'],
- ['environment','Экология и чистая вода','Здоровье населения, качество среды и долгосрочные издержки загрязнения.'],
- ['safety','Гражданская безопасность','Полиция, спасательные службы и доверие к общественному порядку.'],
- ['sports','Массовый спорт','Профилактика заболеваний, здоровье и качество жизни.'],
- ['family','Поддержка семей и детей','Детские сады, пособия и условия для рождения и воспитания детей.'],
- ['employment','Политика занятости','Переобучение, службы занятости и возвращение людей на рынок труда.'],
- ['digital','Цифровые госуслуги','Доступность услуг, снижение бюрократии и рост производительности.'],
- ['regions','Развитие регионов','Выравнивание инфраструктуры, региональные рабочие места и лояльность.']
+ ['pensions','Пенсии и поддержка пожилых','Размер и устойчивость пенсионной системы.','Социальная защита'],
+ ['benefits','Социальная помощь','Адресная помощь малообеспеченным и снижение бедности.','Социальная защита'],
+ ['disability','Поддержка людей с инвалидностью','Доступность услуг, выплаты и самостоятельность граждан.','Социальная защита'],
+ ['eldercare','Уход за пожилыми','Социальные службы и долговременный уход.','Социальная защита'],
+ ['family','Поддержка семей и детей','Помощь семьям, родителям и детям.','Социальная защита'],
+ ['childcare','Детские сады и ясли','Доступность дошкольного ухода и занятость родителей.','Социальная защита'],
+ ['housing','Жилищная политика','Доступность жилья, строительство и аренда.','Жильё и инфраструктура'],
+ ['transport','Общественный транспорт','Мобильность работников и доступ к услугам.','Жильё и инфраструктура'],
+ ['roads','Дороги и мосты','Логистика, доступность регионов и издержки бизнеса.','Жильё и инфраструктура'],
+ ['rail','Железнодорожная инфраструктура','Пассажирские и грузовые перевозки, связанность регионов.','Жильё и инфраструктура'],
+ ['water','Водоснабжение и канализация','Качество воды, санитария и здоровье населения.','Жильё и инфраструктура'],
+ ['waste','Переработка отходов','Чистота населённых пунктов и экологические издержки.','Жильё и инфраструктура'],
+ ['internet','Связь и широкополосный интернет','Доступ к цифровым услугам и возможностям бизнеса.','Жильё и инфраструктура'],
+ ['urban','Развитие городов','Общественные пространства, планирование и городские услуги.','Жильё и инфраструктура'],
+ ['smalltowns','Развитие малых городов и сёл','Рабочие места и доступность услуг вне крупных центров.','Жильё и инфраструктура'],
+ ['healthcare','Здравоохранение','Доступность медицинской помощи и профилактика заболеваний.','Здоровье и качество жизни'],
+ ['sports','Массовый спорт','Профилактика заболеваний и качество жизни.','Здоровье и качество жизни'],
+ ['mentalwell','Психологическая помощь','Доступность консультаций и общественное благополучие.','Здоровье и качество жизни'],
+ ['environment','Экология и чистая вода','Качество среды и долгосрочные издержки загрязнения.','Здоровье и качество жизни'],
+ ['safety','Гражданская безопасность','Работа полиции, спасательных служб и доверие к порядку.','Здоровье и качество жизни'],
+ ['fire','Пожарная служба','Профилактика пожаров и готовность спасательных служб.','Здоровье и качество жизни'],
+ ['emergency','Гражданская защита и ЧС','Готовность к чрезвычайным ситуациям и устойчивость услуг.','Здоровье и качество жизни'],
+ ['schools','Школьное образование','Качество школ, доступность и базовые навыки.','Образование и наука'],
+ ['universities','Университеты','Высшее образование, кадры и квалификация работников.','Образование и наука'],
+ ['vocational','Профессиональное образование','Подготовка рабочих, техников и специалистов.','Образование и наука'],
+ ['science','Научные исследования','Научная база, разработки и долгосрочный рост производительности.','Образование и наука'],
+ ['innovation','Инновационные гранты','Новые технологии и внедрение разработок в бизнесе.','Образование и наука'],
+ ['youth','Молодёжная политика','Образовательные и профессиональные возможности молодёжи.','Образование и наука'],
+ ['culture','Культура и наследие','Культурные учреждения и общественная сплочённость.','Культура и общество'],
+ ['library','Библиотеки и общественные центры','Доступ к знаниям, досугу и местным сообществам.','Культура и общество'],
+ ['publicmedia','Общественные медиа','Независимая информация и медиаграмотность.','Культура и общество'],
+ ['tourism','Туризм и рекреация','Сфера услуг, занятость и доходы регионов.','Культура и общество'],
+ ['employment','Политика занятости','Переобучение, службы занятости и трудоустройство.','Экономика и труд'],
+ ['labour','Защита труда','Безопасные условия, соблюдение трудовых прав и производительность.','Экономика и труд'],
+ ['agriculture','Развитие сельских территорий','Сельская инфраструктура, производительность и занятость.','Экономика и труд'],
+ ['digital','Цифровые госуслуги','Снижение бюрократии и доступность государственных услуг.','Государственное управление'],
+ ['publicadmin','Качество госуправления','Компетентность служб, скорость и качество решений.','Государственное управление'],
+ ['anticorruption','Антикоррупционная политика','Прозрачность закупок, контроль расходов и доверие.','Государственное управление'],
+ ['justice','Доступ к правосудию','Доступность юридической помощи и защита прав.','Право и институты'],
+ ['courts','Независимость и качество судов','Сроки рассмотрения дел, предсказуемость и доверие.','Право и институты'],
+ ['consumer','Защита потребителей','Контроль качества товаров и честные правила рынка.','Право и институты'],
+ ['regions','Развитие регионов','Выравнивание инфраструктуры и региональная лояльность.','Региональная политика']
 ];
 if(!S.society||typeof S.society!=='object')S.society={};
 for(const [k] of SOCIETY_POLICIES)S.society[k]=clamp(Number(S.society[k]??50),0,100);
 let societyDraft={...S.society};
 window.setSociety=(k,v)=>{if(!(k in societyDraft))return;societyDraft[k]=Number(v);const n=document.getElementById('soc-'+k+'-v');if(n)n.textContent=String(Math.round(Number(v)))+' / 100';const c=document.getElementById('societyCost');if(c)c.textContent=fmt(societyMonthlyCost(societyDraft))+' млн $ в месяц';};
-function societyMonthlyCost(policy=S.society){return SOCIETY_POLICIES.reduce((sum,[k])=>sum+Math.round(S.gdp*.000018*(Number(policy[k]??50)/50)),0)}
-function renderSociety(){const sliders=SOCIETY_POLICIES.map(([k,label,desc])=>`<div class="tax-control"><label>${label} <b id="soc-${k}-v">${Math.round(societyDraft[k]??50)} / 100</b></label><input type="range" min="0" max="100" step="1" value="${societyDraft[k]??50}" oninput="setSociety('${k}',this.value)"><small class="muted">${desc}</small></div>`).join('');return `<div class="grid">${card('Социальная политика Украины',`<p class="muted">Управляй не только медициной и школами. Каждый показатель меняет расходы бюджета и конкретные показатели страны. 50 — нейтральный уровень; слишком высокие расходы без доходов увеличивают дефицит и долг.</p><div class="cards"><div class="mini">Общественное одобрение <b>${Math.round(S.approval)}%</b></div><div class="mini">Стабильность <b>${Math.round(S.stability)}%</b></div><div class="mini">Занятость <b>${Math.round(S.employment)}%</b></div><div class="mini">Технологии <b>${Math.round(S.tech)} / 100</b></div><div class="mini">Средняя лояльность регионов <b>${Math.round(S.regions.reduce((a,r)=>a+r.loyalty,0)/Math.max(1,S.regions.length))}%</b></div><div class="mini">Новые социальные расходы <b id="societyCost">${fmt(societyMonthlyCost())} млн $ в месяц</b></div></div><div class="tax-grid">${sliders}</div><button class="primary" onclick="saveSociety()">Утвердить социальную политику</button>`)}${card('Что меняет социальная политика',`<ul><li>Пенсии и пособия влияют на бедность, одобрение и стабильность.</li><li>Жильё и семейная поддержка влияют на привлекательность страны и динамику населения.</li><li>Транспорт и занятость влияют на рабочие места и ВВП.</li><li>Культура, спорт и экология влияют на здоровье и качество жизни.</li><li>Безопасность влияет на беспорядки и стабильность.</li><li>Цифровизация повышает технологии и эффективность экономики.</li><li>Развитие регионов влияет на инфраструктуру и лояльность областей.</li></ul><p class="muted">Результаты накапливаются постепенно каждый игровой месяц. Снижение финансирования тоже имеет последствия.</p>`)}</div>`}
+function societyMonthlyCost(policy=S.society){return SOCIETY_POLICIES.reduce((sum,[k])=>sum+Math.round(S.gdp*.0000065*(Number(policy[k]??50)/50)),0)}
+function renderSociety(){const groups=[...new Set(SOCIETY_POLICIES.map(x=>x[3]))];const sliders=groups.map(g=>`<h3 class="society-group">${g}</h3><div class="tax-grid">${SOCIETY_POLICIES.filter(x=>x[3]===g).map(([k,label,desc])=>`<div class="tax-control"><label>${label} <b id="soc-${k}-v">${Math.round(societyDraft[k]??50)} / 100</b></label><input type="range" min="0" max="100" step="1" value="${societyDraft[k]??50}" oninput="setSociety('${k}',this.value)"><small class="muted">${desc}</small></div>`).join('')}</div>`).join('');return `<div class="grid">${card('Социальная политика Украины',`<p class="muted">Управляй не только медициной и школами. Каждый показатель меняет расходы бюджета и конкретные показатели страны. 50 — нейтральный уровень; слишком высокие расходы без доходов увеличивают дефицит и долг.</p><div class="cards"><div class="mini">Общественное одобрение <b>${Math.round(S.approval)}%</b></div><div class="mini">Стабильность <b>${Math.round(S.stability)}%</b></div><div class="mini">Занятость <b>${Math.round(S.employment)}%</b></div><div class="mini">Технологии <b>${Math.round(S.tech)} / 100</b></div><div class="mini">Средняя лояльность регионов <b>${Math.round(S.regions.reduce((a,r)=>a+r.loyalty,0)/Math.max(1,S.regions.length))}%</b></div><div class="mini">Новые социальные расходы <b id="societyCost">${fmt(societyMonthlyCost())} млн $ в месяц</b></div><div class="mini">Социальное благополучие <b>${Math.round(S.welfare||50)} / 100</b></div><div class="mini">Бедность <b>${Math.round(S.poverty||22)}%</b></div><div class="mini">Инфраструктура <b>${Math.round(S.infrastructure||52)} / 100</b></div><div class="mini">Качество госуслуг <b>${Math.round(S.serviceQuality||50)} / 100</b></div><div class="mini">Качество институтов <b>${Math.round(S.justiceQuality||50)} / 100</b></div></div>${sliders}<button class="primary" onclick="saveSociety()">Утвердить социальную политику</button>`)}${card('Что меняет социальная политика',`<ul><li>Пенсии и пособия влияют на бедность, одобрение и стабильность.</li><li>Жильё и семейная поддержка влияют на привлекательность страны и динамику населения.</li><li>Транспорт и занятость влияют на рабочие места и ВВП.</li><li>Культура, спорт и экология влияют на здоровье и качество жизни.</li><li>Безопасность влияет на беспорядки и стабильность.</li><li>Цифровизация повышает технологии и эффективность экономики.</li><li>Развитие регионов влияет на инфраструктуру и лояльность областей.</li></ul><p class="muted">Результаты накапливаются постепенно каждый игровой месяц. Снижение финансирования тоже имеет последствия.</p>`)}</div>`}
 window.saveSociety=()=>{S.society={...societyDraft};log('Правительство утвердило новую программу социальной политики.');save();render();toast('Социальная политика утверждена')};
 function taxControl(k,label,min,max,step=1){const v=Number(taxDraft[k]??S.taxPolicy[k]??0);return `<div class="tax-control"><label>${label} <b id="tax-${k}-value">${v.toFixed(step<1?1:0)}%</b></label><input type="range" min="${min}" max="${max}" step="${step}" value="${v}" oninput="setTax('${k}',this.value)"></div>`}
 S.tax=taxYieldRate();if(!Number.isFinite(S.taxApplied))S.taxApplied=S.tax;
@@ -355,19 +385,46 @@ default:[0,()=>{S.debt=0;S.trust=5;S.gdp*=.95;S.stability=clamp(S.stability-10);
 window.fin=k=>{if(blocked())return;let e=ECO[k];if(S.money<e[0])return toast('Недостаточно средств');S.money-=e[0];e[1]();clampFix();log(e[2]);doc0(e[2]);save();render();toast(e[2])};
 const doc0=t=>{S.documents.unshift({name:t,type:'Бюджет',text:'Решение правительства.',date:`${months[S.month]} ${S.year}, год`});S.documents=S.documents.slice(0,60)};
 const clampFix=()=>{['stability','approval','legitimacy','food','fuel','steel','coupRisk'].forEach(k=>S[k]=clamp(S[k]))};
-function applySocietyEffects(){const q=S.society||{},v=k=>Number(q[k]??50),d=k=>(v(k)-50)/50;
- // Small monthly effects compound over time; policy is powerful but not an instant win button.
- S.approval=clamp(S.approval+d('pensions')*.10+d('benefits')*.14+d('housing')*.035+d('culture')*.045+d('safety')*.04+d('sports')*.035+d('family')*.045);
- S.stability=clamp(S.stability+d('benefits')*.07+d('safety')*.11+d('culture')*.04+d('regions')*.05);
- S.employment=clamp(S.employment+d('transport')*.045+d('employment')*.10+d('digital')*.035+d('housing')*.025,40,100);
- S.tech=clamp(S.tech+d('digital')*.12+d('employment')*.035+d('culture')*.02);
- S.inflation=clamp(S.inflation-d('transport')*.012-d('digital')*.012+d('housing')*.008,0,100);
- S.pop=Math.max(100000,Math.round(S.pop*(1+(d('family')*.000035)+(d('housing')*.00002))));
- if(v('environment')<35){S.health=clamp(S.health-.012);S.approval=clamp(S.approval-.025)}else if(v('environment')>70){S.health=clamp(S.health+.018)}
- if(v('sports')>65)S.health=clamp(S.health+.018);if(v('sports')<25)S.health=clamp(S.health-.015);
- S.regions.forEach(r=>{r.loyalty=clamp(r.loyalty+d('regions')*.10+d('housing')*.025);r.infra=clamp(r.infra+d('transport')*.045+d('regions')*.035);r.unrest=clamp(r.unrest-d('safety')*.08-d('benefits')*.035)});
- S.gdp=Math.max(100,S.gdp*(1+d('transport')*.00010+d('employment')*.00012+d('digital')*.00015+d('environment')*.00004));
+function applySocietyEffects(){
+ const q=S.society||{},v=k=>Number(q[k]??50),d=k=>(v(k)-50)/50;
+ const avg=keys=>keys.reduce((a,k)=>a+d(k),0)/Math.max(1,keys.length);
+ const social=avg(['pensions','benefits','disability','eldercare','family','childcare']);
+ const infra=avg(['housing','transport','roads','rail','water','waste','internet','urban','smalltowns']);
+ const health=avg(['healthcare','sports','mentalwell','environment','safety','fire','emergency']);
+ const edu=avg(['schools','universities','vocational','science','innovation','youth']);
+ const culture=avg(['culture','library','publicmedia','tourism']);
+ const work=avg(['employment','labour','agriculture']);
+ const governance=avg(['digital','publicadmin','anticorruption']);
+ const law=avg(['justice','courts','consumer']);
+ const regional=d('regions');
+ // Society is a network: every budget line influences several long-term indicators.
+ S.approval=clamp(S.approval+social*.12+d('housing')*.025+culture*.045+health*.035+governance*.025);
+ S.stability=clamp(S.stability+social*.055+health*.045+law*.055+regional*.04);
+ S.welfare=clamp((S.welfare||50)+social*.11+health*.045+culture*.025);
+ S.poverty=clamp((S.poverty??22)-social*.075-work*.035+Math.max(0,S.inflation-8)*.012,0,100);
+ S.employment=clamp(S.employment+work*.10+infra*.055+edu*.035+governance*.025,35,100);
+ S.tech=clamp(S.tech+edu*.105+governance*.035+infra*.025);
+ S.infrastructure=clamp((S.infrastructure||52)+infra*.095+regional*.035);
+ S.serviceQuality=clamp((S.serviceQuality||50)+governance*.10+health*.035+edu*.025);
+ S.justiceQuality=clamp((S.justiceQuality||50)+law*.12+governance*.025);
+ S.environmentQuality=clamp((S.environmentQuality||50)+d('environment')*.10+d('water')*.045+d('waste')*.055);
+ S.inflation=clamp(S.inflation-infra*.009-governance*.008+social*.004,0,100);
+ S.pop=Math.max(100000,Math.round(S.pop*(1+social*.000025+d('housing')*.000018+health*.000008)));
+ S.health=clamp(S.health+health*.045+d('water')*.018+d('sports')*.012,0,30);
+ S.gdp=Math.max(100,S.gdp*(1+infra*.000055+work*.000085+edu*.00010+governance*.000075+law*.000025+culture*.00002));
+ S.regions.forEach(r=>{
+  r.loyalty=clamp(r.loyalty+regional*.075+social*.025+governance*.02);
+  r.infra=clamp(r.infra+infra*.055+regional*.035);
+  r.unrest=clamp(r.unrest-health*.025-social*.035-law*.02);
+  r.wealth=clamp(r.wealth+work*.018+infra*.015);
+ });
+ // Underfunding has visible delayed costs; high funding has diminishing returns.
+ if(v('schools')<20)S.tech=clamp(S.tech-.035);
+ if(v('healthcare')<20)S.health=clamp(S.health-.045,0,30);
+ if(v('anticorruption')>70&&v('publicadmin')>60)S.trust=clamp((S.trust||55)+.025);
+ if(v('labour')<25)S.approval=clamp(S.approval-.035);
 }
+
 function econTick(){applySocietyEffects();let t=S.trust,pr=S.printed=(S.printed||0)*.93;
 const taxLoad=taxYieldRate();if(taxLoad>21){const over=taxLoad-21;S.gdp*=1-over*.00022;S.employment=clamp(S.employment-over*.012,60,100);S.approval=clamp(S.approval-over*.018);t-=over*.035}else if(taxLoad<9&&(S.deficitMonths||0)>1){t-=.35;S.trust=clamp((S.trust||55)-.25)}
 if(S.health<5){S.approval=clamp(S.approval-.4);if(Math.random()<.05){S.pop=Math.round(S.pop*.995);log('Вспышка болезни: нет денег на медицину');say('В больницах нет лекарств','😢')}}

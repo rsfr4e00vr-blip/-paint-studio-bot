@@ -146,3 +146,9 @@ select,input,textarea{background:#111719!important;border:1px solid #414b4d!impo
 .tax-preview{display:flex;flex-direction:column;gap:5px;margin-top:12px}
 .tax-preview span{font-size:20px;font-weight:700;color:#d7c18f}
 @media(max-width:760px){.oblast-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.tax-grid{grid-template-columns:1fr}.maplegend{font-size:11px}}
+
+/* NOVARIA 8.0 — grouped public policy controls */
+.society-group{grid-column:1/-1;margin:18px 0 2px;padding:9px 10px;border-left:3px solid var(--gold);background:#ffffff08;color:var(--gold);font-size:15px;letter-spacing:.05em;text-transform:uppercase}
+.tax-grid{align-items:start}
+.tax-control{min-width:0}
+.tax-control input[type=range]{width:100%;accent-color:var(--gold)}
