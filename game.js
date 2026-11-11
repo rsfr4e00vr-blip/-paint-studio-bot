@@ -1090,8 +1090,40 @@ function warTick(){
   if(w.p>=100){w.won=true;w.wm=0;log(`🏆 Победа над государством ${w.n}! Выбери плоды победы во вкладке «Штаб».`);say('Мы победили в войне!','🎉');toast('🏆 Победа над '+w.n+'!');pause()}
   else if(w.p<=0){
    const loss=Math.min(S.money,1200);S.money-=loss;
-   ch({approval:-10,stability:-6,legitimacy:-8,threat:-10},false);c.value=clamp(c.value-10,-100,100);c.power=Math.round(c.power*1.1);w.dead=1;
-   log(`🏳 Поражение в войне с ${w.n}: вынужденный мир, контрибуция ${fmt(loss)} млн.`);say('Мы проиграли войну…','😢');toast('🏳 Поражение в войне');pause();
+   ch({approval:-10,stability:-6,legitimacy:-8,threat:-10},false);
+   c.value=clamp(c.value-10,-100,100);c.power=Math.round(c.power*1.1);w.dead=1;
+   // Победивший ИИ сам диктует условия мира. Выбор зависит от его амбиций,
+   // силы и отношения к игроку: аннексия редкая, вассалитет/частичный захват чаще.
+   const ambition=clamp((c.aggr||.4)*.55+Math.max(0,-(c.value||0))/220+(c.power/(myPower()+c.power))*.25,0,1);
+   const roll=Math.random();
+   let fate=roll<.12+ambition*.12?'annex':roll<.48+ambition*.18?'puppet':'partial';
+   if(fate==='annex'){
+     const p=Math.round(S.pop*.72),g=Math.round(S.gdp*.68);
+     c.pop=Math.round((c.pop||0)+p);c.gdp=Math.round((c.gdp||0)+g);
+     S.pop=Math.max(100000,Math.round(S.pop*.28));S.gdp=Math.max(100,Math.round(S.gdp*.32));
+     S.army=Math.max(5000,Math.round(S.army*.25));S.money=Math.max(0,Math.round(S.money*.35));
+     S.campaignOver=true;
+     log(`🏴 ${w.n} полностью аннексировал нашу страну. Государственность потеряна; кампания окончена.`);
+     say(`${w.n} ликвидировал нашу независимость.`,'🏴');
+   }else if(fate==='puppet'){
+     c.value=clamp(c.value+35,-100,100);c.owner='puppet';
+     S.out=true;S.approval=clamp(S.approval-15);S.stability=clamp(S.stability-12);
+     S.money=Math.max(0,S.money-loss);
+     S.puppets=S.puppets||[];if(!S.puppets.includes(w.n))S.puppets.push(w.n);
+     log(`🎭 ${w.n} навязал нам вассальный статус. Внешняя политика ограничена, страна сохраняет внутреннее управление.`);
+     say(`${w.n} сделал нашу страну вассалом.`,'🏳');
+   }else{
+     const lostPop=Math.round(S.pop*.28),lostGdp=Math.round(S.gdp*.22);
+     S.pop=Math.max(100000,S.pop-lostPop);S.gdp=Math.max(100,S.gdp-lostGdp);
+     S.army=Math.max(5000,Math.round(S.army*.72));S.money=Math.max(0,S.money-loss);
+     S.conquered=S.conquered||[];S.conquered.push({name:`Территории, отнятые ${w.n}`,owner:'partial',pop:lostPop,gdp:lostGdp,stability:35});
+     c.pop=Math.round((c.pop||0)+lostPop);c.gdp=Math.round((c.gdp||0)+lostGdp);
+     log(`🗺 ${w.n} отнял около 28% нашей территории и навязал контрибуцию ${fmt(loss)} млн. Страна сохранила независимость.`);
+     say(`${w.n} отторг часть нашей территории.`,'🗺');
+   }
+   S.war=S.wars.some(x=>!x.dead)||!!S.martial;
+   toast(fate==='annex'?'🏴 Нас аннексировали':fate==='puppet'?'🎭 Мы стали вассалом':'🗺 Потеряна часть территории');
+   pause();
   }
  });
  S.wars=S.wars.filter(w=>!w.dead);

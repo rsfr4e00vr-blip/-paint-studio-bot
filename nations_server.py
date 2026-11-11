@@ -37,6 +37,13 @@ SANCTION_DMG = 0.05       # -5% дохода цели
 SANCTION_SELF = 0.01      # -1% дохода инициатора
 SANCTION_COOLDOWN = 12
 SANCTION_CAP = 0.10       # суммарный штраф от санкций не больше 10%
+
+# Региональный сепаратизм и гражданская война
+REBELLION_THRESHOLD = 22.0       # лояльность ниже порога запускает кризис
+REBELLION_CONFIRM = 3            # три последовательных отчёта для восстания
+REBELLION_MAX_MONTHS = 18
+REBELLION_COST = 160.0
+REGION_MAX = 24
 PROPOSAL_TTL = 30.0       # секунд на ответ
 
 # Баланс «резиновой ленты»: последнему +5% дохода, лидеру −3%
@@ -100,6 +107,9 @@ class Player:
         self.sanctions_in: list = []  # [{from, end}]
         self.sanctions_out: dict = {} # pid -> month_end
         self.war = None               # id войны
+        self.regions: dict = {}
+        self.rebellion_pressure: dict = {}
+        self.rebellions: dict = {}
 
     def pub(self) -> dict:
         return {"id": self.id, "name": self.name, "country": self.country,
@@ -125,6 +135,7 @@ class Room:
         self.task: asyncio.Task | None = None
         self.proposals: dict = {}     # id -> dict
         self.wars: dict = {}          # id -> dict
+        self.rebellions: dict = {}    # id -> региональные войны
         self.chat: list = []
         self.created = now()
         self.winner = None
@@ -246,6 +257,7 @@ class Room:
             "type": "tick", "month": self.month, "length": self.length,
             "standings": [p.pub() for p in order], "mods": mods,
             "wars": [self.war_pub(w) for w in self.wars.values()],
+            "rebellions": [self.rebellion_pub(w) for w in self.rebellions.values()],
         })
 
     def expire(self):
@@ -313,6 +325,8 @@ class Room:
             await self.send(d, {"type": "war_end", "result": "lose", "enemy": a.country,
                                 "money": -tribute, "approval": -6, "stability": -5})
             await self.notice(f"🏴 {a.country} победил {d.country}. Контрибуция: {tribute} млн.", "war")
+            await self.send(a, {"type": "settlement_offer", "scope": "country",
+                                "target_id": d.id, "enemy": d.country})
         elif result == "def_win":
             # Агрессор платит и теряет рейтинг: нападать на равного невыгодно
             comp = int(min(800, max(0, a.rep["money"]) * 0.10))
@@ -393,6 +407,7 @@ async def handle(room: Room, p: Player, msg: dict):
 
     if kind == "sync":
         await room.send(p, {"type": "state", **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
+                            "rebellions": [room.rebellion_pub(w) for w in room.rebellions.values()],
                             "mods": {q.id: room.income_mod(q) for q in room.players.values()}})
         return
 
@@ -452,7 +467,36 @@ async def on_report(room: Room, p: Player, msg: dict):
     new["power"] = min(new["power"], old["power"] * (1.06 ** months) + 3)
     p.rep = new
     p.out = bool(msg.get("out"))
+    # Региональные данные проверяются по диапазонам; названия и население ограничены.
+    raw_regions = r.get("regions") or []
+    clean_regions = {}
+    if isinstance(raw_regions, list):
+        for item in raw_regions[:REGION_MAX]:
+            if not isinstance(item, dict):
+                continue
+            name = clean_name(item.get("name"), "Регион", 48)
+            clean_regions[name] = {
+                "loyalty": num(item.get("loyalty"), 0, 100, 50),
+                "unrest": num(item.get("unrest"), 0, 100, 20),
+                "pop": num(item.get("pop"), 10000, 500_000_000, 100000)
+            }
+    p.regions = clean_regions
     room.compute_score(p)
+    if room.state == "running":
+        for name, region in clean_regions.items():
+            if region["loyalty"] <= REBELLION_THRESHOLD or region["unrest"] >= 82:
+                p.rebellion_pressure[name] = p.rebellion_pressure.get(name, 0) + 1
+            else:
+                p.rebellion_pressure[name] = max(0, p.rebellion_pressure.get(name, 0) - 1)
+            if (p.rebellion_pressure[name] >= REBELLION_CONFIRM and name not in p.rebellions
+                    and not p.eliminated and not p.war):
+                rid = "r" + "".join(random.choices(string.digits, k=5))
+                p.rebellions[name] = rid
+                room.rebellions[rid] = {"id": rid, "owner": p.id, "region": name,
+                    "progress": 50.0, "month": 0, "pop": region["pop"]}
+                await room.send(p, {"type": "rebellion_start", "id": rid,
+                    "region": name, "progress": 50, "pop": round(region["pop"])})
+                await room.notice(f"⚠️ В регионе «{name}» началось восстание против {p.country}!", "war")
 
 
 def partner(room: Room, p: Player, msg: dict):
@@ -634,7 +678,8 @@ async def nations_socket(ws: WebSocket, code: str):
                         room.host = pid
                 await ws.send_json({"type": "joined", "id": me.id, "host": room.host == me.id,
                                     **room.lobby_info(),
-                                    "wars": [room.war_pub(w) for w in room.wars.values()]})
+                                    "wars": [room.war_pub(w) for w in room.wars.values()],
+                                    "rebellions": [room.rebellion_pub(w) for w in room.rebellions.values()]})
                 if room.state == "paused" and room.auto_paused:
                     room.auto_paused = False
                     room.state = "running"
