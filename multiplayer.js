@@ -36,7 +36,7 @@ function connect(code, telegramGroup=false){
   } else if(m.type==="players")renderPlayers(m.players);
   else if(m.type==="round"){
    isDrawer=false;PS.lock(true);$("#stage").setAttribute("aria-disabled","true");
-   $("#roundStatus").textContent="🎨 Рисует: "+m.drawer+" · "+m.seconds+" сек.";
+   $("#roundStatus").textContent="🎨 Рисует: "+m.drawer;
    $("#wordCard").textContent=isDrawer?"Ждём секретное слово…":"Угадывай, что рисуют!";
    $("#gameChat").innerHTML="";
    if(!isDrawer)notice(m.telegram_group?"Раунд начался — угадывай обычным сообщением в Telegram-группе!":"Раунд начался — пиши догадки в чат!");
