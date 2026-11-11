@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio, random, string, time
 from nations_server import nations_socket, NROOMS, new_code
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, InputMediaPhoto
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo, InputMediaPhoto, BotCommand, BotCommandScopeDefault, BotCommandScopeAllGroupChats)
 from telegram.ext import Application, CommandHandler, ContextTypes, CallbackQueryHandler, MessageHandler, filters
 from io import BytesIO
 import base64, struct, zlib, hmac, hashlib
@@ -403,6 +403,28 @@ async def lifespan(app: FastAPI):
         tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, group_text_handler))
         tg.add_handler(CommandHandler("nations", nations_command))
         await tg.initialize()
+        # Register slash-command suggestions in Telegram's command menu.
+        # Group scope is important: Telegram will suggest these after the user types '/'.
+        drawing_commands = [
+            BotCommand("drawgroup", "🎮 Сыграть в игру — групповая рисовалка"),
+            BotCommand("drawscores", "🏆 Таблица очков рисовалки"),
+            BotCommand("drawhelp", "💡 Как играть в рисовалку"),
+        ]
+        try:
+            await tg.bot.set_my_commands(
+                drawing_commands,
+                scope=BotCommandScopeAllGroupChats(),
+                language_code="ru",
+            )
+            # Also expose commands in private chat command menu.
+            await tg.bot.set_my_commands(
+                drawing_commands,
+                scope=BotCommandScopeDefault(),
+                language_code="ru",
+            )
+        except Exception as exc:
+            # A command-menu setup failure must not prevent the bot from starting.
+            print(f"Не удалось зарегистрировать slash-команды Telegram: {exc}")
         TG_BOT = tg.bot
         if not BOT_USERNAME:
             me = await tg.bot.get_me()
