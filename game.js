@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=s=>document.querySelector(s), clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v)), fmt=n=>Math.round(n).toLocaleString('ru-RU'), months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-const initial=()=>({name:'Республика Новария',month:0,year:1,money:18000,debt:0,pop:8200000,gdp:42000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:20,health:12,education:12,defense:15,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Столица',pop:1200000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный край',pop:1600000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточная область',pop:2100000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южная провинция',pop:1900000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный округ',pop:1400000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[{name:'Аркания',value:15,power:65},{name:'Белория',value:48,power:42},{name:'Тарвия',value:-20,power:80}],conquered:[],botWars:[],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
+const initial=()=>({name:'Республика Новария',month:0,year:1,money:18000,debt:0,pop:8200000,gdp:42000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:20,health:12,education:12,defense:15,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Столица',pop:1200000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный край',pop:1600000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточная область',pop:2100000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южная провинция',pop:1900000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный округ',pop:1400000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[],conquered:[],botWars:[],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
 let S;try{S={...initial(),...JSON.parse(localStorage.getItem('novariaSave')||'{}')}}catch{S=initial()}if(!Array.isArray(S.regions)||!Array.isArray(S.parties)||!Array.isArray(S.relations))S=initial();
 if(!S.playerParty)S.playerParty=S.party||'Центристский союз';if(!S.difficulty)S.difficulty='normal';if(typeof S.campaignOver!=='boolean')S.campaignOver=false;if(!Array.isArray(S.history))S.history=[];if(!Array.isArray(S.log))S.log=[];if(!Array.isArray(S.documents))S.documents=[];if(!Array.isArray(S.laws))S.laws=[];if(!S.event)S.event=null;if(S.history.length===0){let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap())}
 let tab='overview',timer=null,running=false,selectedDifficulty=S.difficulty;
@@ -26,7 +26,32 @@ const MAPR=[
 ['Восточная область','547,139 575,149 652,158 734,186 719,262 652,304 594,313 555,299 536,280 516,252 505,196 497,153',621,214],
 ['Южная провинция','267,252 322,280 380,285 458,290 536,280 555,299 594,313 536,337 528,356 575,374 598,393 536,421 477,431 438,384 481,351 419,337 380,327 368,337 341,365 326,388 275,332',419,313],
 ['Столица','345,135 376,135 380,158 349,163',419,116]];
-function mapHtml(){let P='',T='';MAPR.forEach(m=>{let r=S.regions.find(x=>x.name===m[0])||{loyalty:50,unrest:0};P+=`<polygon points="${m[1]}" fill="${loyColor(r.loyalty)}" stroke="#0d1519" stroke-width="3" stroke-linejoin="round"><title>${m[0]}: лояльность ${Math.round(r.loyalty)}%, недовольство ${Math.round(r.unrest)}%</title></polygon>`;T+=`<text x="${m[2]}" y="${m[3]}" text-anchor="middle" class="maptxt">${m[0].toUpperCase()}</text><text x="${m[2]}" y="${m[3]+17}" text-anchor="middle" class="maptxt2">лояльность ${Math.round(r.loyalty)}%</text>`});const W=S.relations.map((c,i)=>{const x=770+(i%2)*108,y=92+Math.floor(i/2)*88,fill=c.owner==='player'?'#3d9b70':c.owner==='puppet'?'#b68a45':c.owner==='partial'?'#7b9b70':'#586477',label=c.name.length>13?c.name.slice(0,12)+'…':c.name;return `<rect x="${x}" y="${y}" width="98" height="66" rx="7" fill="${fill}" stroke="#111820" stroke-width="2"><title>${c.name} · ${c.owner==='player'?'ваша территория':c.owner==='puppet'?'вассал':c.owner==='partial'?'частичный контроль':'независимое государство'}</title></rect><text x="${x+49}" y="${y+28}" text-anchor="middle" class="maptxt">${label}</text><text x="${x+49}" y="${y+45}" text-anchor="middle" class="maptxt2">${c.owner==='player'?'ВАША':c.owner==='puppet'?'ВАССАЛ':c.owner==='partial'?'ЧАСТЬ':'НЕЗАВИС.'}</text>`}).join('');return `<svg class="hoimap" viewBox="0 0 1000 560" role="img" aria-label="Карта страны и мировые территории"><defs><pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern></defs><rect width="1000" height="560" fill="url(#mg)"/>${P}${T}<text x="868" y="58" text-anchor="middle" class="maptxt">МИРОВЫЕ СТРАНЫ</text>${W}${SEA}</svg><div class="maplegend"><span><i style="background:#6f8a55"></i>высокая лояльность</span><span><i style="background:#a0a257"></i>средняя</span><span><i style="background:#9a5a45"></i>низкая</span></div>`}
+function mapHtml(){
+ // Схематическая мировая карта из 30 отдельных территорий. Это не географическая GIS-карта,
+ // но каждый полигон имеет владельца и меняет цвет после аннексии/вассализации.
+ const world=[
+  [80,110],[190,80],[300,110],[410,85],[520,110],
+  [350,230],[455,315],[520,410],
+  [600,95],[710,75],[820,105],[620,195],[730,190],[840,205],
+  [610,300],[720,300],[830,315],[690,410],
+  [930,90],[1040,80],[1150,115],[930,205],[1040,220],[1150,240],
+  [940,345],[1050,365],[1140,465],[1020,485],[850,455],[760,500]
+ ];
+ const countries=[{name:S.name||'Новария',owner:'player',gdp:S.gdp,pop:S.pop,power:myPower()},...S.relations];
+ const palette=['#657f9c','#788b62','#8e805c','#6e8190','#8b6f78','#6f8b80'];
+ const shapes=countries.slice(0,30).map((c,i)=>{
+  const pos=world[i]||[80+(i%6)*180,100+Math.floor(i/6)*100],x=pos[0],y=pos[1];
+  const pts=`${x-48},${y-25} ${x-20},${y-43} ${x+25},${y-39} ${x+49},${y-8} ${x+40},${y+28} ${x+4},${y+43} ${x-39},${y+30} ${x-52},${y+2}`;
+  const owner=c.owner||c.name;
+  const fill=owner==='player'?'#398f67':owner==='puppet'?'#c19a45':owner==='partial'?'#76a17a':palette[i%palette.length];
+  const label=c.name.length>13?c.name.slice(0,12)+'…':c.name;
+  const status=owner==='player'?'ВАША':owner==='puppet'?'ВАССАЛ':owner==='partial'?'ЧАСТЬ':'НЕЗАВИС.';
+  return `<g><polygon points="${pts}" fill="${fill}" stroke="#10191f" stroke-width="3" stroke-linejoin="round"><title>${c.name} · ${status} · ВВП ${fmt(c.gdp||0)} млрд · население ${fmt(c.pop||0)}</title></polygon><text x="${x}" y="${y-1}" text-anchor="middle" class="maptxt">${label}</text><text x="${x}" y="${y+14}" text-anchor="middle" class="maptxt2">${status}</text></g>`;
+ }).join('');
+ const owned=countries.filter(c=>c.owner==='player'||c.owner==='partial').length;
+ const vassals=countries.filter(c=>c.owner==='puppet').length;
+ return `<svg class="hoimap" viewBox="0 0 1250 570" role="img" aria-label="Схематическая карта мира: 30 государств"><defs><pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern></defs><rect width="1250" height="570" fill="url(#mg)"/><text x="625" y="32" text-anchor="middle" class="maptxt">МИРОВАЯ КАРТА · 30 ГОСУДАРСТВ</text>${shapes}</svg><div class="maplegend"><span><i style="background:#398f67"></i>Новария и присоединённые земли (${owned})</span><span><i style="background:#c19a45"></i>вассалы (${vassals})</span><span><i style="background:#657f9c"></i>независимые государства</span></div><p class="muted">На схеме показаны все 30 государств. Нажми/коснись полигона, чтобы увидеть название, статус и показатели страны во всплывающей подсказке. Расположение схематическое, не точные государственные границы.</p>`;
+}
 function warnBanner(){if(S.out)return'';if(S.grace>0)return `<section class="panel wide okbanner">🛡 Защитный срок: отставка не грозит ещё ${S.grace} мес.</section>`;if(S.crisis>0)return `<section class="panel wide warnbanner">⚠ Угроза отставки: ${S.crisisWhy||''}. Критическое состояние уже ${S.crisis} мес. подряд. ${ADVICE[S.crisisIdx]||'Нужно срочно исправить ситуацию.'} ${isPopular()?'(Тебя любят — отставка наступит позже.)':''}</section>`;return''}
 function bar(label,val){return `<div class="meter"><b>${label}: ${fmt(val)}%</b><div class="bar"><i style="width:${clamp(val)}%;background:${val<30?"linear-gradient(90deg,#c23b4b,#ff7b86)":val<55?"linear-gradient(90deg,#c9902f,#f5c76a)":"linear-gradient(90deg,#2aa56d,#7ee6ae)"}"></i></div></div>`}
 function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]];$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
@@ -96,7 +121,37 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
 const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
 function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust}}
-const C0=[['Аркания',15,65,.4,'Торговая держава'],['Белория',48,42,.2,'Дружелюбный сосед'],['Тарвия',-20,80,.8,'Милитаристы'],['Дорвин',5,55,.5,'Союз торговцев'],['Силезия',-5,38,.3,'Горная республика'],['Мерейя',25,48,.2,'Морская федерация'],['Остмарк',-35,70,.7,'Имперские амбиции']];
+const C0=[
+ ['США',-25,170,0.55,'Глобальная держава',180000],
+ ['Россия',-15,160,0.7,'Военная держава',165000],
+ ['Китай',-10,155,0.48,'Промышленный гигант',155000],
+ ['Индия',5,145,0.42,'Растущая экономика',130000],
+ ['Германия',12,135,0.25,'Промышленная республика',112000],
+ ['Франция',8,128,0.3,'Европейская держава',105000],
+ ['Великобритания',-5,122,0.38,'Морская держава',98000],
+ ['Япония',10,118,0.22,'Технологическая держава',92000],
+ ['Бразилия',15,112,0.36,'Южноамериканская держава',86000],
+ ['Канада',20,108,0.18,'Северная федерация',80000],
+ ['Австралия',25,103,0.2,'Тихоокеанская держава',74000],
+ ['Италия',5,99,0.28,'Средиземноморская страна',68000],
+ ['Турция',-8,96,0.55,'Региональная держава',61000],
+ ['Иран',-30,94,0.72,'Региональный соперник',52000],
+ ['Белория',48,82,0.2,'Дружелюбный сосед',39000],
+ ['Аркания',15,78,0.4,'Торговая держава',36000],
+ ['Тарвия',-20,75,0.8,'Милитаристы',34000],
+ ['Дорвин',5,70,0.5,'Союз торговцев',32000],
+ ['Силезия',-5,66,0.3,'Горная республика',30000],
+ ['Мерейя',25,63,0.2,'Морская федерация',28000],
+ ['Остмарк',-35,60,0.7,'Имперские амбиции',26000],
+ ['Польша',8,58,0.32,'Центральноевропейская страна',24000],
+ ['Украина',18,56,0.35,'Восточноевропейская страна',22000],
+ ['Испания',12,54,0.25,'Средиземноморская страна',20000],
+ ['Швеция',22,52,0.18,'Северная страна',18500],
+ ['Египет',-5,50,0.48,'Североафриканская страна',17000],
+ ['ЮАР',6,48,0.35,'Африканская экономика',15500],
+ ['Мексика',0,46,0.38,'Североамериканская страна',14000],
+ ['Индонезия',15,44,0.32,'Островная держава',12500]
+];
 
 const CDM={speech:4,law:6,aid:3,trade:4,security:3,rally:2,program:4,reform:4,industry:3,roads:2,recruit:2,train:3,equipment:2,mobilize:6};
 const cdLeft=k=>((S.cd||{})[k])||0;
@@ -105,7 +160,7 @@ const cdTick=()=>{if(!S.cd)return;for(let k in S.cd)if(S.cd[k]>0)S.cd[k]--};
 const cdMsg=k=>`Подождите ещё ${cdLeft(k)} мес.`;
 const DN=['Иван Корнев','Мария Лозинская','Павел Рудь','Олег Баранов','Елена Ветрова','Артём Щукин','Нина Орлова','Глеб Сомов'];
 function ensure(){ensureHoi();if(!Array.isArray(S.conquered))S.conquered=[];if(!Array.isArray(S.botWars))S.botWars=[];if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
-C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}if(r.gdp==null)r.gdp=Math.round(18000+c[2]*260);if(r.money==null)r.money=Math.round(5000+c[2]*90);if(r.pop==null)r.pop=Math.round(900000+c[2]*18000);if(r.stability==null)r.stability=55+Math.round(c[1]/10);if(r.army==null)r.army=Math.round(c[2]*620);if(r.owner==null)r.owner=r.name});['cannon','bomb','petard'].forEach(k=>{if(S[k]==null)S[k]=0})}
+C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}if(r.gdp==null)r.gdp=c[5]||Math.round(18000+c[2]*260);if(r.money==null)r.money=Math.round(5000+c[2]*90);if(r.pop==null)r.pop=Math.round(900000+c[2]*18000);if(r.stability==null)r.stability=55+Math.round(c[1]/10);if(r.army==null)r.army=Math.round(c[2]*620);if(r.owner==null)r.owner=r.name;if(r.ai==null)r.ai=true;if(r.army==null)r.army=Math.round(c[2]*620)});['cannon','bomb','petard'].forEach(k=>{if(S[k]==null)S[k]=0})}
 function say(t,m){ensure();S.feed.unshift({t,m:m||'🙂',d:`${months[S.month]} ${S.year}`});S.feed=S.feed.slice(0,40)}
 const blocked=()=>{if(S.campaignOver){toast('Кампания завершена. Начни новую игру.');return true}if(S.out){toast('Вы в оппозиции — вернуться к власти можно во вкладке «Возврат»');return true}return false};
 const myPower=()=>S.army/1000+S.air*1.5+S.navy*2+(S.bomb||0)*15+(S.cannon||0)*.5;
