@@ -27,9 +27,6 @@
 - Нажми «Начать раунд»: рисующий получает секретное слово, остальные видят только имя рисующего.
 - Рисунок синхронизируется у всех участников; остальные отправляют догадки в чат.
 - За правильный ответ начисляется 10 очков, рисующему — 5.
-- Создатель комнаты управляет запуском раунда и настройками: 45/60/80/100/120 секунд и категория слов.
-- Категории: животные, еда, предметы, природа, места/транспорт, сложные и смешные слова; всего более 150 слов.
-- Раунд завершается автоматически по таймеру или после правильного ответа; ведущий передаётся следующему игроку при выходе создателя.
 - Игроки по очереди становятся рисующими.
 - Для работы мультиплеера приложение должно быть развёрнуто на сервере с поддержкой WebSocket (Render поддерживает).
 
@@ -87,9 +84,14 @@ TELEGRAM GROUP DRAWING GAME
 - Комнаты хранятся в памяти процесса: одна копия сервера; на бесплатном плане Render комнаты пропадают при засыпании/перезапуске.
 
 
-PAINT STUDIO — ДОПОЛНЕНИЯ РЕДАКТОРА
-- 25 кистей и эффектов, включая пузыри, листья, сердечки, пиксели, ленту, цветы и дождь.
-- 11 фигур, включая ромб, пятиугольник, шестиугольник, сердце и скруглённый прямоугольник.
-- Текст на холсте, сетка, горизонтальное отражение, поворот на 90°, экспорт PNG/JPG.
-- История отмены/повтора расширена до 50 шагов.
-- Изменения затрагивают Paint Studio; игровые файлы симулятора страны не изменялись.
+TELEGRAM GROUP LIVE DRAWING (NEW)
+
+- Add the bot to your Telegram group.
+- In @BotFather run /setprivacy, choose this bot, then select Disable. This is required so the bot can read ordinary group messages and check guesses (commands alone work with privacy enabled, but live guessing does not).
+- Make sure BOT_TOKEN, WEBAPP_URL, BOT_USERNAME (optional; auto-detected) and MINI_APP_SHORT_NAME are set in Render. The Mini App must be created/published in @BotFather and its short name must match MINI_APP_SHORT_NAME.
+- In the group send /drawgroup (or /guessdraw). Choose a random word, one of six categories, or «Придумать своё слово» (бот попросит прислать его в личные сообщения, чтобы не раскрывать ответ группе).
+- The bot posts a shared image in the group. The selected artist opens the button and draws in Paint Studio; the bot periodically updates that same group image so everyone can watch.
+- Everyone else guesses by sending normal text messages in the Telegram group. The bot checks exact answers (ignores case, punctuation and ё/е), announces correct guesses, awards +10 to the guesser and +5 to the artist, and shows the top scores. Each round lasts 120 seconds. The group score table is retained between rounds while the bot process stays online.
+- This uses the existing Paint Studio Mini App and the drawing WebSocket only. The country simulator files and routes are not changed.
+
+Telegram note: the bot must be able to receive group messages. If group privacy remains enabled in BotFather, it cannot see ordinary guesses and the group game cannot verify them. Group rooms are held in server memory; use one Render instance for this feature unless shared storage is added.
