@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio, random, string, time
+from nations_server import nations_socket, NROOMS, new_code
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
 
@@ -50,6 +51,24 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def nations_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Пост в группе: кнопка входа в мультиплеер «Симулятор государства»."""
+    if not update.effective_chat:
+        return
+    code = new_code()
+    if BOT_USERNAME and MINI_APP_SHORT_NAME:
+        link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=nat_{code}"
+    else:
+        link = f"{WEBAPP_URL}/game?room={code}"
+    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🌍 Войти в игру", url=link)]])
+    await update.effective_message.reply_text(
+        f"🏛 Симулятор государства — мультиплеер\nКомната: {code}\n\n"
+        "У каждого игрока своя страна. Время идёт одновременно, побеждает тот, "
+        "у кого больше очков в конце. Нужно минимум 2 игрока.",
+        reply_markup=keyboard,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global BOT_USERNAME
@@ -58,6 +77,7 @@ async def lifespan(app: FastAPI):
         tg = Application.builder().token(BOT_TOKEN).build()
         tg.add_handler(CommandHandler("start", start))
         tg.add_handler(CommandHandler("draw", draw_command))
+        tg.add_handler(CommandHandler("nations", nations_command))
         await tg.initialize()
         if not BOT_USERNAME:
             me = await tg.bot.get_me()
@@ -99,6 +119,21 @@ def multiplayer_css():
 @app.get("/multiplayer.js")
 def multiplayer_js():
     return FileResponse(BASE / "multiplayer.js", media_type="application/javascript")
+
+
+@app.get("/nations.js")
+def nations_js():
+    return FileResponse(BASE / "nations.js", media_type="application/javascript")
+
+
+@app.get("/nations.css")
+def nations_css():
+    return FileResponse(BASE / "nations.css", media_type="text/css")
+
+
+@app.websocket("/ws/nations/{code}")
+async def nations_ws(ws: WebSocket, code: str):
+    await nations_socket(ws, code)
 
 
 @app.get("/game.js")

@@ -1,0 +1,37 @@
+/* Мультиплеер «Симулятор государства» */
+#mpbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 10px;padding:8px 10px;background:#101d2c;border:1px solid var(--line);border-radius:13px;font-size:13px}
+#mpbar .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mpbar b{color:var(--gold)}
+#mpbar.live{border-color:#39835f}
+body.mp .timebar button,body.mp .timebar label,body.mp .timebar select,body.mp #runstate{display:none}
+body.mp #gameover{display:none!important}
+#mpModal{position:fixed;inset:0;z-index:70;background:#07111ef2;display:none;align-items:flex-start;justify-content:center;padding:14px;overflow:auto}
+#mpModal.open{display:flex}
+.mpbox{width:100%;max-width:520px;margin:auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 20px 80px #000a}
+.mpbox h2{margin:0 0 10px;font-size:19px}
+.mpbox input,.mpbox select,.mpwrap input,.mpwrap select{width:100%;padding:11px;background:#0e1824;color:var(--txt);border:1px solid var(--line);border-radius:9px}
+.mpbox label{display:block;margin:9px 0 3px;color:var(--muted);font-size:12px}
+.mpcode{font:800 30px/1.1 ui-monospace,monospace;letter-spacing:6px;text-align:center;color:var(--gold);padding:10px;background:#0e1824;border:1px dashed var(--line);border-radius:11px;margin:8px 0;user-select:all}
+.mprow{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.mprow>*{flex:1;min-width:120px}
+.mpplayer{display:flex;align-items:center;gap:8px;padding:9px;border:1px solid var(--line);border-radius:10px;background:#122033;margin:6px 0}
+.mpplayer .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mpplayer small{color:var(--muted)}
+.mpwrap{display:grid;gap:10px}
+.mpwrap table{width:100%;border-collapse:collapse;font-size:13px}
+.mpwrap th,.mpwrap td{padding:6px 4px;border-bottom:1px solid #263a52;text-align:left;vertical-align:top}
+.mpwrap tr.me td{background:#1c3047}
+.chip{display:inline-block;padding:1px 6px;margin:1px 2px 1px 0;border-radius:10px;background:#0e1824;border:1px solid var(--line);font-size:11px;color:var(--muted)}
+.chip.good{color:var(--green)}.chip.bad{color:var(--red)}
+.mpdip{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.mpdip .mini .actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.mpdip .mini .actions button,.mpdip .mini .actions select{flex:1 1 40%;min-width:100px;font-size:13px}
+.mpfeed div,.mpchat div{padding:5px 2px;border-bottom:1px solid #263a52;overflow-wrap:anywhere;font-size:13px}
+.mpchat{max-height:180px;overflow:auto;margin-bottom:8px}
+.mpfeed{max-height:220px;overflow:auto}
+.muted2{color:var(--muted);font-size:12px}
+#mpProp{position:fixed;left:10px;right:10px;bottom:12px;z-index:75;max-width:460px;margin:auto;background:#172538;border:1px solid var(--gold);border-radius:14px;padding:12px;box-shadow:0 10px 40px #000a;display:none}
+#mpProp.open{display:block}
+.warbar{height:10px;border-radius:10px;background:#612e38;overflow:hidden;margin:6px 0}
+.warbar i{display:block;height:100%;background:#39835f}
+@media(max-width:520px){.mpcode{font-size:26px;letter-spacing:4px}.mpwrap th:nth-child(n+5),.mpwrap td:nth-child(n+5){display:none}}
