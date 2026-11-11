@@ -39,8 +39,7 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     room_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=5))
-    ROOMS.setdefault(room_id, {"clients": set(), "players": {}, "drawer": None,
-                               "word": None, "round": 0, "ends": 0, "image": None})
+    draw_room(room_id)
     link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=draw_{room_id}"
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🎨 Войти и играть", url=link)]])
     await update.effective_message.reply_text(
@@ -147,12 +146,22 @@ def health():
 
 
 
-# --- Multiplayer drawing rooms ---
+# --- Paint Studio multiplayer drawing rooms (kept separate from nation simulator) ---
 ROOMS = {}
-WORDS = ["котик", "собака", "самолёт", "пицца", "радуга", "динозавр", "робот", "замок",
-         "велосипед", "арбуз", "жираф", "ракета", "снеговик", "пират", "черепаха",
-         "зонт", "пингвин", "космонавт", "торт", "пальма", "акула", "единорог",
-         "машина", "гитара", "солнце", "корабль", "бабочка", "крокодил", "часы", "гриб"]
+WORD_BANKS = {
+    "animals": "кот собака жираф пингвин черепаха акула крокодил бабочка слон лиса медведь кенгуру осьминог павлин ёж дельфин сова попугай верблюд лягушка улитка енот тигр лев зебра белка бобр фламинго хамелеон морж тюлень",
+    "food": "пицца арбуз торт мороженое банан ананас бургер суши пончик сыр морковь клубника лимон гриб мороженое шоколад бутерброд огурец попкорн круассан пирог картошка виноград вишня кокос яйцо морковь",
+    "objects": "зонт часы гитара телефон компьютер очки чемодан подушка лампа ключ корона рюкзак велосипед робот фотоаппарат наушники чашка книга свеча мяч скейтборд самокат будильник микрофон геймпад ножницы кисточка глобус телескоп",
+    "nature": "радуга солнце луна звезда вулкан водопад гора пальма кактус цветок дерево облако молния снеговик море остров пустыня гриб снежинка листочек радуга торнадо айсберг костёр пещера планета комета",
+    "places": "самолёт ракета корабль поезд автобус метро маяк замок мост аэропорт школа больница цирк музей небоскрёб палатка подводная лодка трактор вертолёт воздушный шар космическая станция ферма вокзал",
+    "fun": "динозавр единорог космонавт пират русалка дракон привидение вампир ниндзя супергерой инопланетянин машина времени снежный человек летающий бутерброд танцующий кактус говорящий чайник король обезьян робот-повар кот в сапогах",
+}
+WORD_BANKS["all"] = " ".join(WORD_BANKS.values())
+
+def draw_room(room_id):
+    return ROOMS.setdefault(room_id, {"clients": set(), "players": {}, "drawer": None,
+        "word": None, "round": 0, "ends": 0, "image": None, "host": None, "last_drawer": None,
+        "duration": 80, "category": "all", "round_task": None})
 
 async def room_send(room, payload, exclude=None):
     for ws in list(room["clients"]):
@@ -163,12 +172,32 @@ async def room_send(room, payload, exclude=None):
         except Exception:
             room["clients"].discard(ws)
 
+async def finish_draw_round(room, reason="Время вышло"):
+    if not room.get("word"):
+        return
+    answer = room["word"]
+    room["word"] = None
+    room["ends"] = 0
+    room["drawer"] = None
+    task = room.get("round_task")
+    room["round_task"] = None
+    if task and task is not asyncio.current_task():
+        task.cancel()
+    await room_send(room, {"type": "round_end", "word": answer, "reason": reason,
+        "players": [{"name": p["name"], "score": p["score"]} for p in room["players"].values()]})
+
+async def draw_round_clock(room, duration):
+    try:
+        await asyncio.sleep(duration)
+        await finish_draw_round(room, "Время вышло")
+    except asyncio.CancelledError:
+        pass
+
 @app.websocket("/ws/draw/{room_id}")
 async def draw_socket(ws: WebSocket, room_id: str):
     await ws.accept()
     room_id = room_id.upper()[:8]
-    room = ROOMS.setdefault(room_id, {"clients": set(), "players": {}, "drawer": None,
-                                      "word": None, "round": 0, "ends": 0, "image": None})
+    room = draw_room(room_id)
     room["clients"].add(ws)
     player_id = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
     try:
@@ -178,58 +207,88 @@ async def draw_socket(ws: WebSocket, room_id: str):
             if kind == "join":
                 name = str(msg.get("name", "Игрок"))[:24].strip() or "Игрок"
                 room["players"][ws] = {"id": player_id, "name": name, "score": 0}
-                await ws.send_json({"type":"joined", "id":player_id, "room":room_id,
-                                    "players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()],
-                                    "drawer": room["players"].get(room["drawer"],{}).get("name") if room["drawer"] else None,
-                                    "image": room["image"]})
-                await room_send(room, {"type":"players","players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()]}, ws)
+                if room["host"] is None:
+                    room["host"] = ws
+                await ws.send_json({"type": "joined", "id": player_id, "room": room_id,
+                    "host": room["host"] is ws,
+                    "players": [{"name": p["name"], "score": p["score"]} for p in room["players"].values()],
+                    "drawer": room["players"].get(room["drawer"], {}).get("name") if room["drawer"] else None,
+                    "image": room["image"], "duration": room["duration"], "category": room["category"]})
+                await room_send(room, {"type": "players", "players": [{"name": p["name"], "score": p["score"]} for p in room["players"].values()]}, ws)
+                if room["word"]:
+                    await ws.send_json({"type": "round", "drawer": room["players"].get(room["drawer"], {}).get("name", "Игрок"),
+                        "round": room["round"], "seconds": max(0, int(room["ends"] - time.time()))})
             elif ws not in room["players"]:
                 continue
+            elif kind == "settings":
+                if ws is not room["host"] or room["word"]:
+                    continue
+                category = str(msg.get("category", "all"))
+                duration = int(msg.get("duration", 80))
+                room["category"] = category if category in WORD_BANKS else "all"
+                room["duration"] = duration if duration in (45, 60, 80, 100, 120) else 80
+                await room_send(room, {"type": "settings", "category": room["category"], "duration": room["duration"]})
             elif kind == "start":
-                if len(room["players"]) < 2:
-                    await ws.send_json({"type":"notice","text":"Нужно минимум 2 игрока."})
+                if ws is not room["host"]:
+                    await ws.send_json({"type": "notice", "text": "Начать раунд может создатель комнаты."})
+                    continue
+                if room["word"]:
+                    await ws.send_json({"type": "notice", "text": "Раунд уже идёт."})
                     continue
                 candidates = [p for p in room["players"] if p in room["clients"]]
-                previous = room["drawer"]
-                if len(candidates) > 1 and previous in candidates:
-                    candidates = candidates[candidates.index(previous)+1:] + candidates[:candidates.index(previous)+1]
-                room["drawer"] = candidates[0]
-                room["word"] = random.choice(WORDS)
-                room["round"] += 1
-                room["ends"] = time.time() + 80
-                room["image"] = None
-                await room_send(room, {"type":"round","drawer":room["players"][room["drawer"]]["name"],
-                                       "round":room["round"],"seconds":80})
-                await room["drawer"].send_json({"type":"your_word","word":room["word"]})
-            elif kind == "guess":
-                guess = str(msg.get("text",""))[:100].strip()
-                if not guess:
+                if len(candidates) < 2:
+                    await ws.send_json({"type": "notice", "text": "Нужно минимум 2 игрока."})
                     continue
-                if room["word"] and ws is not room["drawer"] and guess.casefold() == room["word"].casefold():
+                previous = room.get("last_drawer")
+                if previous in candidates:
+                    candidates = candidates[candidates.index(previous) + 1:] + candidates[:candidates.index(previous) + 1]
+                room["drawer"] = candidates[0]
+                room["last_drawer"] = candidates[0]
+                words = WORD_BANKS[room["category"]].split()
+                room["word"] = random.choice(words)
+                room["round"] += 1
+                room["ends"] = time.time() + room["duration"]
+                room["image"] = None
+                await room_send(room, {"type": "round", "drawer": room["players"][room["drawer"]]["name"],
+                    "round": room["round"], "seconds": room["duration"]})
+                await room["drawer"].send_json({"type": "your_word", "word": room["word"]})
+                room["round_task"] = asyncio.create_task(draw_round_clock(room, room["duration"]))
+            elif kind == "guess":
+                guess = str(msg.get("text", ""))[:80].strip()
+                if not guess or not room["word"] or ws is room["drawer"]:
+                    continue
+                normalize = lambda value: "".join(ch for ch in value.casefold().replace("ё", "е") if ch.isalnum())
+                if normalize(guess) == normalize(room["word"]):
                     room["players"][ws]["score"] += 10
                     if room["drawer"] in room["players"]:
                         room["players"][room["drawer"]]["score"] += 5
-                    await room_send(room, {"type":"correct","name":room["players"][ws]["name"],
-                                            "word":room["word"],"players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()]})
-                    room["word"] = None
+                    await room_send(room, {"type": "correct", "name": room["players"][ws]["name"],
+                        "word": room["word"], "players": [{"name": p["name"], "score": p["score"]} for p in room["players"].values()]})
+                    await finish_draw_round(room, "Слово угадано!")
                 else:
-                    await room_send(room, {"type":"chat","name":room["players"][ws]["name"],"text":guess})
-            elif kind == "canvas" and ws is room["drawer"]:
-                data = str(msg.get("data",""))
-                if len(data) < 2_000_000:
+                    await room_send(room, {"type": "chat", "name": room["players"][ws]["name"], "text": guess})
+            elif kind == "canvas" and ws is room["drawer"] and room["word"]:
+                data = str(msg.get("data", ""))
+                if data.startswith("data:image/") and len(data) < 1_200_000:
                     room["image"] = data
-                    await room_send(room, {"type":"canvas","data":data}, ws)
+                    await room_send(room, {"type": "canvas", "data": data}, ws)
             elif kind == "clear" and ws is room["drawer"]:
                 room["image"] = None
-                await room_send(room, {"type":"clear"}, ws)
+                await room_send(room, {"type": "clear"}, ws)
     except WebSocketDisconnect:
         room["clients"].discard(ws)
         room["players"].pop(ws, None)
+        if room["host"] is ws:
+            room["host"] = next(iter(room["players"]), None)
+            if room["host"]:
+                await room["host"].send_json({"type": "host", "isHost": True})
         if room["drawer"] is ws:
-            room["drawer"] = None
-            room["word"] = None
-        await room_send(room, {"type":"players","players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()]})
+            await finish_draw_round(room, "Рисующий отключился")
+        await room_send(room, {"type": "players", "players": [{"name": p["name"], "score": p["score"]} for p in room["players"].values()]})
         if not room["clients"]:
+            task = room.get("round_task")
+            if task:
+                task.cancel()
             ROOMS.pop(room_id, None)
 
 if __name__ == "__main__":
