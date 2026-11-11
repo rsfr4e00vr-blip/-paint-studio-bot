@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio, random, string, time
+import json
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 from nations_server import nations_socket, NROOMS, new_code
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update, WebAppInfo
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -95,6 +98,40 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+# GeoJSON is fetched server-side and cached in-process. Each layer is independent:
+# a failed regional dataset never blocks the world or Ukraine layers.
+_MAP_SOURCES = {
+    "world": "https://raw.githubusercontent.com/datasets/geo-countries/master/data/countries.geojson",
+    "ukraine": "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/main/releaseData/gbOpen/UKR/ADM1/geoBoundaries-UKR-ADM1.geojson",
+    "russia": "https://raw.githubusercontent.com/wmgeolab/geoBoundaries/main/releaseData/gbOpen/RUS/ADM1/geoBoundaries-RUS-ADM1.geojson",
+}
+_MAP_CACHE = {}
+
+def _load_map_geojson(layer: str):
+    if layer in _MAP_CACHE:
+        return _MAP_CACHE[layer]
+    req = Request(_MAP_SOURCES[layer], headers={"User-Agent": "NovariaGame/1.0", "Accept": "application/geo+json,application/json"})
+    with urlopen(req, timeout=35) as response:
+        raw = response.read(45 * 1024 * 1024 + 1)
+    if len(raw) > 45 * 1024 * 1024:
+        raise ValueError("GeoJSON layer exceeds size limit")
+    data = json.loads(raw.decode("utf-8"))
+    if data.get("type") != "FeatureCollection" or not isinstance(data.get("features"), list):
+        raise ValueError("Invalid GeoJSON layer")
+    _MAP_CACHE[layer] = data
+    return data
+
+@app.get("/api/map/{layer}")
+async def map_geojson(layer: str):
+    from fastapi import HTTPException
+    if layer not in _MAP_SOURCES:
+        raise HTTPException(status_code=404, detail="Unknown map layer")
+    try:
+        return await asyncio.to_thread(_load_map_geojson, layer)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Map data temporarily unavailable: {type(exc).__name__}")
+
 
 
 @app.get("/")
