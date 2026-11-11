@@ -25,7 +25,6 @@ DIFFS = {"story", "easy", "normal", "hard", "expert"}
 NEWBIE_SHIELD = 24        # первые 24 мес. нельзя объявлять войну
 WAR_COOLDOWN = 18         # агрессор ждёт 18 мес. после своей войны
 PEACE_SHIELD = 12         # после войны защитника 12 мес. не трогают
-WAR_MAX_MONTHS = 12       # затяжная война заканчивается ничьёй
 AID_MAX_SHARE = 0.25      # перевод ≤ 25% казны отправителя
 AID_FEE = 0.15            # комиссия на переводе (против сговора и фарма)
 AID_COOLDOWN = 6          # один и тот же получатель — раз в 6 мес.
@@ -303,8 +302,6 @@ class Room:
                 await self.end_war(w, "agg_win")
             elif w["p"] <= 0:
                 await self.end_war(w, "def_win")
-            elif w["m"] >= WAR_MAX_MONTHS:
-                await self.end_war(w, "draw")
 
     async def end_war(self, w: dict, result: str):
         self.wars.pop(w["id"], None)
