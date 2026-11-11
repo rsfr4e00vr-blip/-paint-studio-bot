@@ -22,6 +22,7 @@ WEBAPP_URL = os.environ.get("WEBAPP_URL", "").rstrip("/")
 PORT = int(os.environ.get("PORT", "8000"))
 TG_BOT = None
 GROUP_UPDATE_LOCKS = {}
+GROUP_CHAT_LOCKS = {}  # атомарный запуск: в одном чате только один художник
 GROUP_SCORES = {}
 GROUP_PLAYER_NAMES = {}
 
@@ -120,37 +121,41 @@ async def drawgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard += [[InlineKeyboardButton(label, callback_data=f"tgdraw:{key}")] for key, label in GROUP_CATEGORY_LABELS.items()]
     keyboard += [[InlineKeyboardButton("✍️ Придумать своё слово", callback_data="tgdraw:custom")]]
     await update.effective_message.reply_text(
-        "🎨 *Рисовалка для всей группы!*\n\nВыбери тему слова или придумай своё. После старта рисунок будет обновляться прямо в этом чате — остальные смогут угадывать обычными сообщениями.",
+         "🎨 *Рисовалка для всей группы!*\n\nВыбери тему слова — нажавший участник станет художником. После старта другой участник не сможет перехватить очередь. Если художник выйдет из холста, он сможет вернуться кнопкой под игровым сообщением. Остальные угадывают обычными сообщениями.",
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 async def _start_group_canvas(chat_id, user_id, word, context, title="🎨 Угадай рисунок!"):
-    # One live round per group: repeated taps cannot replace the current artist.
-    for existing in ROOMS.values():
-        if (existing.get("telegram_group") and existing.get("tg_chat_id") == chat_id
-                and existing.get("word") and existing.get("ends", 0) > time.time()):
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text="⏳ В этой группе уже идёт раунд! Дождитесь его окончания — случайное нажатие не сменит художника."
-            )
-            return
-    room_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    round_token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
-    room = {"clients": set(), "players": {}, "drawer": None, "word": word, "round": 1,
-            "ends": time.time() + 120, "round_token": round_token, "image": None, "telegram_group": True,
-            "tg_chat_id": chat_id, "tg_drawer_id": user_id, "tg_message_id": None,
-            "tg_last_edit": 0.0, "tg_latest_data": None, "tg_scores": {}, "tg_drawer_name": None,
-            "round_lock": asyncio.Lock(), "created_at": time.time()}
-    ROOMS[room_id] = room
-    GROUP_UPDATE_LOCKS[room_id] = asyncio.Lock()
-    link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=tgdraw_{room_id}"
-    keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🖌 Открыть холст и рисовать", url=link)]])
-    bio = BytesIO(_blank_png()); bio.name = "canvas.png"
-    sent = await context.bot.send_photo(chat_id=chat_id, photo=bio,
-        caption=f"{title}\n\n🖌 Художник открывает холст. Все остальные угадывают слово сообщениями в чате!\n⏱ Раунд: 120 секунд\n🏆 За правильный ответ — 10 очков.", reply_markup=keyboard)
-    room["tg_message_id"] = sent.message_id
-    await context.bot.send_message(chat_id=chat_id, text="💡 Подсказка появится постепенно. Пишите версии прямо сюда — бот проверит ответы!")
-    asyncio.create_task(_expire_group_round(room_id, word, round_token, context.bot))
-    asyncio.create_task(_group_hint_task(room_id, word, round_token, context.bot))
+    # Atomic check-and-create: two simultaneous taps cannot start competing rounds.
+    lock = GROUP_CHAT_LOCKS.setdefault(chat_id, asyncio.Lock())
+    async with lock:
+        for existing in ROOMS.values():
+            if (existing.get("telegram_group") and existing.get("tg_chat_id") == chat_id
+                    and existing.get("word") and existing.get("ends", 0) > time.time()):
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="⏳ Раунд уже идёт! Художник уже выбран. Нажмите «↩️ Вернуться к рисованию» под игровым сообщением — очередь не изменится."
+                )
+                return
+        room_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        round_token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        room = {"clients": set(), "players": {}, "drawer": None, "word": word, "round": 1,
+                "ends": time.time() + 120, "round_token": round_token, "image": None, "telegram_group": True,
+                "tg_chat_id": chat_id, "tg_drawer_id": user_id, "tg_message_id": None,
+                "tg_last_edit": 0.0, "tg_latest_data": None, "tg_scores": {}, "tg_drawer_name": None,
+                "round_lock": asyncio.Lock(), "created_at": time.time()}
+        ROOMS[room_id] = room
+        GROUP_UPDATE_LOCKS[room_id] = asyncio.Lock()
+        link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=tgdraw_{room_id}"
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("↩️ Вернуться к рисованию", url=link)]])
+        bio = BytesIO(_blank_png()); bio.name = "canvas.png"
+        sent = await context.bot.send_photo(chat_id=chat_id, photo=bio,
+            caption=f"{title}\n\n🖌 Художник открывает холст. Все остальные угадывают слово сообщениями в чате!\n⏱ Раунд: 120 секунд\n🏆 За правильный ответ — 10 очков.\n\nЕсли холст закрылся, нажмите кнопку ниже — вы вернётесь в этот же раунд.",
+            reply_markup=keyboard)
+        room["tg_message_id"] = sent.message_id
+        await context.bot.send_message(chat_id=chat_id, text="💡 Подсказка появится постепенно. Пишите версии прямо сюда — бот проверит ответы!")
+        asyncio.create_task(_expire_group_round(room_id, word, round_token, context.bot))
+        asyncio.create_task(_group_hint_task(room_id, word, round_token, context.bot))
+
 
 async def _expire_group_round(room_id, word, round_token, bot):
     await asyncio.sleep(120)
@@ -162,7 +167,8 @@ async def _expire_group_round(room_id, word, round_token, bot):
     try:
         await bot.send_message(chat_id=room["tg_chat_id"], text=f"⌛ Время вышло! Загаданное слово: «{word}». Чтобы сыграть снова, напишите /drawgroup.")
         await bot.edit_message_caption(chat_id=room["tg_chat_id"], message_id=room["tg_message_id"],
-            caption=f"⌛ Раунд завершён — время вышло. Слово было «{word}».\n\nНажмите /drawgroup, чтобы сыграть ещё раз.")
+            caption=f"⌛ Раунд завершён — время вышло. Слово было «{word}».\n\nНажмите /drawgroup, чтобы сыграть ещё раз.",
+            reply_markup=None)
     except Exception as exc:
         print(f"Telegram group round timeout update failed: {exc}")
 
@@ -242,7 +248,8 @@ async def group_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 await context.bot.edit_message_caption(
                     chat_id=chat.id, message_id=room["tg_message_id"],
-                    caption=f"✅ Раунд завершён! {winner} угадал слово «{solved_word}».\n\nНажмите /drawgroup, чтобы сыграть ещё раз."
+                    caption=f"✅ Раунд завершён! {winner} угадал слово «{solved_word}».\n\nНажмите /drawgroup, чтобы сыграть ещё раз.",
+                    reply_markup=None
                 )
             except Exception:
                 pass
@@ -414,8 +421,8 @@ async def draw_socket(ws: WebSocket, room_id: str):
                 if is_group_drawer:
                     current = room.get("drawer")
                     if current is None or current not in room["clients"]:
+                        # Reopening the same Mini App link restores the original artist.
                         room["drawer"] = ws
-                    if room.get("drawer") is ws:
                         room["tg_drawer_name"] = name
                 await ws.send_json({"type":"joined", "id":player_id, "room":room_id,
                                     "players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()],
@@ -477,6 +484,7 @@ async def draw_socket(ws: WebSocket, room_id: str):
         room["players"].pop(ws, None)
         if room["drawer"] is ws:
             room["drawer"] = None
+            # Keep the group word/timer alive so the original artist can reconnect.
             if not room.get("telegram_group"):
                 room["word"] = None
         await room_send(room, {"type":"players","players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()]})
