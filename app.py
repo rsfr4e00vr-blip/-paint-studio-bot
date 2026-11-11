@@ -351,16 +351,6 @@ def multiplayer_js():
     return FileResponse(BASE / "multiplayer.js", media_type="application/javascript")
 
 
-@app.get("/studio-upgrade.css")
-def studio_upgrade_css():
-    return FileResponse(BASE / "studio-upgrade.css", media_type="text/css")
-
-
-@app.get("/studio-upgrade.js")
-def studio_upgrade_js():
-    return FileResponse(BASE / "studio-upgrade.js", media_type="application/javascript")
-
-
 @app.get("/nations.js")
 def nations_js():
     return FileResponse(BASE / "nations.js", media_type="application/javascript")
