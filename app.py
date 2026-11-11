@@ -125,71 +125,52 @@ async def drawgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 
-def _group_hint_text(word, revealed):
-    """Build a masked word; revealed contains zero-based letter positions."""
-    revealed = set(revealed or [])
-    letter_index = 0
+def _group_hint_text(word, level):
+    """Reveal `level` letters while preserving spaces and punctuation."""
+    import unicodedata
+    positions = [i for i, ch in enumerate(word) if ch.isalpha()]
+    reveal = set(positions[:max(0, level)])
     out = []
-    for ch in word:
-        if ch.isalpha():
-            out.append(ch.upper() if letter_index in revealed else "＿")
-            letter_index += 1
+    for i, ch in enumerate(word):
+        if ch.isalpha() and i not in reveal:
+            out.append("＿")
         else:
             out.append(ch)
-    return "".join(out), letter_index
+    return "".join(out), len(positions)
 
 
-def _group_hint_keyboard(room_id, word, revealed=None):
-    """Each underscore is an independent button that reveals its own letter."""
-    revealed = set(revealed or [])
-    rows, row = [], []
-    letter_index = 0
-    for ch in word:
-        if ch.isalpha():
-            label = ch.upper() if letter_index in revealed else "＿"
-            row.append(InlineKeyboardButton(
-                label, callback_data=f"tgdraw:letter:{room_id}:{letter_index}"
-            ))
-            letter_index += 1
-            if len(row) == 8:
-                rows.append(row)
-                row = []
-        elif ch.isspace():
-            if row:
-                rows.append(row)
-                row = []
-    if row:
-        rows.append(row)
-    return InlineKeyboardMarkup(rows) if rows else None
-
-
-async def _send_group_hint(room, bot, letter_index=None):
-    """Reveal one selected letter and redraw the clickable letter slots."""
+async def _send_group_hint(room, bot, manual=False):
     word = room.get("word")
     if not word or room.get("ends", 0) <= time.time():
-        return False
-    total = sum(ch.isalpha() for ch in word)
-    revealed = set(room.get("revealed_letters", []))
-    if letter_index is None or letter_index < 0 or letter_index >= total:
-        return False
-    if letter_index in revealed:
-        return False
-    revealed.add(letter_index)
-    room["revealed_letters"] = sorted(revealed)
-    keyboard = _group_hint_keyboard(
-        next((rid for rid, value in ROOMS.items() if value is room), ""),
-        word, revealed
-    )
-    try:
-        await bot.edit_message_reply_markup(
-            chat_id=room["tg_chat_id"],
-            message_id=room["tg_message_id"],
-            reply_markup=keyboard
-        )
-    except Exception as exc:
-        print(f"Telegram group letter hint update failed: {exc}")
-        return False
-    return True
+        return
+    total_letters = sum(ch.isalpha() for ch in word)
+    level = min(total_letters, int(room.get("hint_level", 0)) + 1)
+    if level <= int(room.get("hint_level", 0)):
+        await bot.send_message(chat_id=room["tg_chat_id"], text="💡 Больше букв для подсказки уже нет — слово открыто полностью.")
+        return
+    room["hint_level"] = level
+    masked, total = _group_hint_text(word, level)
+    if level >= total:
+        message = f"💡 Подсказка: {masked}"
+    else:
+        message = f"💡 Подсказка ({level}/{total} букв): {masked}"
+    await bot.send_message(chat_id=room["tg_chat_id"], text=message)
+
+
+async def _group_hint_task(room_id, word, round_token, bot):
+    """Automatic gradual hints at 35, 65 and 95 seconds; button reveals one more."""
+    for delay in (35, 65, 95):
+        await asyncio.sleep(delay - (0 if delay == 35 else previous))
+        previous = delay
+        room = ROOMS.get(room_id)
+        if not room or room.get("round_token") != round_token or room.get("word") != word:
+            return
+        if room.get("ends", 0) <= time.time():
+            return
+        try:
+            await _send_group_hint(room, bot, manual=False)
+        except Exception as exc:
+            print(f"Telegram group hint failed: {exc}")
 
 
 async def _start_group_canvas(chat_id, user_id, word, context, title="🎨 Угадай рисунок!"):
@@ -207,24 +188,25 @@ async def _start_group_canvas(chat_id, user_id, word, context, title="🎨 Уг�
         room_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
         round_token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
         room = {"clients": set(), "players": {}, "drawer": None, "word": word, "round": 1,
-                "ends": time.time() + 240, "round_token": round_token, "image": None, "telegram_group": True,
+                "ends": time.time() + 120, "round_token": round_token, "image": None, "telegram_group": True,
                 "tg_chat_id": chat_id, "tg_drawer_id": user_id, "tg_message_id": None,
                 "tg_last_edit": 0.0, "tg_latest_data": None, "tg_scores": {}, "tg_drawer_name": None,
-                "round_lock": asyncio.Lock(), "revealed_letters": [], "created_at": time.time()}
+                "round_lock": asyncio.Lock(), "hint_level": 0, "created_at": time.time()}
         ROOMS[room_id] = room
         GROUP_UPDATE_LOCKS[room_id] = asyncio.Lock()
         link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=tgdraw_{room_id}"
-        keyboard = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🖌 Открыть / вернуться к рисованию", url=link)]]
-            + (_group_hint_keyboard(room_id, word).inline_keyboard or [])
-        )
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🖌 Открыть / вернуться к рисованию", url=link)],
+            [InlineKeyboardButton("💡 Подсказка", callback_data=f"tgdraw:hint:{room_id}")]
+        ])
         bio = BytesIO(_blank_png()); bio.name = "canvas.png"
         sent = await context.bot.send_photo(chat_id=chat_id, photo=bio,
-            caption=f"{title}\n\n🖌 Художник открывает холст. Только он может рисовать в этом раунде. Все остальные угадывают слово сообщениями в чате!\n⏱ Раунд: 240 секунд\n🏆 За правильный ответ — 10 очков.\n\nЕсли случайно закрыл холст, нажми кнопку «Открыть / вернуться к рисованию» — продолжишь этот же раунд.",
+            caption=f"{title}\n\n🖌 Художник открывает холст. Только он может рисовать в этом раунде. Все остальные угадывают слово сообщениями в чате!\n⏱ Раунд: 120 секунд\n🏆 За правильный ответ — 10 очков.\n\nЕсли случайно закрыл холст, нажми кнопку «Открыть / вернуться к рисованию» — продолжишь этот же раунд.",
             reply_markup=keyboard)
         room["tg_message_id"] = sent.message_id
-        await context.bot.send_message(chat_id=chat_id, text="💡 Нажимай на любую чёрточку под рисунком — откроется именно эта буква.")
+        await context.bot.send_message(chat_id=chat_id, text="💡 Подсказка будет постепенно открывать буквы. Можно нажать кнопку «Подсказка» под рисунком в любой момент.")
         asyncio.create_task(_expire_group_round(room_id, word, round_token, context.bot))
+        asyncio.create_task(_group_hint_task(room_id, word, round_token, context.bot))
 
 
 async def _finish_group_round(room, bot, caption, reveal_word=None):
@@ -238,7 +220,7 @@ async def _finish_group_round(room, bot, caption, reveal_word=None):
 
 
 async def _expire_group_round(room_id, word, round_token, bot):
-    await asyncio.sleep(240)
+    await asyncio.sleep(120)
     room = ROOMS.get(room_id)
     if not room or room.get("word") != word or room.get("round_token") != round_token:
         return
@@ -249,33 +231,21 @@ async def _expire_group_round(room_id, word, round_token, bot):
 
 async def drawgroup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
+    await query.answer()
     if not query.message or not query.message.chat:
         return
     chat_id = query.message.chat_id
     user_id = query.from_user.id
     parts = (query.data or "").split(":")
     choice = parts[1] if len(parts) > 1 else ""
-    if choice != "letter":
-        await query.answer()
 
-    if choice == "letter":
+    if choice == "hint":
         room_id = parts[2] if len(parts) > 2 else ""
-        try:
-            letter_index = int(parts[3])
-        except (IndexError, ValueError):
-            await query.answer("Эта буква недоступна.", show_alert=True)
-            return
         room = ROOMS.get(room_id)
         if not room or room.get("tg_chat_id") != chat_id or not room.get("word") or room.get("ends", 0) <= time.time():
-            await query.answer("Раунд уже завершён.", show_alert=True)
+            await context.bot.send_message(chat_id=chat_id, text="Раунд уже завершён.")
             return
-        if letter_index in set(room.get("revealed_letters", [])):
-            await query.answer("Эта буква уже открыта.")
-            return
-        if await _send_group_hint(room, context.bot, letter_index):
-            await query.answer("Буква открыта!")
-        else:
-            await query.answer("Не удалось открыть букву. Попробуй ещё раз.", show_alert=True)
+        await _send_group_hint(room, context.bot, manual=True)
         return
 
     if choice == "custom":
@@ -364,7 +334,7 @@ async def drawscores_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def drawhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
-        "🎨 *Команды групповой рисовалки*\n/drawgroup — начать раунд\n/drawscores — таблица очков\n/drawhelp — помощь\n\nВо время раунда: художник рисует на холсте, остальные пишут догадки в чат. Нажимай на чёрточки под рисунком, чтобы открывать отдельные буквы слова, а кнопка «Открыть / вернуться к рисованию» возвращает в текущий холст.",
+        "🎨 *Команды групповой рисовалки*\n/drawgroup — начать раунд\n/drawscores — таблица очков\n/drawhelp — помощь\n\nВо время раунда: художник рисует на холсте, остальные пишут догадки в чат. Кнопка «💡 Подсказка» открывает буквы слова, а кнопка «Открыть / вернуться к рисованию» возвращает в текущий холст.",
         parse_mode="Markdown")
 
 async def publish_group_canvas(room, data):
@@ -387,11 +357,10 @@ async def publish_group_canvas(room, data):
             caption = "🎨 Художник рисует!\nПишите догадки сообщениями в группе."
             room_id = next((rid for rid, value in ROOMS.items() if value is room), "")
             link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=tgdraw_{room_id}"
-            keyboard = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("🖌 Открыть / вернуться к рисованию", url=link)]]
-                + (_group_hint_keyboard(room_id, room.get("word", ""), room.get("revealed_letters", [])).inline_keyboard
-                   if room.get("word") else [])
-            )
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🖌 Открыть / вернуться к рисованию", url=link)],
+                [InlineKeyboardButton("💡 Подсказка", callback_data=f"tgdraw:hint:{room_id}")]
+            ])
             await TG_BOT.edit_message_media(chat_id=room["tg_chat_id"], message_id=room["tg_message_id"],
                 media=InputMediaPhoto(media=photo, caption=caption), reply_markup=keyboard)
             room["tg_last_edit"] = time.monotonic()
