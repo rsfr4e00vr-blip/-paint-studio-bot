@@ -25,7 +25,14 @@ DIFFS = {"story", "easy", "normal", "hard", "expert"}
 NEWBIE_SHIELD = 24        # первые 24 мес. нельзя объявлять войну
 WAR_COOLDOWN = 18         # агрессор ждёт 18 мес. после своей войны
 PEACE_SHIELD = 12         # после войны защитника 12 мес. не трогают
-WAR_MAX_MONTHS = 0        # 0 = без автоматического лимита длительности войны
+WAR_MAX_MONTHS = 24       # затяжная война без перевеса заканчивается ничьёй
+DICTATE_FRONT = 60        # от этого перевеса на фронте можно диктовать условия
+REGION_FRONT = 70         # отторжение области
+WON_GRACE = 3             # после полной победы 3 мес. на выбор условий, иначе контрибуция
+VASSAL_MONTHS = 24
+VASSAL_TAKE = 0.10        # вассал отдаёт 10% дохода
+VASSAL_GAIN = 0.07        # сюзерен получает 7% (меньше, чем теряет вассал)
+MAX_REGIONS_LOST = 2      # у страны нельзя отнять больше двух областей за игру
 AID_MAX_SHARE = 0.25      # перевод ≤ 25% казны отправителя
 AID_FEE = 0.15            # комиссия на переводе (против сговора и фарма)
 AID_COOLDOWN = 6          # один и тот же получатель — раз в 6 мес.
@@ -37,13 +44,6 @@ SANCTION_DMG = 0.05       # -5% дохода цели
 SANCTION_SELF = 0.01      # -1% дохода инициатора
 SANCTION_COOLDOWN = 12
 SANCTION_CAP = 0.10       # суммарный штраф от санкций не больше 10%
-
-# Региональный сепаратизм и гражданская война
-REBELLION_THRESHOLD = 22.0       # лояльность ниже порога запускает кризис
-REBELLION_CONFIRM = 3            # три последовательных отчёта для восстания
-REBELLION_MAX_MONTHS = 18
-REBELLION_COST = 160.0
-REGION_MAX = 24
 PROPOSAL_TTL = 30.0       # секунд на ответ
 
 # Баланс «резиновой ленты»: последнему +5% дохода, лидеру −3%
@@ -52,32 +52,9 @@ RUBBER_FIRST = -0.03
 
 START_GDP = 42000.0
 START_POWER = 100.0       # warPower() страны на старте (проверено симуляцией)
-MAX_WORLD_COUNTRIES = 30
-AI_COUNTRY_COUNT = 24
 START_MONEY = {"story": 26000, "easy": 22000, "normal": 18000, "hard": 14500, "expert": 10500}
 GDP_SCORE_CAP = 1.015     # зачётный ВВП растёт не быстрее 1.5% в месяц
 
-
-
-# 30 игровых территорий. 24 из них занимают ИИ-государства, оставшиеся
-# доступны новым игрокам. Это игровая сетка владения; географические полигоны
-# карты должны подключаться отдельно через GeoJSON.
-WORLD_TERRITORIES = [
-    "Балтийский регион", "Карпатский регион", "Причерноморье", "Подолье",
-    "Полесье", "Центральная равнина", "Дунайский регион", "Припятский край",
-    "Верхний Днестр", "Нижний Дунай", "Северная равнина", "Южное побережье",
-    "Восточные холмы", "Западные долины", "Среднее Поволжье", "Кавказские предгорья",
-    "Приазовье", "Северный берег", "Лесной край", "Степной край",
-    "Озерный край", "Горная долина", "Речной край", "Портовая область",
-    "Солнечная провинция", "Северо-восточный округ", "Юго-западный округ",
-    "Центральный округ", "Приграничный округ", "Свободная область"
-]
-AI_COUNTRY_NAMES = [
-    "Аркания", "Белория", "Тарвия", "Дорвин", "Силезия", "Мерейя", "Остмарк",
-    "Польша", "Румыния", "Молдова", "Литва", "Латвия", "Эстония", "Финляндия",
-    "Швеция", "Норвегия", "Дания", "Германия", "Чехия", "Словакия", "Венгрия",
-    "Болгария", "Сербия", "Грузия"
-]
 
 def now() -> float:
     return time.time()
@@ -109,7 +86,6 @@ class Player:
         self.id = pid
         self.name = name
         self.country = country
-        self.territory = None
         self.connected = True
         self.ready = False
         self.eliminated = False       # campaignOver на клиенте
@@ -131,19 +107,20 @@ class Player:
         self.sanctions_in: list = []  # [{from, end}]
         self.sanctions_out: dict = {} # pid -> month_end
         self.war = None               # id войны
-        self.regions: dict = {}
-        self.rebellion_pressure: dict = {}
-        self.rebellions: dict = {}
+        self.vassal_of = None         # id сюзерена
+        self.vassal_end = 0
+        self.vassals: dict = {}       # id вассала -> конец срока
+        self.regions_lost = 0
 
     def pub(self) -> dict:
         return {"id": self.id, "name": self.name, "country": self.country,
                 "connected": self.connected, "ready": self.ready,
                 "eliminated": self.eliminated, "out": self.out,
                 "score": round(self.score, 1), "comp": self.comp,
+                "vassal_of": self.vassal_of,
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
-                "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
-                "territory": self.territory, "ai": False}
+                "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"])}
 
 
 class Room:
@@ -159,113 +136,12 @@ class Room:
         self.auto_paused = False
         self.task: asyncio.Task | None = None
         self.proposals: dict = {}     # id -> dict
+        self.cedes: dict = {}         # id проигравшего -> ожидающая передача области
         self.wars: dict = {}          # id -> dict
-        self.rebellions: dict = {}    # id -> региональные войны
         self.chat: list = []
         self.created = now()
         self.winner = None
         self.final: list = []
-        self.territories: dict = {}
-        self.ai_countries: dict = {}
-        self.world_events: list = []
-        self._seed_world()
-
-    def _seed_world(self):
-        names = AI_COUNTRY_NAMES[:AI_COUNTRY_COUNT]
-        shuffled = WORLD_TERRITORIES[:]
-        random.shuffle(shuffled)
-        for idx, territory in enumerate(shuffled):
-            tid = f"territory-{idx+1:02d}"
-            self.territories[tid] = {"id": tid, "name": territory, "owner_id": None,
-                                     "owner": None, "status": "free"}
-        for idx, name in enumerate(names):
-            tid = list(self.territories)[idx]
-            self.territories[tid].update({"owner_id": f"ai-{idx+1:02d}", "owner": name, "status": "ai"})
-            power = random.randint(55, 115)
-            self.ai_countries[f"ai-{idx+1:02d}"] = {
-                "id": f"ai-{idx+1:02d}", "country": name, "name": "Правительство ИИ",
-                "territory_id": tid, "territory": territory, "gdp": random.randint(24000, 62000),
-                "money": random.randint(9000, 26000), "debt": 0, "stab": random.randint(52, 82),
-                "appr": random.randint(48, 78), "legit": random.randint(55, 85),
-                "trust": random.randint(50, 80), "power": power,
-                "pop": random.randint(1800000, 18000000), "score": 0.0, "comp": {},
-                "relation": {}, "alive": True}
-        self._score_ai()
-
-    def _score_ai(self):
-        for b in self.ai_countries.values():
-            eco = max(0.0, min(100.0, 30.0 + 30.0 * math.log2(max(.05, b["gdp"] / START_GDP))))
-            welfare = (b["stab"] + b["appr"]) / 2
-            gov = (b["legit"] + b["trust"]) / 2
-            fin = max(0.0, min(100.0, 50 + (b["money"] - self.start_money) / 400))
-            mil = max(0.0, min(100.0, b["power"] / START_POWER * 40))
-            b["comp"] = {"eco": round(eco), "welfare": round(welfare), "gov": round(gov), "fin": round(fin), "mil": round(mil)}
-            b["score"] = round(eco*.36 + welfare*.20 + gov*.14 + fin*.14 + mil*.16, 1)
-
-    def allocate_territory(self, p: Player):
-        free = [t for t in self.territories.values() if t["status"] == "free"]
-        if not free:
-            return None
-        t = random.choice(free)
-        t.update({"owner_id": p.id, "owner": p.country, "status": "player"})
-        p.territory = t["name"]
-        return t
-
-    def release_territory(self, p: Player):
-        for t in self.territories.values():
-            if t["owner_id"] == p.id:
-                t.update({"owner_id": None, "owner": None, "status": "free"})
-        p.territory = None
-
-    def world_pub(self):
-        countries = [dict(b, ai=True, connected=True, eliminated=not b["alive"])
-                     for b in self.ai_countries.values()]
-        countries += [p.pub() for p in self.players.values()]
-        return {"territories": list(self.territories.values()), "countries": countries,
-                "total": len(countries), "ai_count": len(self.ai_countries),
-                "free_count": sum(1 for t in self.territories.values() if t["status"] == "free")}
-
-    def ranking_pub(self):
-        self._score_ai()
-        rows = [p.pub() for p in self.players.values()]
-        rows += [{"id": b["id"], "name": "ИИ", "country": b["country"], "connected": True,
-                  "ready": True, "eliminated": not b["alive"], "out": False,
-                  "score": b["score"], "comp": b["comp"], "gdp": round(b["gdp"]),
-                  "money": round(b["money"]), "stab": round(b["stab"]),
-                  "appr": round(b["appr"]), "power": round(b["power"], 1),
-                  "pop": round(b["pop"]), "territory": b["territory"], "ai": True}
-                 for b in self.ai_countries.values()]
-        return sorted(rows, key=lambda x: -x.get("score", 0))
-
-    async def world_event(self, text: str):
-        item = {"text": text, "month": self.month}
-        self.world_events.append(item)
-        self.world_events = self.world_events[-50:]
-        await self.broadcast({"type": "world_event", **item})
-        await self.broadcast({"type": "world", "world": self.world_pub()})
-
-    async def ai_month(self):
-        # Серверная автономная экономика и дипломатическая реакция ИИ.
-        for b in self.ai_countries.values():
-            if not b["alive"]:
-                continue
-            growth = random.uniform(0.001, 0.009) * (1.0 if b["stab"] >= 45 else .45)
-            b["gdp"] = max(5000, min(2_000_000, b["gdp"] * (1 + growth)))
-            b["money"] = max(0, min(5_000_000, b["money"] + b["gdp"]*.00065 - b["power"]*1.8))
-            b["pop"] = min(2_000_000_000, b["pop"] * (1 + random.uniform(-.0001, .0008)))
-            b["stab"] = max(10, min(95, b["stab"] + (.12 if b["money"] > 5000 else -.25) + random.uniform(-.2,.2)))
-            b["appr"] = max(5, min(95, b["appr"] + (b["stab"]-60)*.008 + random.uniform(-.35,.35)))
-            b["legit"] = max(5, min(98, b["legit"] + (b["appr"]-55)*.004))
-            b["power"] = max(10, min(100000, b["power"] * (1 + random.uniform(-.002,.006))))
-            # Каждое ИИ-государство оценивает новые страны игроков.
-            for p in self.players.values():
-                if p.eliminated:
-                    continue
-                old = b["relation"].get(p.id, 0)
-                strength = p.rep["gdp"] / max(1, b["gdp"])
-                drift = .15 if strength > 1.2 else (-.1 if strength < .65 else 0)
-                b["relation"][p.id] = max(-100, min(100, old + drift + random.uniform(-.25,.25)))
-        self._score_ai()
 
     # ---- рассылка
     async def send(self, p: Player, payload: dict):
@@ -291,8 +167,7 @@ class Room:
     def lobby_info(self) -> dict:
         return {"code": self.code, "state": self.state, "host": self.host,
                 "month": self.month, "length": self.length, "speed": self.speed,
-                "diff": self.diff, "players": [p.pub() for p in self.players.values()],
-                "world": self.world_pub()}
+                "diff": self.diff, "players": [p.pub() for p in self.players.values()]}
 
     async def push_lobby(self):
         await self.broadcast({"type": "lobby", **self.lobby_info()})
@@ -343,8 +218,13 @@ class Room:
         sanc = min(SANCTION_CAP, SANCTION_DMG * sum(1 for s in p.sanctions_in if s["end"] > self.month))
         self_cost = SANCTION_SELF * sum(1 for _, end in p.sanctions_out.items() if end > self.month)
         rub = self.rubber(p)
+        vas = 0.0
+        if p.vassal_of and p.vassal_end > self.month:
+            vas -= VASSAL_TAKE
+        vas += VASSAL_GAIN * sum(1 for end in p.vassals.values() if end > self.month)
         return {"pact": round(pact, 4), "sanction": round(-sanc - self_cost, 4),
-                "rubber": round(rub, 4), "total": round(pact - sanc - self_cost + rub, 4)}
+                "rubber": round(rub, 4), "vassal": round(vas, 4),
+                "total": round(pact - sanc - self_cost + rub + vas, 4)}
 
     # ---- цикл времени
     async def run(self):
@@ -368,23 +248,22 @@ class Room:
     def should_finish(self) -> bool:
         if self.month >= self.length:
             return True
+        if len(self.players) >= 2 and len(self.alive()) <= 1:
+            return True
         return False
 
     async def tick(self):
         self.month += 1
         await self.process_wars()
-        await self.ai_month()
         self.expire()
         for p in self.players.values():
             self.compute_score(p)
         order = self.ranking()
-        standings = self.ranking_pub()
         mods = {p.id: self.income_mod(p) for p in self.players.values()}
         await self.broadcast({
             "type": "tick", "month": self.month, "length": self.length,
-            "standings": standings, "mods": mods, "world": self.world_pub(),
+            "standings": [p.pub() for p in order], "mods": mods,
             "wars": [self.war_pub(w) for w in self.wars.values()],
-            "rebellions": [self.rebellion_pub(w) for w in self.rebellions.values()],
         })
 
     def expire(self):
@@ -395,19 +274,24 @@ class Room:
             p.sanctions_in = [s for s in p.sanctions_in if s["end"] > self.month]
             p.sanctions_out = {k: v for k, v in p.sanctions_out.items() if v > self.month}
             p.pacts = {k: v for k, v in p.pacts.items() if v > self.month}
+            p.vassals = {k: v for k, v in p.vassals.items() if v > self.month}
+            if p.vassal_of and p.vassal_end <= self.month:
+                p.vassal_of = None
 
     async def finish(self):
         self.state = "finished"
         for p in self.players.values():
             self.compute_score(p)
-        self.final = self.ranking_pub()
-        self.winner = self.final[0]["id"] if self.final else None
+        order = self.ranking()
+        self.final = [p.pub() for p in order]
+        self.winner = order[0].id if order else None
         await self.broadcast({"type": "final", "standings": self.final, "winner": self.winner,
                               "month": self.month})
 
     # ---- войны
     def war_pub(self, w: dict) -> dict:
-        return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"]}
+        return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"],
+                "won": w.get("won"), "wm": w.get("wm", 0)}
 
     async def process_wars(self):
         for wid, w in list(self.wars.items()):
@@ -425,12 +309,74 @@ class Room:
                 await self.send(side, {"type": "war_cost", "war": wid,
                                        "army_loss": int(300 + 900 * enemy_ratio),
                                        "money": 100, "approval": 0.15})
-            if w["p"] >= 100:
-                await self.end_war(w, "agg_win")
-            elif w["p"] <= 0:
-                await self.end_war(w, "def_win")
-            elif WAR_MAX_MONTHS and w["m"] >= WAR_MAX_MONTHS:
+            # перевес на фронте: сообщаем один раз
+            for side, front in ((a, w["p"]), (d, 100 - w["p"])):
+                key = "hint_" + side.id
+                if front >= DICTATE_FRONT and not w.get(key):
+                    w[key] = True
+                    await self.send(side, {"type": "dictate_open", "enemy": (d if side is a else a).country})
+                    await self.notice(f"💪 У {side.country} перевес {int(front)}% — можно диктовать условия.", "war")
+            if not w.get("won"):
+                if w["p"] >= 100:
+                    w["won"], w["wm"] = a.id, 0
+                    await self.notice(f"🏆 {a.country} полностью разгромил {d.country}! Выбор условий: {WON_GRACE} мес.", "war")
+                elif w["p"] <= 0:
+                    w["won"], w["wm"] = d.id, 0
+                    await self.notice(f"🏆 {d.country} полностью разгромил {a.country}! Выбор условий: {WON_GRACE} мес.", "war")
+            else:
+                w["wm"] = w.get("wm", 0) + 1
+                if w["wm"] >= WON_GRACE:
+                    win = self.players[w["won"]]
+                    lose = d if win is a else a
+                    await self.resolve(w, win, lose, "tribute")
+                    continue
+            if not w.get("won") and w["m"] >= WAR_MAX_MONTHS:
                 await self.end_war(w, "draw")
+
+    async def resolve(self, w: dict, win: Player, lose: Player, mode: str):
+        """Условия мира, которые выбрал победитель на фронте."""
+        front = w["p"] if win.id == w["a"] else 100 - w["p"]
+        k = 1.0 if w.get("won") else 0.4 + 0.6 * front / 100
+        if mode == "tribute":
+            amount = int(min(1500, (500 + lose.rep["gdp"] * 0.012) * k, max(0, lose.rep["money"]) * 0.25))
+            await self.send(win, {"type": "war_end", "result": "win", "enemy": lose.country, "money": amount, "approval": 3, "stability": 0})
+            await self.send(lose, {"type": "war_end", "result": "lose", "enemy": win.country, "money": -amount, "approval": -6, "stability": -5})
+            await self.notice(f"💰 {lose.country} выплачивает контрибуцию стране {win.country}: {amount} млн.", "war")
+        elif mode == "vassal":
+            win.vassals[lose.id] = self.month + VASSAL_MONTHS
+            lose.vassal_of, lose.vassal_end = win.id, self.month + VASSAL_MONTHS
+            await self.send(win, {"type": "war_end", "result": "win", "enemy": lose.country, "money": 0, "approval": 4, "stability": 0})
+            await self.send(lose, {"type": "war_end", "result": "lose", "enemy": win.country, "money": 0, "approval": -6, "stability": -3})
+            await self.notice(f"👑 {lose.country} стал вассалом страны {win.country} на {VASSAL_MONTHS} мес.", "war")
+        elif mode == "region":
+            self.cedes[lose.id] = {"to": win.id, "k": k, "kind": "region", "exp": self.month + 6}
+            lose.regions_lost += 1
+            await self.send(win, {"type": "war_end", "result": "win", "enemy": lose.country, "money": 0, "approval": 3, "stability": 0})
+            await self.send(lose, {"type": "war_end", "result": "lose", "enemy": win.country, "money": 0, "approval": -2, "stability": 0})
+            await self.send(lose, {"type": "cede_request", "to": win.id, "kind": "region", "country": win.country})
+            await self.notice(f"🗺 {win.country} отторгает область у страны {lose.country}.", "war")
+        elif mode == "annex":
+            pop = int(lose.rep["pop"] * 0.5)
+            gdp = int(lose.rep["gdp"] * 0.4)
+            await self.send(win, {"type": "region_gain", "kind": "annex", "from": lose.country,
+                                  "region": {"name": f"Земли {lose.country}", "from": lose.country, "pop": pop, "gdp": gdp, "full": True}})
+            await self.send(lose, {"type": "annexed", "by": win.country})
+            await self.send(win, {"type": "war_end", "result": "win", "enemy": lose.country, "money": 0, "approval": 4, "stability": -3})
+            lose.eliminated = True
+            self.compute_score(lose)
+            await self.notice(f"🏴 {win.country} полностью захватил страну {lose.country}!", "war")
+        self.wars.pop(w["id"], None)
+        for p in (win, lose):
+            p.war = None
+        a = self.players.get(w["a"])
+        if a:
+            a.war_cd = self.month + WAR_COOLDOWN
+        lose.shield_until = max(lose.shield_until, self.month + PEACE_SHIELD)
+        win.shield_until = max(win.shield_until, self.month + 6)
+        if self.should_finish():
+            if self.task:
+                self.task.cancel()
+            await self.finish()
 
     async def end_war(self, w: dict, result: str):
         self.wars.pop(w["id"], None)
@@ -443,25 +389,7 @@ class Room:
         a.war_cd = self.month + WAR_COOLDOWN
         d.shield_until = max(d.shield_until, self.month + PEACE_SHIELD)
         a.shield_until = max(a.shield_until, self.month + 6)
-        if result == "agg_win":
-            # Контрибуция ограничена: ≤ 1200 млн и ≤ 15% казны проигравшего
-            tribute = int(min(1200, 500 + d.rep["gdp"] * 0.01, max(0, d.rep["money"]) * 0.15))
-            await self.send(a, {"type": "war_end", "result": "win", "enemy": d.country,
-                                "money": tribute, "approval": 3, "stability": 0})
-            await self.send(d, {"type": "war_end", "result": "lose", "enemy": a.country,
-                                "money": -tribute, "approval": -6, "stability": -5})
-            await self.notice(f"🏴 {a.country} победил {d.country}. Контрибуция: {tribute} млн.", "war")
-            await self.send(a, {"type": "settlement_offer", "scope": "country",
-                                "target_id": d.id, "enemy": d.country})
-        elif result == "def_win":
-            # Агрессор платит и теряет рейтинг: нападать на равного невыгодно
-            comp = int(min(800, max(0, a.rep["money"]) * 0.10))
-            await self.send(d, {"type": "war_end", "result": "win", "enemy": a.country,
-                                "money": comp + 300, "approval": 5, "stability": 2})
-            await self.send(a, {"type": "war_end", "result": "lose", "enemy": d.country,
-                                "money": -comp, "approval": -8, "stability": -4})
-            await self.notice(f"🛡 {d.country} отбил нападение {a.country}.", "war")
-        elif result == "draw":
+        if result == "draw":
             for p, e in ((a, d), (d, a)):
                 await self.send(p, {"type": "war_end", "result": "draw", "enemy": e.country,
                                     "money": 0, "approval": -2, "stability": 0})
@@ -503,8 +431,8 @@ async def handle(room: Room, p: Player, msg: dict):
         return
 
     if kind == "start" and room.state == "lobby" and p.id == room.host:
-        if len(room.players) < 1:
-            await room.notice("Нужен хотя бы один игрок.", "warn", p)
+        if len(room.players) < 2:
+            await room.notice("Нужно минимум 2 игрока.", "warn", p)
             return
         room.state = "running"
         room.month = 0
@@ -514,8 +442,7 @@ async def handle(room: Room, p: Player, msg: dict):
             q.score_gdp = START_GDP
             room.compute_score(q)
         await room.broadcast({"type": "start", "diff": room.diff, "length": room.length,
-                              "speed": room.speed, "month": 0, "players": [q.pub() for q in room.players.values()],
-                              "standings": room.ranking_pub(), "world": room.world_pub()})
+                              "speed": room.speed, "players": [q.pub() for q in room.players.values()]})
         room.task = asyncio.create_task(room.run())
         return
 
@@ -534,9 +461,7 @@ async def handle(room: Room, p: Player, msg: dict):
 
     if kind == "sync":
         await room.send(p, {"type": "state", **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
-                            "rebellions": [room.rebellion_pub(w) for w in room.rebellions.values()],
-                            "mods": {q.id: room.income_mod(q) for q in room.players.values()},
-                            "standings": room.ranking_pub(), "world": room.world_pub()})
+                            "mods": {q.id: room.income_mod(q) for q in room.players.values()}})
         return
 
     if room.state not in ("running", "paused"):
@@ -548,6 +473,7 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_report(room, p, msg)
     elif kind == "eliminated":
         p.eliminated = True
+        room.cedes.pop(p.id, None)
         room.compute_score(p)
         await room.notice(f"💀 {p.country} выбыл из игры.", "war")
         if p.war and p.war in room.wars:
@@ -568,6 +494,10 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_war(room, p, msg)
     elif kind == "peace":
         await on_peace(room, p, msg)
+    elif kind == "dictate":
+        await on_dictate(room, p, msg)
+    elif kind == "cede":
+        await on_cede(room, p, msg)
 
 
 async def on_report(room: Room, p: Player, msg: dict):
@@ -595,36 +525,7 @@ async def on_report(room: Room, p: Player, msg: dict):
     new["power"] = min(new["power"], old["power"] * (1.06 ** months) + 3)
     p.rep = new
     p.out = bool(msg.get("out"))
-    # Региональные данные проверяются по диапазонам; названия и население ограничены.
-    raw_regions = r.get("regions") or []
-    clean_regions = {}
-    if isinstance(raw_regions, list):
-        for item in raw_regions[:REGION_MAX]:
-            if not isinstance(item, dict):
-                continue
-            name = clean_name(item.get("name"), "Регион", 48)
-            clean_regions[name] = {
-                "loyalty": num(item.get("loyalty"), 0, 100, 50),
-                "unrest": num(item.get("unrest"), 0, 100, 20),
-                "pop": num(item.get("pop"), 10000, 500_000_000, 100000)
-            }
-    p.regions = clean_regions
     room.compute_score(p)
-    if room.state == "running":
-        for name, region in clean_regions.items():
-            if region["loyalty"] <= REBELLION_THRESHOLD or region["unrest"] >= 82:
-                p.rebellion_pressure[name] = p.rebellion_pressure.get(name, 0) + 1
-            else:
-                p.rebellion_pressure[name] = max(0, p.rebellion_pressure.get(name, 0) - 1)
-            if (p.rebellion_pressure[name] >= REBELLION_CONFIRM and name not in p.rebellions
-                    and not p.eliminated and not p.war):
-                rid = "r" + "".join(random.choices(string.digits, k=5))
-                p.rebellions[name] = rid
-                room.rebellions[rid] = {"id": rid, "owner": p.id, "region": name,
-                    "progress": 50.0, "month": 0, "pop": region["pop"]}
-                await room.send(p, {"type": "rebellion_start", "id": rid,
-                    "region": name, "progress": 50, "pop": round(region["pop"])})
-                await room.notice(f"⚠️ В регионе «{name}» началось восстание против {p.country}!", "war")
 
 
 def partner(room: Room, p: Player, msg: dict):
@@ -722,6 +623,9 @@ async def on_war(room: Room, p: Player, msg: dict):
     if p.war or q.war:
         await room.notice("Одна из сторон уже воюет: не больше одной войны одновременно.", "warn", p)
         return
+    if p.vassal_of == q.id and p.vassal_end > room.month:
+        await room.notice("Вассал не может воевать с сюзереном.", "warn", p)
+        return
     if room.month < p.war_cd:
         await room.notice(f"Армия не готова к новой войне: ещё {p.war_cd - room.month} мес.", "warn", p)
         return
@@ -756,6 +660,69 @@ async def on_peace(room: Room, p: Player, msg: dict):
         await room.notice("Предложение мира отправлено.", "info", p)
 
 
+async def on_dictate(room: Room, p: Player, msg: dict):
+    """Победитель на фронте сам выбирает условия: контрибуция, вассал, область, захват страны."""
+    w = room.wars.get(p.war or "")
+    if not w:
+        return
+    other = room.players.get(w["d"] if w["a"] == p.id else w["a"])
+    if not other:
+        return
+    mode = msg.get("mode")
+    if mode not in ("tribute", "vassal", "region", "annex"):
+        return
+    front = w["p"] if w["a"] == p.id else 100 - w["p"]
+    won = w.get("won") == p.id
+    if w.get("won") and not won:
+        await room.notice("Противник разгромил вас — условия диктует он.", "warn", p)
+        return
+    if not won and front < DICTATE_FRONT:
+        await room.notice(f"Диктовать условия можно при перевесе от {DICTATE_FRONT}% (сейчас {int(front)}%).", "warn", p)
+        return
+    if mode == "region" and not won and front < REGION_FRONT:
+        await room.notice(f"Отторгнуть область можно при перевесе от {REGION_FRONT}%.", "warn", p)
+        return
+    if mode == "annex" and not won:
+        await room.notice("Полный захват — только при полной победе (100% на фронте).", "warn", p)
+        return
+    if mode == "region" and other.regions_lost >= MAX_REGIONS_LOST:
+        await room.notice(f"У {other.country} уже отняли {MAX_REGIONS_LOST} области — больше нельзя.", "warn", p)
+        return
+    if mode == "vassal":
+        if any(e > room.month for e in p.vassals.values()):
+            await room.notice("У вас уже есть вассал: можно иметь только одного.", "warn", p)
+            return
+        if p.vassal_of or other.vassal_of:
+            await room.notice("Вассалом не может стать тот, кто сам вассал или имеет сюзерена.", "warn", p)
+            return
+    await room.resolve(w, p, other, mode)
+
+
+async def on_cede(room: Room, p: Player, msg: dict):
+    """Проигравший передаёт область победителю (клиент сам выбирает самую мятежную)."""
+    pend = room.cedes.pop(p.id, None)
+    if not pend or pend["exp"] < room.month:
+        return
+    win = room.players.get(pend["to"])
+    if not win or win.eliminated:
+        return
+    r = msg.get("region") or {}
+    if msg.get("none") or not r.get("name"):
+        amount = int(min(1500, 600 + p.rep["gdp"] * 0.012, max(0, p.rep["money"]) * 0.25))
+        p.regions_lost = max(0, p.regions_lost - 1)
+        await room.send(win, {"type": "war_end", "result": "win", "enemy": p.country, "money": amount, "approval": 0, "stability": 0})
+        await room.send(p, {"type": "war_end", "result": "lose", "enemy": win.country, "money": -amount, "approval": 0, "stability": 0})
+        await room.notice(f"У {p.country} нет области для передачи — вместо неё контрибуция {amount} млн.", "war")
+        return
+    pop = int(num(r.get("pop"), 0, p.rep["pop"] * 0.35, 0))
+    gdp = int(min(p.rep["gdp"] * 0.3, p.rep["gdp"] * pop / max(1.0, p.rep["pop"]) * 0.8))
+    name = f"{clean_name(r.get('name'), 'Область', 24)} ({p.country})"[:40]
+    await room.send(win, {"type": "region_gain", "kind": "region", "from": p.country,
+                          "region": {"name": name, "from": p.country, "pop": pop, "gdp": gdp,
+                                     "wealth": num(r.get("wealth"), 0, 100, 40), "industry": num(r.get("industry"), 0, 100, 36),
+                                     "infra": num(r.get("infra"), 0, 100, 34), "resource": clean_name(r.get("resource"), "Захвачено", 16)}})
+
+
 # ------------------------------------------------------------------ WebSocket
 async def nations_socket(ws: WebSocket, code: str):
     await ws.accept()
@@ -771,7 +738,6 @@ async def nations_socket(ws: WebSocket, code: str):
                 if msg.get("type") != "join":
                     continue
                 rejoin = bool(msg.get("rejoin"))
-                created_new = False
                 if room is None:
                     if rejoin:
                         await ws.send_json({"type": "error", "fatal": True, "text": "Комната больше не существует."})
@@ -790,8 +756,8 @@ async def nations_socket(ws: WebSocket, code: str):
                     await ws.send_json({"type": "error", "fatal": True, "text": "Сессия не найдена в этой комнате."})
                     await ws.close()
                     return
-                elif room.state == "finished":
-                    await ws.send_json({"type": "error", "text": "Эта игра уже завершена."})
+                elif room.state != "lobby":
+                    await ws.send_json({"type": "error", "text": "Игра уже идёт. Присоединиться можно только по прежнему токену."})
                     await ws.close()
                     return
                 elif len(room.players) >= MAX_PLAYERS:
@@ -801,46 +767,24 @@ async def nations_socket(ws: WebSocket, code: str):
                 else:
                     pid = "".join(random.choices(string.ascii_lowercase + string.digits, k=16))
                     me = Player(ws, pid, name, country)
-                    created_new = True
                     me.joined_month = room.month
                     room.players[pid] = me
-                    allocated = room.allocate_territory(me)
-                    for bot in room.ai_countries.values():
-                        bot["relation"][me.id] = random.randint(-15, 30)
-                    if not allocated:
-                        room.players.pop(pid, None)
-                        await ws.send_json({"type": "error", "text": "Свободных игровых территорий больше нет."})
-                        await ws.close()
-                        return
                     if room.host is None:
                         room.host = pid
-                is_new_player = created_new
-                # Вновь созданный участник получает отдельный стартовый пакет даже посреди партии.
                 await ws.send_json({"type": "joined", "id": me.id, "host": room.host == me.id,
-                                    "new_player": bool(is_new_player and room.state in ("running", "paused")),
                                     **room.lobby_info(),
-                                    "wars": [room.war_pub(w) for w in room.wars.values()],
-                                    "rebellions": [room.rebellion_pub(w) for w in room.rebellions.values()]})
+                                    "wars": [room.war_pub(w) for w in room.wars.values()]})
                 if room.state == "paused" and room.auto_paused:
                     room.auto_paused = False
                     room.state = "running"
                     room.task = asyncio.create_task(room.run())
                     await room.broadcast({"type": "paused", "value": False})
                 await room.push_lobby()
-                if room.state in ("running", "paused") and is_new_player:
-                    me.joined_month = room.month
-                    me.last_report = room.month
-                    me.rep["money"] = room.start_money
-                    me.score_gdp = START_GDP
-                    room.compute_score(me)
-                    await room.send(me, {"type": "start", "diff": room.diff, "length": room.length,
-                        "speed": room.speed, "month": room.month, "late_join": True,
-                        "territory": me.territory, "players": [q.pub() for q in room.players.values()],
-                        "standings": room.ranking_pub(), "world": room.world_pub()})
-                if created_new:
-                    await room.world_event(f"🌍 Новое государство «{me.country}» появилось на территории «{me.territory}». Все ИИ-государства получили сведения о новом участнике.")
-                    if room.state == "paused":
-                        await room.send(me, {"type": "paused", "value": True})
+                pend = room.cedes.get(me.id)
+                if pend and room.state != "lobby":
+                    w_ = room.players.get(pend["to"])
+                    await ws.send_json({"type": "cede_request", "to": pend["to"], "kind": "region",
+                                        "country": w_.country if w_ else ""})
                 continue
             await handle(room, me, msg)
     except WebSocketDisconnect:
@@ -851,7 +795,6 @@ async def nations_socket(ws: WebSocket, code: str):
         if room and me:
             me.connected = False
             if room.state == "lobby":
-                room.release_territory(me)
                 room.players.pop(me.id, None)
                 if room.host == me.id:
                     room.host = next(iter(room.players), None)

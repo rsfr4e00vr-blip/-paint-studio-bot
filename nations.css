@@ -35,5 +35,3 @@ body.mp #gameover{display:none!important}
 .warbar{height:10px;border-radius:10px;background:#612e38;overflow:hidden;margin:6px 0}
 .warbar i{display:block;height:100%;background:#39835f}
 @media(max-width:520px){.mpcode{font-size:26px;letter-spacing:4px}.mpwrap th:nth-child(n+5),.mpwrap td:nth-child(n+5){display:none}}
-
-.warbar.rebel{background:#4b2630}.warbar.rebel i{background:#d58a43}
