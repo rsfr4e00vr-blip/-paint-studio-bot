@@ -20,18 +20,27 @@ function connect(code, telegramGroup=false){
    myId=m.id;$("#multiSetup").hidden=true;$("#multiGame").hidden=false;
    $("#roomLabel").textContent=m.room;$("#playerList").innerHTML="";
    if(m.image)drawRemote(m.image);
-   if(m.telegram_group){isDrawer=!!m.is_drawer;$("#roundStart").hidden=true;$("#guessInput").placeholder="Угадывай прямо сообщением в Telegram-группе";$("#guessSend").hidden=true;notice(isDrawer?"Ты художник! Рисунок виден всей Telegram-группе.":"Открой холст может только выбранный художник. Угадывай в сообщениях группы.");}
+   if(m.telegram_group){
+    isDrawer=!!m.is_drawer;
+    $("#roundStart").hidden=true;
+    $("#guessInput").placeholder="Угадывай прямо сообщением в Telegram-группе";
+    $("#guessSend").hidden=true;
+    // Lock the canvas immediately for every participant except the verified artist.
+    $("#stage").style.pointerEvents=isDrawer?"auto":"none";
+    $("#stage").setAttribute("aria-disabled",isDrawer?"false":"true");
+    notice(isDrawer?"Ты художник! Рисунок виден всей Telegram-группе.":"Ты зритель: холст заблокирован, угадывай сообщениями в группе.");
+   }
    else {$("#roundStart").hidden=false;$("#guessSend").hidden=false;notice("Ты в комнате! Отправь код друзьям.");}
    renderPlayers(m.players);
   } else if(m.type==="players")renderPlayers(m.players);
   else if(m.type==="round"){
-   isDrawer=false;$("#stage").style.pointerEvents="none";
+   isDrawer=false;$("#stage").style.pointerEvents="none";$("#stage").setAttribute("aria-disabled","true");
    $("#roundStatus").textContent="🎨 Рисует: "+m.drawer+" · "+m.seconds+" сек.";
    $("#wordCard").textContent=isDrawer?"Ждём секретное слово…":"Угадывай, что рисуют!";
    $("#gameChat").innerHTML="";
    if(!isDrawer)notice(m.telegram_group?"Раунд начался — угадывай обычным сообщением в Telegram-группе!":"Раунд начался — пиши догадки в чат!");
   } else if(m.type==="your_word"){
-   isDrawer=true;$("#stage").style.pointerEvents="auto";$("#wordCard").textContent="ТВОЁ СЛОВО: "+m.word;
+   isDrawer=true;$("#stage").style.pointerEvents="auto";$("#stage").setAttribute("aria-disabled","false");$("#wordCard").textContent="ТВОЁ СЛОВО: "+m.word;
    notice("Нарисуй это слово, не называя его!");
   } else if(m.type==="canvas")drawRemote(m.data);
   else if(m.type==="clear"){const c=canvas.getContext("2d");c.clearRect(0,0,canvas.width,canvas.height);}
@@ -39,7 +48,7 @@ function connect(code, telegramGroup=false){
   else if(m.type==="correct"){chat("🎉 "+m.name+" угадал слово «"+m.word+"»!");renderPlayers(m.players);$("#wordCard").textContent="Угадали: "+m.word;}
   else if(m.type==="notice")notice(m.text);
  };
- socket.onclose=()=>{if(box.style.display==="block")notice("Соединение закрыто. Попробуй войти снова.");};
+ socket.onclose=()=>{isDrawer=false;$("#stage").style.pointerEvents="none";if(box.style.display==="block")notice("Соединение закрыто. Холст заблокирован до нового подключения.");};
  socket.onerror=()=>notice("Не удалось подключиться к комнате.");
 }
 function renderPlayers(players){$("#playerList").innerHTML=(players||[]).map(p=>`<div>👤 ${escapeHtml(p.name)} <b style="float:right">${p.score} очк.</b></div>`).join("")||"Пока никого нет";}
@@ -49,9 +58,9 @@ function drawRemote(data){applyingRemote=true;const im=new Image();im.onload=()=
 $("#roomCreate").onclick=()=>connect(Math.random().toString(36).slice(2,7).toUpperCase());
 $("#roomJoin").onclick=()=>{const c=$("#roomCode").value.trim();if(c.length<3)return notice("Введи код комнаты.");connect(c);};
 $("#roundStart").onclick=()=>send({type:"start"});
-$("#roomLeave").onclick=()=>{if(socket)socket.close();socket=null;isDrawer=false;$("#stage").style.pointerEvents="auto";$("#multiGame").hidden=true;$("#multiSetup").hidden=false;};
+$("#roomLeave").onclick=()=>{if(socket)socket.close();socket=null;isDrawer=false;$("#stage").style.pointerEvents="auto";$("#stage").removeAttribute("aria-disabled");$("#multiGame").hidden=true;$("#multiSetup").hidden=false;};
 $("#canvasClear").onclick=()=>{if(isDrawer){const c=canvas.getContext("2d");c.fillStyle="#fff";c.fillRect(0,0,canvas.width,canvas.height);send({type:"clear"});syncCanvas();}};
-function guess(){const v=$("#guessInput").value.trim();if(v){send({type:"guess",text:v});$("#guessInput").value="";}}
+function guess(){const v=$("#guessInput").value.trim().slice(0,100);if(v&&socket&&socket.readyState===WebSocket.OPEN){send({type:"guess",text:v});$("#guessInput").value="";}}
 $("#guessSend").onclick=guess;$("#guessInput").addEventListener("keydown",e=>{if(e.key==="Enter")guess();});
 function syncCanvas(){if(!isDrawer||!socket||socket.readyState!==1||applyingRemote)return;try{send({type:"canvas",data:canvas.toDataURL("image/jpeg",.55)});}catch{}}
 $("#stage").addEventListener("pointerup",()=>{if(isDrawer)setTimeout(syncCanvas,100);},true);

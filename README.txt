@@ -95,3 +95,42 @@ TELEGRAM GROUP LIVE DRAWING (NEW)
 - This uses the existing Paint Studio Mini App and the drawing WebSocket only. The country simulator files and routes are not changed.
 
 Telegram note: the bot must be able to receive group messages. If group privacy remains enabled in BotFather, it cannot see ordinary guesses and the group game cannot verify them. Group rooms are held in server memory; use one Render instance for this feature unless shared storage is added.
+
+
+ОБНОВЛЕНИЕ PAINT STUDIO / TELEGRAM DRAW GUESS
+=============================================
+
+Что изменено:
+- В Telegram-группе одновременно может идти только один активный раунд.
+- Повторное нажатие на кнопку приглашения не заменяет художника и не сбрасывает раунд.
+- Рисовать может только Telegram-пользователь, которому сервер выдал роль художника после проверки initData.
+- У зрителей холст блокируется сразу при подключении; случайные касания не рисуют.
+- Команда перезапуска раунда из Mini App запрещена для группового режима.
+- Если художник случайно закрыл Mini App, раунд и рисунок сохраняются; тот же подтверждённый Telegram-пользователь может подключиться снова.
+- Правильный ответ засчитывается только одному первому угадавшему, защита от одновременных ответов.
+- Подсказки появляются через 40 и 80 секунд.
+- /drawscores показывает рейтинг группы, /drawhelp показывает помощь.
+- Таймер старого раунда не может завершить новый раунд с таким же словом.
+
+Симулятор государства:
+- game.html, game.js, nations.js, nations.css и nations_server.py не изменялись.
+- Маршрут /game оставлен без изменений.
+
+Настройка запуска остаётся прежней:
+BOT_TOKEN, BOT_USERNAME, MINI_APP_SHORT_NAME, WEBAPP_URL.
+
+PAINT STUDIO 2.0 INTERFACE UPDATE
+--------------------------------
+The drawing Mini App now includes an adaptive dark interface loaded from
+studio-upgrade.css and studio-upgrade.js. Added studio features:
+- Raster layers: add, select, hide, delete, and merge layers.
+- Non-destructive preview effects (normal, vivid, saturated, monochrome,
+  retro, and glow-like brightness/contrast).
+- Photo import, fitted to the canvas.
+- A history panel that exposes the existing undo/redo controls.
+- Achievement badges stored locally in the browser.
+- Composite PNG export and composite gallery saves for multi-layer drawings.
+
+The new assets are served by /studio-upgrade.css and /studio-upgrade.js.
+The nation simulator files (game.html, game.js, nations.js, nations.css,
+and nations_server.py) are not changed by this interface update.

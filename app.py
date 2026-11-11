@@ -124,15 +124,22 @@ async def drawgroup_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 async def _start_group_canvas(chat_id, user_id, word, context, title="🎨 Угадай рисунок!"):
-    # Keep one active Telegram drawing round per group.
-    for old_room in ROOMS.values():
-        if old_room.get("telegram_group") and old_room.get("tg_chat_id") == chat_id:
-            old_room["word"] = None
+    # One live round per group: repeated taps cannot replace the current artist.
+    for existing in ROOMS.values():
+        if (existing.get("telegram_group") and existing.get("tg_chat_id") == chat_id
+                and existing.get("word") and existing.get("ends", 0) > time.time()):
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="⏳ В этой группе уже идёт раунд! Дождитесь его окончания — случайное нажатие не сменит художника."
+            )
+            return
     room_id = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    round_token = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
     room = {"clients": set(), "players": {}, "drawer": None, "word": word, "round": 1,
-            "ends": time.time() + 120, "image": None, "telegram_group": True,
+            "ends": time.time() + 120, "round_token": round_token, "image": None, "telegram_group": True,
             "tg_chat_id": chat_id, "tg_drawer_id": user_id, "tg_message_id": None,
-            "tg_last_edit": 0.0, "tg_latest_data": None, "tg_scores": {}, "tg_drawer_name": None}
+            "tg_last_edit": 0.0, "tg_latest_data": None, "tg_scores": {}, "tg_drawer_name": None,
+            "round_lock": asyncio.Lock(), "created_at": time.time()}
     ROOMS[room_id] = room
     GROUP_UPDATE_LOCKS[room_id] = asyncio.Lock()
     link = f"https://t.me/{BOT_USERNAME}/{MINI_APP_SHORT_NAME}?startapp=tgdraw_{room_id}"
@@ -142,14 +149,16 @@ async def _start_group_canvas(chat_id, user_id, word, context, title="🎨 Уг�
         caption=f"{title}\n\n🖌 Художник открывает холст. Все остальные угадывают слово сообщениями в чате!\n⏱ Раунд: 120 секунд\n🏆 За правильный ответ — 10 очков.", reply_markup=keyboard)
     room["tg_message_id"] = sent.message_id
     await context.bot.send_message(chat_id=chat_id, text="💡 Подсказка появится постепенно. Пишите версии прямо сюда — бот проверит ответы!")
-    asyncio.create_task(_expire_group_round(room_id, word, context.bot))
+    asyncio.create_task(_expire_group_round(room_id, word, round_token, context.bot))
+    asyncio.create_task(_group_hint_task(room_id, word, round_token, context.bot))
 
-async def _expire_group_round(room_id, word, bot):
+async def _expire_group_round(room_id, word, round_token, bot):
     await asyncio.sleep(120)
     room = ROOMS.get(room_id)
-    if not room or room.get("word") != word:
+    if not room or room.get("word") != word or room.get("round_token") != round_token:
         return
     room["word"] = None
+    room["ends"] = 0
     try:
         await bot.send_message(chat_id=room["tg_chat_id"], text=f"⌛ Время вышло! Загаданное слово: «{word}». Чтобы сыграть снова, напишите /drawgroup.")
         await bot.edit_message_caption(chat_id=room["tg_chat_id"], message_id=room["tg_message_id"],
@@ -206,23 +215,37 @@ async def group_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if user.id == room.get("tg_drawer_id"):
         return
     if guess == answer:
-        scores = GROUP_SCORES.setdefault(chat.id, {})
-        names = GROUP_PLAYER_NAMES.setdefault(chat.id, {})
-        winner = (user.full_name or user.first_name or "Игрок")
-        drawer_name = room.get("tg_drawer_name") or "Художник"
-        scores[user.id] = scores.get(user.id, 0) + 10
-        scores[room["tg_drawer_id"]] = scores.get(room["tg_drawer_id"], 0) + 5
-        names[user.id] = winner
-        names[room["tg_drawer_id"]] = drawer_name
-        leaderboard = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:5]
-        score_lines = [f"• {names.get(player_id, 'Игрок')}: {points} очк." for player_id, points in leaderboard]
-        await msg.reply_text(f"🎉 Правильно, {winner}! Это «{room['word']}»!\n🏆 +10 очков угадавшему · +5 художнику\n\nТаблица очков:\n" + "\n".join(score_lines))
-        room["word"] = None
-        try:
-            await context.bot.edit_message_caption(chat_id=chat.id, message_id=room["tg_message_id"],
-                caption=f"✅ Раунд завершён! {winner} угадал слово «{room['word'] or answer}».\n\nНажмите /drawgroup, чтобы сыграть ещё раз.")
-        except Exception:
-            pass
+        lock = room.setdefault("round_lock", asyncio.Lock())
+        async with lock:
+            if not room.get("word") or normalize(str(room["word"])) != guess:
+                return
+            solved_word = str(room["word"])
+            scores = GROUP_SCORES.setdefault(chat.id, {})
+            names = GROUP_PLAYER_NAMES.setdefault(chat.id, {})
+            winner = user.full_name or user.first_name or "Игрок"
+            drawer_id = room.get("tg_drawer_id")
+            drawer_name = room.get("tg_drawer_name") or "Художник"
+            scores[user.id] = scores.get(user.id, 0) + 10
+            if drawer_id is not None:
+                scores[drawer_id] = scores.get(drawer_id, 0) + 5
+            names[user.id] = winner
+            if drawer_id is not None:
+                names[drawer_id] = drawer_name
+            leaderboard = sorted(scores.items(), key=lambda item: item[1], reverse=True)[:5]
+            score_lines = [f"• {names.get(pid, 'Игрок')}: {points} очк." for pid, points in leaderboard]
+            room["word"] = None
+            room["ends"] = 0
+            await msg.reply_text(
+                f"🎉 Правильно, {winner}! Это «{solved_word}»!\n"
+                f"🏆 +10 очков угадавшему · +5 художнику\n\nТаблица очков:\n" + "\n".join(score_lines)
+            )
+            try:
+                await context.bot.edit_message_caption(
+                    chat_id=chat.id, message_id=room["tg_message_id"],
+                    caption=f"✅ Раунд завершён! {winner} угадал слово «{solved_word}».\n\nНажмите /drawgroup, чтобы сыграть ещё раз."
+                )
+            except Exception:
+                pass
 
 async def publish_group_canvas(room, data):
     if not TG_BOT or not room.get("telegram_group") or not room.get("tg_message_id"):
@@ -278,6 +301,8 @@ async def lifespan(app: FastAPI):
         tg.add_handler(CommandHandler("draw", draw_command))
         tg.add_handler(CommandHandler("drawgroup", drawgroup_command))
         tg.add_handler(CommandHandler("guessdraw", drawgroup_command))
+        tg.add_handler(CommandHandler("drawscores", drawscores_command))
+        tg.add_handler(CommandHandler("drawhelp", drawhelp_command))
         tg.add_handler(CallbackQueryHandler(drawgroup_callback, pattern=r"^tgdraw:"))
         tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, group_text_handler))
         tg.add_handler(CommandHandler("nations", nations_command))
@@ -324,6 +349,16 @@ def multiplayer_css():
 @app.get("/multiplayer.js")
 def multiplayer_js():
     return FileResponse(BASE / "multiplayer.js", media_type="application/javascript")
+
+
+@app.get("/studio-upgrade.css")
+def studio_upgrade_css():
+    return FileResponse(BASE / "studio-upgrade.css", media_type="text/css")
+
+
+@app.get("/studio-upgrade.js")
+def studio_upgrade_js():
+    return FileResponse(BASE / "studio-upgrade.js", media_type="application/javascript")
 
 
 @app.get("/nations.js")
@@ -387,20 +422,28 @@ async def draw_socket(ws: WebSocket, room_id: str):
                 verified_user_id = verified_webapp_user_id(str(msg.get("tg_init_data", ""))) if room.get("telegram_group") else None
                 is_group_drawer = bool(room.get("telegram_group") and verified_user_id == str(room.get("tg_drawer_id")))
                 if is_group_drawer:
-                    room["drawer"] = ws
-                    room["tg_drawer_name"] = name
+                    current = room.get("drawer")
+                    if current is None or current not in room["clients"]:
+                        room["drawer"] = ws
+                    if room.get("drawer") is ws:
+                        room["tg_drawer_name"] = name
                 await ws.send_json({"type":"joined", "id":player_id, "room":room_id,
                                     "players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()],
                                     "drawer": room["players"].get(room["drawer"],{}).get("name") if room["drawer"] else None,
                                     "image": room["image"], "telegram_group": bool(room.get("telegram_group")),
-                                    "is_drawer": is_group_drawer})
-                if is_group_drawer:
-                    await ws.send_json({"type":"round", "drawer":name, "round":1, "seconds":120, "telegram_group":True})
+                                    "is_drawer": bool(is_group_drawer and room.get("drawer") is ws)})
+                if is_group_drawer and room.get("drawer") is ws:
+                    await ws.send_json({"type":"round", "drawer":name, "round":1,
+                                        "seconds":max(0, int(room.get("ends", time.time()) - time.time())),
+                                        "telegram_group":True})
                     await ws.send_json({"type":"your_word", "word":room.get("word")})
                 await room_send(room, {"type":"players","players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()]}, ws)
             elif ws not in room["players"]:
                 continue
             elif kind == "start":
+                if room.get("telegram_group"):
+                    await ws.send_json({"type":"notice","text":"В групповой игре художник уже выбран создателем раунда. Нельзя перезапустить раунд кнопкой."})
+                    continue
                 if len(room["players"]) < 2:
                     await ws.send_json({"type":"notice","text":"Нужно минимум 2 игрока."})
                     continue
@@ -444,7 +487,8 @@ async def draw_socket(ws: WebSocket, room_id: str):
         room["players"].pop(ws, None)
         if room["drawer"] is ws:
             room["drawer"] = None
-            room["word"] = None
+            if not room.get("telegram_group"):
+                room["word"] = None
         await room_send(room, {"type":"players","players":[{"name":p["name"],"score":p["score"]} for p in room["players"].values()]})
         if not room["clients"]:
             ROOMS.pop(room_id, None)
