@@ -63,8 +63,9 @@ async def nations_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("🌍 Войти в игру", url=link)]])
     await update.effective_message.reply_text(
         f"🏛 Симулятор государства — мультиплеер\nКомната: {code}\n\n"
-        "У каждого игрока своя страна. Время идёт одновременно, побеждает тот, "
-        "у кого больше очков в конце. Нужно минимум 2 игрока.",
+        "У каждого игрока своя страна и случайная свободная территория. "
+        "В комнате работают 24 государства под управлением ИИ; можно начать одному, "
+        "а другие игроки могут подключаться даже после старта, пока есть свободные территории.",
         reply_markup=keyboard,
     )
 

@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=s=>document.querySelector(s), clamp=(v,a=0,b=100)=>Math.max(a,Math.min(b,v)), fmt=n=>Math.round(n).toLocaleString('ru-RU'), months=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
-const initial=()=>({name:'Республика Новария',month:0,year:1,money:18000,debt:0,pop:8200000,gdp:42000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:20,health:12,education:12,defense:15,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Столица',pop:1200000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный край',pop:1600000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточная область',pop:2100000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южная провинция',pop:1900000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный округ',pop:1400000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[],conquered:[],botWars:[],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
+const initial=()=>({name:'Республика Новария',month:0,year:1,money:18000,debt:0,pop:8200000,gdp:42000,inflation:5,employment:94,stability:68,approval:61,legitimacy:70,food:78,fuel:65,steel:55,equipment:48,ammo:62,energy:72,tech:32,army:42000,navy:8,air:45,training:58,morale:65,threat:20,war:false,gov:'Парламентская республика',leader:'Александр Ветров',party:'Центристский союз',playerParty:'Центристский союз',campaignOver:false,difficulty:'normal',history:[],tax:20,health:12,education:12,defense:15,industry:50,election:24,coupRisk:12,grace:12,crisis:0,cd:{},regions:[{name:'Столица',pop:1200000,wealth:82,loyalty:76,unrest:10,industry:70,infra:88,resource:'Услуги'},{name:'Северный край',pop:1600000,wealth:55,loyalty:64,unrest:18,industry:48,infra:55,resource:'Лес'},{name:'Восточная область',pop:2100000,wealth:48,loyalty:57,unrest:24,industry:75,infra:49,resource:'Сталь'},{name:'Южная провинция',pop:1900000,wealth:51,loyalty:60,unrest:20,industry:42,infra:53,resource:'Зерно'},{name:'Западный округ',pop:1400000,wealth:62,loyalty:68,unrest:14,industry:58,infra:67,resource:'Энергия'}],parties:[{name:'Центристский союз',support:34,seats:38,ideology:'Центр'},{name:'Народная партия',support:25,seats:27,ideology:'Консерватизм'},{name:'Партия реформ',support:21,seats:22,ideology:'Либерализм'},{name:'Социальный альянс',support:20,seats:13,ideology:'Социал-демократия'}],relations:[{name:'Аркания',value:15,power:65},{name:'Белория',value:48,power:42},{name:'Тарвия',value:-20,power:80}],conquered:[],botWars:[],log:['Правительство сформировано. Начинается управление государством.'],documents:[],events:[],laws:[],event:null});
 let S;try{S={...initial(),...JSON.parse(localStorage.getItem('novariaSave')||'{}')}}catch{S=initial()}if(!Array.isArray(S.regions)||!Array.isArray(S.parties)||!Array.isArray(S.relations))S=initial();
 if(!S.playerParty)S.playerParty=S.party||'Центристский союз';if(!S.difficulty)S.difficulty='normal';if(typeof S.campaignOver!=='boolean')S.campaignOver=false;if(!Array.isArray(S.history))S.history=[];if(!Array.isArray(S.log))S.log=[];if(!Array.isArray(S.documents))S.documents=[];if(!Array.isArray(S.laws))S.laws=[];if(!S.event)S.event=null;if(S.history.length===0){let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap())}
 let tab='overview',timer=null,running=false,selectedDifficulty=S.difficulty;
@@ -19,76 +19,14 @@ appr:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f9a5
 army:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b5504a" stroke-width="2" aria-hidden="true"><path d="M5 21V4M5 5h13l-3 4 3 4H5"/></svg>'};
 const flagSvg='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d6b25e" stroke-width="1.8" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M12 8v8M8 12h8"/></svg>';
 function loyColor(v){return v>=70?'#6f8a55':v>=62?'#8b9a57':v>=55?'#a0a257':v>=48?'#a58a4a':'#9a5a45'}
-const NOVARIA_REGIONS = [
- {country:'UKR', names:['Autonomous Republic of Crimea','Crimea','Avtonomna Respublika Krym','Crimea, Autonomous Republic']},
- {country:'UKR', names:['Odeska','Odesa','Odessa','Odesa Oblast']},
- {country:'UKR', names:['Mykolaivska','Mykolaiv','Mykolayiv','Mykolaiv Oblast']},
- {country:'UKR', names:['Khersonska','Kherson','Kherson Oblast']},
- {country:'UKR', names:['Zaporizka','Zaporizhzhia','Zaporizhia','Zaporizhzhia Oblast']},
- {country:'UKR', names:['Dnipropetrovska','Dnipropetrovsk','Dnipropetrovsk Oblast']},
- {country:'UKR', names:['Donetska','Donetsk','Donetsk Oblast']},
- {country:'UKR', names:['Luhanska','Luhansk','Lugansk','Luhansk Oblast']},
- {country:'UKR', names:['Kharkivska','Kharkiv','Kharkov','Kharkiv Oblast']},
- {country:'RUS', names:['Belgorodskaya oblast','Belgorod Oblast','Belgorod']}
-];
-const WORLD_COUNTRY_NAMES = {
- 'United States of America':'США','Russia':'Россия','China':'Китай','India':'Индия','Germany':'Германия','France':'Франция',
- 'United Kingdom':'Великобритания','Japan':'Япония','Brazil':'Бразилия','Canada':'Канада','Australia':'Австралия','Italy':'Италия',
- 'Turkey':'Турция','Iran':'Иран','Poland':'Польша','Ukraine':'Украина','Spain':'Испания','Sweden':'Швеция','Egypt':'Египет',
- 'South Africa':'ЮАР','Mexico':'Мексика','Indonesia':'Индонезия'
-};
-function mapHtml(){
- const owned=S.conquered&&S.conquered.length?S.conquered.map(x=>x.name).join(' · '):'нет дополнительных захватов';
- return `<div class="novaria-map-tools"><button type="button" onclick="window.novariaMapWorld()">Весь мир</button><button type="button" class="primary" onclick="window.novariaMapHome()">Территория Новарии</button><span class="map-note">Географическая карта · масштабирование двумя пальцами</span></div><div id="novaria-real-map" class="novaria-real-map" role="application" aria-label="Интерактивная географическая карта мира"></div><div class="maplegend"><span><i style="background:#2e9b72"></i>Новария (игровая территория)</span><span><i style="background:#c19a45"></i>Вассальные государства</span><span><i style="background:#64748b"></i>Остальные страны</span></div><p class="muted">Границы и подложка загружаются из географических наборов Natural Earth, OpenStreetMap и geoBoundaries. Территория Новарии — условность альтернативного игрового сценария. Дополнительные захваты: ${owned}.</p>`;
-}
-let novariaMapInstance=null, novariaMapLayers=[];
-function normGeoName(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-zа-яё0-9]+/g,' ').trim()}
-function featureName(f){const p=f&&f.properties||{};return p.shapeName||p.shapeName_en||p.name||p.NAME_1||p.NAME||p.admin||Object.values(p).find(v=>typeof v==='string'&&v.length>2)||''}
-function featureMatches(f,entry){const n=normGeoName(featureName(f));return entry.names.some(x=>{const q=normGeoName(x);return n===q||n.includes(q)||q.includes(n)})}
-function novariaMapWorld(){if(novariaMapInstance)novariaMapInstance.setView([20,0],2)}
-function novariaMapHome(){if(novariaMapInstance)novariaMapInstance.fitBounds([[44.0,26.0],[53.8,40.0]],{padding:[18,18]})}
-window.novariaMapWorld=novariaMapWorld;window.novariaMapHome=novariaMapHome;
-async function initNovariaMap(){
- const el=document.getElementById('novaria-real-map');if(!el)return;
- if(!window.L){el.innerHTML='<div class="map-load-error">Не удалось загрузить картографическую библиотеку. Проверь подключение к интернету.</div>';return}
- if(novariaMapInstance){try{novariaMapInstance.remove()}catch{}novariaMapInstance=null;novariaMapLayers=[]}
- const map=L.map(el,{zoomControl:true,scrollWheelZoom:true,preferCanvas:true}).setView([25,10],2);
- novariaMapInstance=map;
- L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
- const statusEl=document.createElement('div');statusEl.className='map-status';statusEl.textContent='Загрузка географических границ…';el.appendChild(statusEl);
- const relationNames=new Map((S.relations||[]).map(c=>[normGeoName(c.name),c]));
- const colorForCountry=(name)=>{
-  const aliases={'United States of America':'сша','Russia':'россия','China':'китай','India':'индия','Germany':'германия','France':'франция','United Kingdom':'великобритания','Japan':'япония','Brazil':'бразилия','Canada':'канада','Australia':'австралия','Italy':'италия','Turkey':'турция','Iran':'иран','Poland':'польша','Ukraine':'украина','Spain':'испания','Sweden':'швеция','Egypt':'египет','South Africa':'юар','Mexico':'мексика','Indonesia':'индонезия'};
-  const ru=aliases[name]||normGeoName(name),r=relationNames.get(normGeoName(ru));
-  if(r&&r.owner==='player')return '#2e9b72';if(r&&r.owner==='puppet')return '#c19a45';if(r&&r.owner==='partial')return '#76a17a';
-  return '#68788a';
- };
- try{
-  const worldUrl='https://cdn.jsdelivr.net/gh/datasets/geo-countries@main/data/countries.geojson';
-  const worldRes=await fetch(worldUrl,{cache:'force-cache'});if(!worldRes.ok)throw new Error('world '+worldRes.status);
-  const world=await worldRes.json();
-  const worldLayer=L.geoJSON(world,{style:f=>{const name=f.properties?.name||'';const fill=colorForCountry(name);return{color:'#d6dce2',weight:.65,opacity:.8,fillColor:fill,fillOpacity:.20}} ,onEachFeature:(f,l)=>{const n=f.properties?.name||'Страна';l.bindTooltip(n,{sticky:true})}}).addTo(map);
-  novariaMapLayers.push(worldLayer);
- }catch(e){console.warn('World country boundaries unavailable',e)}
- const getAdmin=async iso=>{
-  const metaRes=await fetch(`https://www.geoboundaries.org/api/current/gbOpen/${iso}/ADM1/`);if(!metaRes.ok)throw new Error('metadata '+iso);
-  const meta=await metaRes.json();const url=meta.simplifiedGeometryGeoJSON||meta.gjDownloadURL;
-  const dataRes=await fetch(url);if(!dataRes.ok)throw new Error('geojson '+iso);return dataRes.json();
- };
- try{
-  const [ukr,rus]=await Promise.all([getAdmin('UKR'),getAdmin('RUS')]);
-  const all=[...(ukr.features||[]),...(rus.features||[])];
-  const selected=[];
-  NOVARIA_REGIONS.forEach(entry=>{const found=all.filter(f=>{const p=f.properties||{};const group=String(p.shapeGroup||p.adm0_a3||p.ADM0_A3||'').toUpperCase();return (!group||group===entry.country)&&featureMatches(f,entry)});found.forEach(f=>selected.push({...f,properties:{...(f.properties||{}),__novariaRegion:featureName(f)}}));});
-  if(selected.length){const novariaLayer=L.geoJSON({type:'FeatureCollection',features:selected},{style:{color:'#ffe08a',weight:2,opacity:1,fillColor:'#159b69',fillOpacity:.76},onEachFeature:(f,l)=>l.bindPopup(`<b>Новария · ${f.properties.__novariaRegion}</b><br>Игровая территория альтернативного сценария`)}).addTo(map);novariaMapLayers.push(novariaLayer);}
-  else console.warn('No Novaria administrative regions matched geoBoundaries names');
-  statusEl.remove();
-  const btn=document.querySelector('.novaria-map-tools button.primary');if(btn)btn.disabled=false;
-  novariaMapHome();
- }catch(e){console.warn('Administrative boundaries unavailable',e);statusEl.textContent='Подложка карты загружена. Детальные границы областей временно недоступны.';}
- setTimeout(()=>map.invalidateSize(),150);
-}
-window.initNovariaMap=initNovariaMap;
+const MAPR=[
+['Северный край','92,97 88,78 186,78 224,88 263,92 341,102 400,59 477,57 512,88 536,74 547,139 497,153 458,144 400,139 341,144 244,149 186,144 108,139',236,111],
+['Западный округ','92,97 108,139 186,144 244,149 256,214 267,252 209,247 186,252 143,276 65,266 34,243 53,210 88,149',162,196],
+['Центральный округ','244,149 341,144 400,139 458,144 497,153 505,196 516,252 536,280 458,290 380,285 322,280 267,252 256,214',365,219],
+['Восточная область','547,139 575,149 652,158 734,186 719,262 652,304 594,313 555,299 536,280 516,252 505,196 497,153',621,214],
+['Южная провинция','267,252 322,280 380,285 458,290 536,280 555,299 594,313 536,337 528,356 575,374 598,393 536,421 477,431 438,384 481,351 419,337 380,327 368,337 341,365 326,388 275,332',419,313],
+['Столица','345,135 376,135 380,158 349,163',419,116]];
+function mapHtml(){let P='',T='';MAPR.forEach(m=>{let r=S.regions.find(x=>x.name===m[0])||{loyalty:50,unrest:0};P+=`<polygon points="${m[1]}" fill="${loyColor(r.loyalty)}" stroke="#0d1519" stroke-width="3" stroke-linejoin="round"><title>${m[0]}: лояльность ${Math.round(r.loyalty)}%, недовольство ${Math.round(r.unrest)}%</title></polygon>`;T+=`<text x="${m[2]}" y="${m[3]}" text-anchor="middle" class="maptxt">${m[0].toUpperCase()}</text><text x="${m[2]}" y="${m[3]+17}" text-anchor="middle" class="maptxt2">лояльность ${Math.round(r.loyalty)}%</text>`});const W=S.relations.map((c,i)=>{const x=770+(i%2)*108,y=92+Math.floor(i/2)*88,fill=c.owner==='player'?'#3d9b70':c.owner==='puppet'?'#b68a45':c.owner==='partial'?'#7b9b70':'#586477',label=c.name.length>13?c.name.slice(0,12)+'…':c.name;return `<rect x="${x}" y="${y}" width="98" height="66" rx="7" fill="${fill}" stroke="#111820" stroke-width="2"><title>${c.name} · ${c.owner==='player'?'ваша территория':c.owner==='puppet'?'вассал':c.owner==='partial'?'частичный контроль':'независимое государство'}</title></rect><text x="${x+49}" y="${y+28}" text-anchor="middle" class="maptxt">${label}</text><text x="${x+49}" y="${y+45}" text-anchor="middle" class="maptxt2">${c.owner==='player'?'ВАША':c.owner==='puppet'?'ВАССАЛ':c.owner==='partial'?'ЧАСТЬ':'НЕЗАВИС.'}</text>`}).join('');return `<svg class="hoimap" viewBox="0 0 1000 560" role="img" aria-label="Карта страны и мировые территории"><defs><pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern></defs><rect width="1000" height="560" fill="url(#mg)"/>${P}${T}<text x="868" y="58" text-anchor="middle" class="maptxt">МИРОВЫЕ СТРАНЫ</text>${W}${SEA}</svg><div class="maplegend"><span><i style="background:#6f8a55"></i>высокая лояльность</span><span><i style="background:#a0a257"></i>средняя</span><span><i style="background:#9a5a45"></i>низкая</span></div>`}
 function warnBanner(){if(S.out)return'';if(S.grace>0)return `<section class="panel wide okbanner">🛡 Защитный срок: отставка не грозит ещё ${S.grace} мес.</section>`;if(S.crisis>0)return `<section class="panel wide warnbanner">⚠ Угроза отставки: ${S.crisisWhy||''}. Критическое состояние уже ${S.crisis} мес. подряд. ${ADVICE[S.crisisIdx]||'Нужно срочно исправить ситуацию.'} ${isPopular()?'(Тебя любят — отставка наступит позже.)':''}</section>`;return''}
 function bar(label,val){return `<div class="meter"><b>${label}: ${fmt(val)}%</b><div class="bar"><i style="width:${clamp(val)}%;background:${val<30?"linear-gradient(90deg,#c23b4b,#ff7b86)":val<55?"linear-gradient(90deg,#c9902f,#f5c76a)":"linear-gradient(90deg,#2aa56d,#7ee6ae)"}"></i></div></div>`}
 function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]];$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
@@ -104,7 +42,7 @@ if(tab==='diplomacy')c=`<div class="cards">${S.relations.map((r,i)=>`<div class=
 if(tab==='documents')c=`<div class="grid">${card('Государственные документы',`<div class="row"><input id="docname" placeholder="Название документа"><select id="doctype"><option>Указ</option><option>Закон</option><option>Бюджет</option><option>Военный приказ</option><option>Дипломатическая нота</option></select></div><textarea id="doctext" rows="5" style="width:100%" placeholder="Текст документа..."></textarea><button class="primary" onclick="createDoc()">Подписать и сохранить</button>`)}${card('Архив документов',S.documents.length?S.documents.map((d,i)=>`<div class="choice"><b>${d.type}: ${d.name}</b><small class="muted"> · ${d.date}</small><p>${d.text}</p><button onclick="deleteDoc(${i})">Удалить</button></div>`).join(''):'Пока документов нет.')}</div>`;
 if(tab==='events')c=`<div class="grid">${card('События государства',S.event?`<h3>${S.event.title}</h3><p>${S.event.text}</p><div class="actions"><button class="primary" onclick="resolveEvent(0)">${S.event.a}</button><button onclick="resolveEvent(1)">${S.event.b}</button></div>`:'<p>Сейчас нет неразрешённых событий.</p>')}${card('Хроника',`<div class="log">${S.log.map(x=>`<div>${x}</div>`).join('')}</div>`)}</div>`;
 if(tab==='settings')c=`<div class="grid">${card('Сложность кампании',`<p>Выбери, насколько трудно удерживать власть и развивать государство. Сложность применяется только к <b>новой кампании</b>, текущую игру она не меняет.</p><div class="row"><label for="difficultySelect">Уровень сложности</label><select id="difficultySelect" onchange="setDifficulty(this.value)"><option value="story" ${selectedDifficulty==='story'?'selected':''}>История — очень легко</option><option value="easy" ${selectedDifficulty==='easy'?'selected':''}>Лёгкая</option><option value="normal" ${selectedDifficulty==='normal'?'selected':''}>Нормальная</option><option value="hard" ${selectedDifficulty==='hard'?'selected':''}>Сложная</option><option value="expert" ${selectedDifficulty==='expert'?'selected':''}>Эксперт</option></select></div><div class="mini"><b>Текущая сложность: ${difficulty().label}</b><br>Доходы ×${difficulty().income.toFixed(2)} · расходы ×${difficulty().expenses.toFixed(2)}<br>Давление оппозиции ×${difficulty().rivalPressure.toFixed(2)}<br>Риск беспорядков ×${difficulty().unrest.toFixed(2)}</div><button class="primary" onclick="resetGame()">Начать новую кампанию на выбранной сложности</button>`)}${card('Сохранение',`<p>Прогресс автоматически сохраняется на этом устройстве.</p><button class="good" onclick="save();toast('Игра сохранена')">Сохранить сейчас</button> <button onclick="exportSave()">Экспортировать сохранение</button><div class="row"><input type="file" id="importfile" accept=".json"><button onclick="importSave()">Загрузить файл</button></div>`)}${card('Параметры страны',`<div class="row"><label>Название</label><input id="countryname" value="${S.name}"><button onclick="S.name=$('#countryname').value;save();render()">Изменить</button></div>`)}</div>`;
-{let t=addonTab();if(t)c=t;else if(S.out)c=outBanner()+c}if(tab==='overview')c+=ovExtra()+card('👥 Что говорят люди',feedHtml());$('#content').innerHTML=(tab==='mp'&&window.NGMP?window.NGMP.tab():(tab==='events'?'':evBanner())+c);if(tab==='mp'&&window.NGMP&&window.NGMP.after)window.NGMP.after();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));drawCharts();if(tab==='overview')setTimeout(()=>window.initNovariaMap&&window.initNovariaMap(),60);if(S.campaignOver)showGameOver()}
+{let t=addonTab();if(t)c=t;else if(S.out)c=outBanner()+c}if(tab==='overview')c+=ovExtra()+card('👥 Что говорят люди',feedHtml());$('#content').innerHTML=(tab==='mp'&&window.NGMP?window.NGMP.tab():(tab==='events'?'':evBanner())+c);if(tab==='mp'&&window.NGMP&&window.NGMP.after)window.NGMP.after();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));drawCharts();if(S.campaignOver)showGameOver()}
 function runElection(){
  if(S.campaignOver)return;
  if(!S.out){let m0=S.parties.find(p=>p.name===S.playerParty);if(m0)m0.support=clamp(m0.support+(S.approval-50)*.12,2,75)}
@@ -158,37 +96,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
 const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
 function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust}}
-const C0=[
- ['США',-25,170,0.55,'Глобальная держава',180000],
- ['Россия',-15,160,0.7,'Военная держава',165000],
- ['Китай',-10,155,0.48,'Промышленный гигант',155000],
- ['Индия',5,145,0.42,'Растущая экономика',130000],
- ['Германия',12,135,0.25,'Промышленная республика',112000],
- ['Франция',8,128,0.3,'Европейская держава',105000],
- ['Великобритания',-5,122,0.38,'Морская держава',98000],
- ['Япония',10,118,0.22,'Технологическая держава',92000],
- ['Бразилия',15,112,0.36,'Южноамериканская держава',86000],
- ['Канада',20,108,0.18,'Северная федерация',80000],
- ['Австралия',25,103,0.2,'Тихоокеанская держава',74000],
- ['Италия',5,99,0.28,'Средиземноморская страна',68000],
- ['Турция',-8,96,0.55,'Региональная держава',61000],
- ['Иран',-30,94,0.72,'Региональный соперник',52000],
- ['Белория',48,82,0.2,'Дружелюбный сосед',39000],
- ['Аркания',15,78,0.4,'Торговая держава',36000],
- ['Тарвия',-20,75,0.8,'Милитаристы',34000],
- ['Дорвин',5,70,0.5,'Союз торговцев',32000],
- ['Силезия',-5,66,0.3,'Горная республика',30000],
- ['Мерейя',25,63,0.2,'Морская федерация',28000],
- ['Остмарк',-35,60,0.7,'Имперские амбиции',26000],
- ['Польша',8,58,0.32,'Центральноевропейская страна',24000],
- ['Украина',18,56,0.35,'Восточноевропейская страна',22000],
- ['Испания',12,54,0.25,'Средиземноморская страна',20000],
- ['Швеция',22,52,0.18,'Северная страна',18500],
- ['Египет',-5,50,0.48,'Североафриканская страна',17000],
- ['ЮАР',6,48,0.35,'Африканская экономика',15500],
- ['Мексика',0,46,0.38,'Североамериканская страна',14000],
- ['Индонезия',15,44,0.32,'Островная держава',12500]
-];
+const C0=[['Аркания',15,65,.4,'Торговая держава'],['Белория',48,42,.2,'Дружелюбный сосед'],['Тарвия',-20,80,.8,'Милитаристы'],['Дорвин',5,55,.5,'Союз торговцев'],['Силезия',-5,38,.3,'Горная республика'],['Мерейя',25,48,.2,'Морская федерация'],['Остмарк',-35,70,.7,'Имперские амбиции']];
 
 const CDM={speech:4,law:6,aid:3,trade:4,security:3,rally:2,program:4,reform:4,industry:3,roads:2,recruit:2,train:3,equipment:2,mobilize:6};
 const cdLeft=k=>((S.cd||{})[k])||0;
@@ -197,7 +105,7 @@ const cdTick=()=>{if(!S.cd)return;for(let k in S.cd)if(S.cd[k]>0)S.cd[k]--};
 const cdMsg=k=>`Подождите ещё ${cdLeft(k)} мес.`;
 const DN=['Иван Корнев','Мария Лозинская','Павел Рудь','Олег Баранов','Елена Ветрова','Артём Щукин','Нина Орлова','Глеб Сомов'];
 function ensure(){ensureHoi();if(!Array.isArray(S.conquered))S.conquered=[];if(!Array.isArray(S.botWars))S.botWars=[];if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
-C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}if(r.gdp==null)r.gdp=c[5]||Math.round(18000+c[2]*260);if(r.money==null)r.money=Math.round(5000+c[2]*90);if(r.pop==null)r.pop=Math.round(900000+c[2]*18000);if(r.stability==null)r.stability=55+Math.round(c[1]/10);if(r.army==null)r.army=Math.round(c[2]*620);if(r.owner==null)r.owner=r.name;if(r.ai==null)r.ai=true;if(r.army==null)r.army=Math.round(c[2]*620)});['cannon','bomb','petard'].forEach(k=>{if(S[k]==null)S[k]=0})}
+C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}if(r.gdp==null)r.gdp=Math.round(18000+c[2]*260);if(r.money==null)r.money=Math.round(5000+c[2]*90);if(r.pop==null)r.pop=Math.round(900000+c[2]*18000);if(r.stability==null)r.stability=55+Math.round(c[1]/10);if(r.army==null)r.army=Math.round(c[2]*620);if(r.owner==null)r.owner=r.name});['cannon','bomb','petard'].forEach(k=>{if(S[k]==null)S[k]=0})}
 function say(t,m){ensure();S.feed.unshift({t,m:m||'🙂',d:`${months[S.month]} ${S.year}`});S.feed=S.feed.slice(0,40)}
 const blocked=()=>{if(S.campaignOver){toast('Кампания завершена. Начни новую игру.');return true}if(S.out){toast('Вы в оппозиции — вернуться к власти можно во вкладке «Возврат»');return true}return false};
 const myPower=()=>S.army/1000+S.air*1.5+S.navy*2+(S.bomb||0)*15+(S.cannon||0)*.5;

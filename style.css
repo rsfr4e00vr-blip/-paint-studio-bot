@@ -84,16 +84,7 @@ th{background:#10171c;font-weight:500;letter-spacing:.06em}
 .gameover-box{background:#1a2127;border:2px solid var(--gold);border-radius:0;box-shadow:none}
 .gameover-box h2{font-family:Oswald,sans-serif;letter-spacing:.1em;color:var(--gold)}
 .party-card{border-color:var(--gold)!important;background:#2a2412!important}
-.novaria-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 10px}
-.novaria-map-tools button{border:1px solid var(--line);background:#18232b;color:var(--text);padding:8px 12px;border-radius:4px}
-.novaria-map-tools button:disabled{opacity:.5}
-.map-note{font-size:12px;color:var(--muted)}
-.novaria-real-map{height:520px;width:100%;min-height:360px;border:1px solid var(--line);background:#dce3e8;z-index:1}
-.novaria-real-map .leaflet-control-attribution{font-size:9px}
-.novaria-real-map .leaflet-popup-content-wrapper,.novaria-real-map .leaflet-popup-tip{background:#17232b;color:#eee;border:1px solid #d6b25e}
-.map-status,.map-load-error{position:absolute;z-index:500;top:10px;left:50%;transform:translateX(-50%);background:#14202b;color:#f2dfad;border:1px solid #c8a65a;border-radius:4px;padding:8px 12px;font-size:12px;max-width:90%;text-align:center}
-.maplegend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:10px;color:var(--muted);font-size:13px}
-.maplegend i{display:inline-block;width:12px;height:12px;margin-right:6px;vertical-align:-1px}
+.hoimap{display:block;width:100%;max-width:640px;margin:0 auto;background:#0d1519;border:1px solid var(--line)}
 .hoimap .maptxt{font-family:Oswald,sans-serif;font-size:15px;font-weight:600;fill:#101418;pointer-events:none}
 .hoimap .maptxt2{font-size:13px;fill:#101418;pointer-events:none}
 .maplegend{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-top:10px;color:var(--muted);font-size:13px}
