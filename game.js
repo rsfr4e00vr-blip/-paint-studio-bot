@@ -19,39 +19,76 @@ appr:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6f9a5
 army:'<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b5504a" stroke-width="2" aria-hidden="true"><path d="M5 21V4M5 5h13l-3 4 3 4H5"/></svg>'};
 const flagSvg='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d6b25e" stroke-width="1.8" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M12 8v8M8 12h8"/></svg>';
 function loyColor(v){return v>=70?'#6f8a55':v>=62?'#8b9a57':v>=55?'#a0a257':v>=48?'#a58a4a':'#9a5a45'}
-const MAPR=[
-['Северный край','92,97 88,78 186,78 224,88 263,92 341,102 400,59 477,57 512,88 536,74 547,139 497,153 458,144 400,139 341,144 244,149 186,144 108,139',236,111],
-['Западный округ','92,97 108,139 186,144 244,149 256,214 267,252 209,247 186,252 143,276 65,266 34,243 53,210 88,149',162,196],
-['Центральный округ','244,149 341,144 400,139 458,144 497,153 505,196 516,252 536,280 458,290 380,285 322,280 267,252 256,214',365,219],
-['Восточная область','547,139 575,149 652,158 734,186 719,262 652,304 594,313 555,299 536,280 516,252 505,196 497,153',621,214],
-['Южная провинция','267,252 322,280 380,285 458,290 536,280 555,299 594,313 536,337 528,356 575,374 598,393 536,421 477,431 438,384 481,351 419,337 380,327 368,337 341,365 326,388 275,332',419,313],
-['Столица','345,135 376,135 380,158 349,163',419,116]];
+const NOVARIA_REGIONS = [
+ {country:'UKR', names:['Autonomous Republic of Crimea','Crimea','Avtonomna Respublika Krym','Crimea, Autonomous Republic']},
+ {country:'UKR', names:['Odeska','Odesa','Odessa','Odesa Oblast']},
+ {country:'UKR', names:['Mykolaivska','Mykolaiv','Mykolayiv','Mykolaiv Oblast']},
+ {country:'UKR', names:['Khersonska','Kherson','Kherson Oblast']},
+ {country:'UKR', names:['Zaporizka','Zaporizhzhia','Zaporizhia','Zaporizhzhia Oblast']},
+ {country:'UKR', names:['Dnipropetrovska','Dnipropetrovsk','Dnipropetrovsk Oblast']},
+ {country:'UKR', names:['Donetska','Donetsk','Donetsk Oblast']},
+ {country:'UKR', names:['Luhanska','Luhansk','Lugansk','Luhansk Oblast']},
+ {country:'UKR', names:['Kharkivska','Kharkiv','Kharkov','Kharkiv Oblast']},
+ {country:'RUS', names:['Belgorodskaya oblast','Belgorod Oblast','Belgorod']}
+];
+const WORLD_COUNTRY_NAMES = {
+ 'United States of America':'США','Russia':'Россия','China':'Китай','India':'Индия','Germany':'Германия','France':'Франция',
+ 'United Kingdom':'Великобритания','Japan':'Япония','Brazil':'Бразилия','Canada':'Канада','Australia':'Австралия','Italy':'Италия',
+ 'Turkey':'Турция','Iran':'Иран','Poland':'Польша','Ukraine':'Украина','Spain':'Испания','Sweden':'Швеция','Egypt':'Египет',
+ 'South Africa':'ЮАР','Mexico':'Мексика','Indonesia':'Индонезия'
+};
 function mapHtml(){
- // Схематическая мировая карта из 30 отдельных территорий. Это не географическая GIS-карта,
- // но каждый полигон имеет владельца и меняет цвет после аннексии/вассализации.
- const world=[
-  [80,110],[190,80],[300,110],[410,85],[520,110],
-  [350,230],[455,315],[520,410],
-  [600,95],[710,75],[820,105],[620,195],[730,190],[840,205],
-  [610,300],[720,300],[830,315],[690,410],
-  [930,90],[1040,80],[1150,115],[930,205],[1040,220],[1150,240],
-  [940,345],[1050,365],[1140,465],[1020,485],[850,455],[760,500]
- ];
- const countries=[{name:S.name||'Новария',owner:'player',gdp:S.gdp,pop:S.pop,power:myPower()},...S.relations];
- const palette=['#657f9c','#788b62','#8e805c','#6e8190','#8b6f78','#6f8b80'];
- const shapes=countries.slice(0,30).map((c,i)=>{
-  const pos=world[i]||[80+(i%6)*180,100+Math.floor(i/6)*100],x=pos[0],y=pos[1];
-  const pts=`${x-48},${y-25} ${x-20},${y-43} ${x+25},${y-39} ${x+49},${y-8} ${x+40},${y+28} ${x+4},${y+43} ${x-39},${y+30} ${x-52},${y+2}`;
-  const owner=c.owner||c.name;
-  const fill=owner==='player'?'#398f67':owner==='puppet'?'#c19a45':owner==='partial'?'#76a17a':palette[i%palette.length];
-  const label=c.name.length>13?c.name.slice(0,12)+'…':c.name;
-  const status=owner==='player'?'ВАША':owner==='puppet'?'ВАССАЛ':owner==='partial'?'ЧАСТЬ':'НЕЗАВИС.';
-  return `<g><polygon points="${pts}" fill="${fill}" stroke="#10191f" stroke-width="3" stroke-linejoin="round"><title>${c.name} · ${status} · ВВП ${fmt(c.gdp||0)} млрд · население ${fmt(c.pop||0)}</title></polygon><text x="${x}" y="${y-1}" text-anchor="middle" class="maptxt">${label}</text><text x="${x}" y="${y+14}" text-anchor="middle" class="maptxt2">${status}</text></g>`;
- }).join('');
- const owned=countries.filter(c=>c.owner==='player'||c.owner==='partial').length;
- const vassals=countries.filter(c=>c.owner==='puppet').length;
- return `<svg class="hoimap" viewBox="0 0 1250 570" role="img" aria-label="Схематическая карта мира: 30 государств"><defs><pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern></defs><rect width="1250" height="570" fill="url(#mg)"/><text x="625" y="32" text-anchor="middle" class="maptxt">МИРОВАЯ КАРТА · 30 ГОСУДАРСТВ</text>${shapes}</svg><div class="maplegend"><span><i style="background:#398f67"></i>Новария и присоединённые земли (${owned})</span><span><i style="background:#c19a45"></i>вассалы (${vassals})</span><span><i style="background:#657f9c"></i>независимые государства</span></div><p class="muted">На схеме показаны все 30 государств. Нажми/коснись полигона, чтобы увидеть название, статус и показатели страны во всплывающей подсказке. Расположение схематическое, не точные государственные границы.</p>`;
+ const owned=S.conquered&&S.conquered.length?S.conquered.map(x=>x.name).join(' · '):'нет дополнительных захватов';
+ return `<div class="novaria-map-tools"><button type="button" onclick="window.novariaMapWorld()">Весь мир</button><button type="button" class="primary" onclick="window.novariaMapHome()">Территория Новарии</button><span class="map-note">Географическая карта · масштабирование двумя пальцами</span></div><div id="novaria-real-map" class="novaria-real-map" role="application" aria-label="Интерактивная географическая карта мира"></div><div class="maplegend"><span><i style="background:#2e9b72"></i>Новария (игровая территория)</span><span><i style="background:#c19a45"></i>Вассальные государства</span><span><i style="background:#64748b"></i>Остальные страны</span></div><p class="muted">Границы и подложка загружаются из географических наборов Natural Earth, OpenStreetMap и geoBoundaries. Территория Новарии — условность альтернативного игрового сценария. Дополнительные захваты: ${owned}.</p>`;
 }
+let novariaMapInstance=null, novariaMapLayers=[];
+function normGeoName(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-zа-яё0-9]+/g,' ').trim()}
+function featureName(f){const p=f&&f.properties||{};return p.shapeName||p.shapeName_en||p.name||p.NAME_1||p.NAME||p.admin||Object.values(p).find(v=>typeof v==='string'&&v.length>2)||''}
+function featureMatches(f,entry){const n=normGeoName(featureName(f));return entry.names.some(x=>{const q=normGeoName(x);return n===q||n.includes(q)||q.includes(n)})}
+function novariaMapWorld(){if(novariaMapInstance)novariaMapInstance.setView([20,0],2)}
+function novariaMapHome(){if(novariaMapInstance)novariaMapInstance.fitBounds([[44.0,26.0],[53.8,40.0]],{padding:[18,18]})}
+window.novariaMapWorld=novariaMapWorld;window.novariaMapHome=novariaMapHome;
+async function initNovariaMap(){
+ const el=document.getElementById('novaria-real-map');if(!el)return;
+ if(!window.L){el.innerHTML='<div class="map-load-error">Не удалось загрузить картографическую библиотеку. Проверь подключение к интернету.</div>';return}
+ if(novariaMapInstance){try{novariaMapInstance.remove()}catch{}novariaMapInstance=null;novariaMapLayers=[]}
+ const map=L.map(el,{zoomControl:true,scrollWheelZoom:true,preferCanvas:true}).setView([25,10],2);
+ novariaMapInstance=map;
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
+ const statusEl=document.createElement('div');statusEl.className='map-status';statusEl.textContent='Загрузка географических границ…';el.appendChild(statusEl);
+ const relationNames=new Map((S.relations||[]).map(c=>[normGeoName(c.name),c]));
+ const colorForCountry=(name)=>{
+  const aliases={'United States of America':'сша','Russia':'россия','China':'китай','India':'индия','Germany':'германия','France':'франция','United Kingdom':'великобритания','Japan':'япония','Brazil':'бразилия','Canada':'канада','Australia':'австралия','Italy':'италия','Turkey':'турция','Iran':'иран','Poland':'польша','Ukraine':'украина','Spain':'испания','Sweden':'швеция','Egypt':'египет','South Africa':'юар','Mexico':'мексика','Indonesia':'индонезия'};
+  const ru=aliases[name]||normGeoName(name),r=relationNames.get(normGeoName(ru));
+  if(r&&r.owner==='player')return '#2e9b72';if(r&&r.owner==='puppet')return '#c19a45';if(r&&r.owner==='partial')return '#76a17a';
+  return '#68788a';
+ };
+ try{
+  const worldUrl='https://cdn.jsdelivr.net/gh/datasets/geo-countries@main/data/countries.geojson';
+  const worldRes=await fetch(worldUrl,{cache:'force-cache'});if(!worldRes.ok)throw new Error('world '+worldRes.status);
+  const world=await worldRes.json();
+  const worldLayer=L.geoJSON(world,{style:f=>{const name=f.properties?.name||'';const fill=colorForCountry(name);return{color:'#d6dce2',weight:.65,opacity:.8,fillColor:fill,fillOpacity:.20}} ,onEachFeature:(f,l)=>{const n=f.properties?.name||'Страна';l.bindTooltip(n,{sticky:true})}}).addTo(map);
+  novariaMapLayers.push(worldLayer);
+ }catch(e){console.warn('World country boundaries unavailable',e)}
+ const getAdmin=async iso=>{
+  const metaRes=await fetch(`https://www.geoboundaries.org/api/current/gbOpen/${iso}/ADM1/`);if(!metaRes.ok)throw new Error('metadata '+iso);
+  const meta=await metaRes.json();const url=meta.simplifiedGeometryGeoJSON||meta.gjDownloadURL;
+  const dataRes=await fetch(url);if(!dataRes.ok)throw new Error('geojson '+iso);return dataRes.json();
+ };
+ try{
+  const [ukr,rus]=await Promise.all([getAdmin('UKR'),getAdmin('RUS')]);
+  const all=[...(ukr.features||[]),...(rus.features||[])];
+  const selected=[];
+  NOVARIA_REGIONS.forEach(entry=>{const found=all.filter(f=>{const p=f.properties||{};const group=String(p.shapeGroup||p.adm0_a3||p.ADM0_A3||'').toUpperCase();return (!group||group===entry.country)&&featureMatches(f,entry)});found.forEach(f=>selected.push({...f,properties:{...(f.properties||{}),__novariaRegion:featureName(f)}}));});
+  if(selected.length){const novariaLayer=L.geoJSON({type:'FeatureCollection',features:selected},{style:{color:'#ffe08a',weight:2,opacity:1,fillColor:'#159b69',fillOpacity:.76},onEachFeature:(f,l)=>l.bindPopup(`<b>Новария · ${f.properties.__novariaRegion}</b><br>Игровая территория альтернативного сценария`)}).addTo(map);novariaMapLayers.push(novariaLayer);}
+  else console.warn('No Novaria administrative regions matched geoBoundaries names');
+  statusEl.remove();
+  const btn=document.querySelector('.novaria-map-tools button.primary');if(btn)btn.disabled=false;
+  novariaMapHome();
+ }catch(e){console.warn('Administrative boundaries unavailable',e);statusEl.textContent='Подложка карты загружена. Детальные границы областей временно недоступны.';}
+ setTimeout(()=>map.invalidateSize(),150);
+}
+window.initNovariaMap=initNovariaMap;
 function warnBanner(){if(S.out)return'';if(S.grace>0)return `<section class="panel wide okbanner">🛡 Защитный срок: отставка не грозит ещё ${S.grace} мес.</section>`;if(S.crisis>0)return `<section class="panel wide warnbanner">⚠ Угроза отставки: ${S.crisisWhy||''}. Критическое состояние уже ${S.crisis} мес. подряд. ${ADVICE[S.crisisIdx]||'Нужно срочно исправить ситуацию.'} ${isPopular()?'(Тебя любят — отставка наступит позже.)':''}</section>`;return''}
 function bar(label,val){return `<div class="meter"><b>${label}: ${fmt(val)}%</b><div class="bar"><i style="width:${clamp(val)}%;background:${val<30?"linear-gradient(90deg,#c23b4b,#ff7b86)":val<55?"linear-gradient(90deg,#c9902f,#f5c76a)":"linear-gradient(90deg,#2aa56d,#7ee6ae)"}"></i></div></div>`}
 function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]];$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
@@ -67,7 +104,7 @@ if(tab==='diplomacy')c=`<div class="cards">${S.relations.map((r,i)=>`<div class=
 if(tab==='documents')c=`<div class="grid">${card('Государственные документы',`<div class="row"><input id="docname" placeholder="Название документа"><select id="doctype"><option>Указ</option><option>Закон</option><option>Бюджет</option><option>Военный приказ</option><option>Дипломатическая нота</option></select></div><textarea id="doctext" rows="5" style="width:100%" placeholder="Текст документа..."></textarea><button class="primary" onclick="createDoc()">Подписать и сохранить</button>`)}${card('Архив документов',S.documents.length?S.documents.map((d,i)=>`<div class="choice"><b>${d.type}: ${d.name}</b><small class="muted"> · ${d.date}</small><p>${d.text}</p><button onclick="deleteDoc(${i})">Удалить</button></div>`).join(''):'Пока документов нет.')}</div>`;
 if(tab==='events')c=`<div class="grid">${card('События государства',S.event?`<h3>${S.event.title}</h3><p>${S.event.text}</p><div class="actions"><button class="primary" onclick="resolveEvent(0)">${S.event.a}</button><button onclick="resolveEvent(1)">${S.event.b}</button></div>`:'<p>Сейчас нет неразрешённых событий.</p>')}${card('Хроника',`<div class="log">${S.log.map(x=>`<div>${x}</div>`).join('')}</div>`)}</div>`;
 if(tab==='settings')c=`<div class="grid">${card('Сложность кампании',`<p>Выбери, насколько трудно удерживать власть и развивать государство. Сложность применяется только к <b>новой кампании</b>, текущую игру она не меняет.</p><div class="row"><label for="difficultySelect">Уровень сложности</label><select id="difficultySelect" onchange="setDifficulty(this.value)"><option value="story" ${selectedDifficulty==='story'?'selected':''}>История — очень легко</option><option value="easy" ${selectedDifficulty==='easy'?'selected':''}>Лёгкая</option><option value="normal" ${selectedDifficulty==='normal'?'selected':''}>Нормальная</option><option value="hard" ${selectedDifficulty==='hard'?'selected':''}>Сложная</option><option value="expert" ${selectedDifficulty==='expert'?'selected':''}>Эксперт</option></select></div><div class="mini"><b>Текущая сложность: ${difficulty().label}</b><br>Доходы ×${difficulty().income.toFixed(2)} · расходы ×${difficulty().expenses.toFixed(2)}<br>Давление оппозиции ×${difficulty().rivalPressure.toFixed(2)}<br>Риск беспорядков ×${difficulty().unrest.toFixed(2)}</div><button class="primary" onclick="resetGame()">Начать новую кампанию на выбранной сложности</button>`)}${card('Сохранение',`<p>Прогресс автоматически сохраняется на этом устройстве.</p><button class="good" onclick="save();toast('Игра сохранена')">Сохранить сейчас</button> <button onclick="exportSave()">Экспортировать сохранение</button><div class="row"><input type="file" id="importfile" accept=".json"><button onclick="importSave()">Загрузить файл</button></div>`)}${card('Параметры страны',`<div class="row"><label>Название</label><input id="countryname" value="${S.name}"><button onclick="S.name=$('#countryname').value;save();render()">Изменить</button></div>`)}</div>`;
-{let t=addonTab();if(t)c=t;else if(S.out)c=outBanner()+c}if(tab==='overview')c+=ovExtra()+card('👥 Что говорят люди',feedHtml());$('#content').innerHTML=(tab==='mp'&&window.NGMP?window.NGMP.tab():(tab==='events'?'':evBanner())+c);if(tab==='mp'&&window.NGMP&&window.NGMP.after)window.NGMP.after();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));drawCharts();if(S.campaignOver)showGameOver()}
+{let t=addonTab();if(t)c=t;else if(S.out)c=outBanner()+c}if(tab==='overview')c+=ovExtra()+card('👥 Что говорят люди',feedHtml());$('#content').innerHTML=(tab==='mp'&&window.NGMP?window.NGMP.tab():(tab==='events'?'':evBanner())+c);if(tab==='mp'&&window.NGMP&&window.NGMP.after)window.NGMP.after();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));drawCharts();if(tab==='overview')setTimeout(()=>window.initNovariaMap&&window.initNovariaMap(),60);if(S.campaignOver)showGameOver()}
 function runElection(){
  if(S.campaignOver)return;
  if(!S.out){let m0=S.parties.find(p=>p.name===S.playerParty);if(m0)m0.support=clamp(m0.support+(S.approval-50)*.12,2,75)}
