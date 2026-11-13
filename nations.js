@@ -46,7 +46,7 @@ setInterval(()=>send({type:'ping',t:Date.now()}),25000);
 function on(m){
   switch(m.type){
   case'joined':
-    me.id=m.id;me.host=(m.host===m.id);Object.assign(room,pick(m));wars=m.wars||[];
+    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];
     localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
