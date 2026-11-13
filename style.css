@@ -100,5 +100,11 @@ th{background:#10171c;font-weight:500;letter-spacing:.06em}
 .evbanner button{margin-left:8px}
 .mini small{display:block;margin:3px 0 4px;color:var(--muted)}
 
-/* Interactive geographic map */
-.novaria-geo-map{height: min(72vh,680px);min-height:420px;width:100%;border:2px solid #d6b25e;border-radius:8px;background:#a9d3df;z-index:1;overflow:hidden}.geo-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 12px}.geo-map-tools button{padding:9px 13px;border:1px solid #52616d;border-radius:6px;background:#1b2730;color:#e8e2d1;font-weight:700}.geo-map-tools button:active{background:#d6b25e;color:#14202a}.geo-map-tools span{font-size:13px;color:#9da8b1}.novaria-geo-map .leaflet-tooltip{background:#17232d;color:#f0e7d0;border:1px solid #d6b25e;border-radius:4px;box-shadow:none}.maplegend{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px}.maplegend span{display:inline-flex;align-items:center;gap:7px}.maplegend i{width:13px;height:13px;border-radius:2px;display:inline-block}
+.wlbar{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.wlbar input,.wlbar select{flex:1 1 150px;min-width:0;background:#101d2c;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:9px 10px;font:inherit}
+
+.wmslot{position:relative;width:100%;background:#0d1519;border:1px solid var(--line);border-radius:12px;overflow:hidden;min-height:200px}.wmnode{position:relative;width:100%;aspect-ratio:1000/587}.wmnode svg{display:block;width:100%;height:100%}.hoverinfo{background:#101d2c;color:#edf4fb;border:1px solid #344b63;border-radius:8px;padding:6px 9px;font-size:12px}
+
+.wzoom{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px}.wzoom button{width:40px;height:40px;padding:0;border-radius:10px;font-size:20px;background:#101d2cdd;color:#f0e2b0;border:1px solid #6b5a2a}
+.ccm{position:fixed;inset:0;z-index:50;background:rgba(5,10,16,.82);overflow-y:auto;padding:max(10px,env(safe-area-inset-top)) 10px max(10px,env(safe-area-inset-bottom))}.ccbox{position:relative;max-width:760px;margin:0 auto;background:#14202e;border:1px solid #6b5a2a;border-radius:14px;padding:14px}.ccbox h3{margin:0 40px 4px 0}.ccx{position:absolute;right:10px;top:10px;width:38px;height:38px;padding:0;border-radius:10px}
+
+.wmslot.full{position:fixed;inset:0;z-index:45;border-radius:0;border:0;background:#0c1a26;display:flex;align-items:center;padding-top:env(safe-area-inset-top)}.wmslot.full .wmnode{aspect-ratio:auto;height:100%;max-height:100%}
