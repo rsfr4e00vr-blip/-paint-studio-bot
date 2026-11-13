@@ -99,3 +99,6 @@ th{background:#10171c;font-weight:500;letter-spacing:.06em}
 .evbanner{border:1px solid var(--gold)!important;background:#2a2410!important;color:#f3dfa4;margin-bottom:10px}
 .evbanner button{margin-left:8px}
 .mini small{display:block;margin:3px 0 4px;color:var(--muted)}
+
+/* Interactive geographic map */
+.novaria-geo-map{height: min(72vh,680px);min-height:420px;width:100%;border:2px solid #d6b25e;border-radius:8px;background:#a9d3df;z-index:1;overflow:hidden}.geo-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0 12px}.geo-map-tools button{padding:9px 13px;border:1px solid #52616d;border-radius:6px;background:#1b2730;color:#e8e2d1;font-weight:700}.geo-map-tools button:active{background:#d6b25e;color:#14202a}.geo-map-tools span{font-size:13px;color:#9da8b1}.novaria-geo-map .leaflet-tooltip{background:#17232d;color:#f0e7d0;border:1px solid #d6b25e;border-radius:4px;box-shadow:none}.maplegend{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px}.maplegend span{display:inline-flex;align-items:center;gap:7px}.maplegend i{width:13px;height:13px;border-radius:2px;display:inline-block}
