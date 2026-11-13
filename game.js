@@ -423,11 +423,20 @@ function occupyTick(w){
  }
  if(w.occ.length){ch({money:-25*w.occ.length},false);const c=rel(w.n);if(c)c.power=Math.max(10,Math.round(c.power-.15*w.occ.length))}
 }
+/* очередь анимаций: каждый удар врага показывается по очереди (не больше 4 за месяц) */
+const FXQ=[];let fxBusy=false;
+function fxPush(o){FXQ.push(o);while(FXQ.length>4)FXQ.shift();fxNext()}
+function fxNext(){
+ if(fxBusy||!FXQ.length)return;
+ if(document.getElementById('strikeov')){setTimeout(fxNext,600);return}
+ fxBusy=true;try{strikeScene(FXQ.shift())}catch(e){}
+ setTimeout(function chk(){if(document.getElementById('strikeov'))setTimeout(chk,400);else{fxBusy=false;fxNext()}},1500);
+}
 function warNews(w,ico,t){if(!w)return;w.news=w.news||[];w.news.unshift({m:ico,t,d:`${months[S.month].slice(0,3)}, год ${S.year}`});w.news.length=Math.min(w.news.length,12)}
 /* Удар по инфраструктуре: новость в карточке войны + отключение области на 2–4 месяца */
-function infraNews(w,name,enemySide){
+function infraNews(w,name,enemySide,wpn){
  const o=OUTAGE[Math.floor(Math.random()*OUTAGE.length)];
- warNews(w,o[0],`${cityOf(name)}: ${o[1]}${enemySide?' (после нашего удара)':''}`);
+ warNews(w,o[0],`${cityOf(name)}: ${wpn?wpn+' врага — ':''}${o[1]}${enemySide?' (после нашего удара)':''}`);
  if(o[0]==='⚡'||Math.random()<.5){const D=enemySide?(w.dark=w.dark||{}):(S.dark=S.dark||{});D[name]=Math.round(rnd(2,4))}
 }
 /* Отключения у нас: каждый месяц давят на промышленность, энергию и настроение области; потом свет возвращают */
@@ -450,7 +459,7 @@ function enemyStrikes(w,c){
  const WP=AIARS.WEAPONS,aggr=c.aggr||.5,myAA=(S.aa||0)+bcount('aabat')*1.5;
  /* ИИ планирует залп: несколько единиц оружия за ход, приманки против ПВО, затем ракеты */
  const acts=AIARS.plan(S,c,{vs:'p',front:100-w.p,defAA:myAA,defStab:S.stability,aggr,war:true,allowBomb:c.power>=60&&w.p>72&&aggr>.6,allowCiv:aggr>.5||w.p>65});
- let pool=2+(S.aa||0)*1.5+bcount('aabat')*2,show=null,hits=0,stopped=0;   // pool — сколько перехватов ПВО успевает сделать за месяц
+ let pool=2+(S.aa||0)*1.5+bcount('aabat')*2,shows=[],hits=0,stopped=0;   // pool — сколько перехватов ПВО успевает сделать за месяц
  acts.forEach(act=>{
   const f=WP[act.w].f,air=WP[act.w].air,t=act.t;
   const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60*((S.dark&&S.dark[r.name])?.55:1):r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
@@ -458,32 +467,33 @@ function enemyStrikes(w,c){
   const pI=air?Math.min(.75,(S.aa||0)*.07+bcount('aabat')*.05):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
   let caught=false;
   if(air){if(pool>0){pool-=act.decoy?1.2:1;caught=Math.random()<pI}}else caught=Math.random()<pI;
-  if(caught){stopped++;log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);if(!show)show={w:act.w,reg,down:true,f:0};return}
-  hits++;if(!show||show.down||f>show.f)show={w:act.w,reg,down:false,f};
+  if(caught){stopped++;log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
+  hits++;shows.push({w:act.w,reg,down:false,f});
   let shift=0,r=0;
   if(t==='mil'){
    shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f*myLS());S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
    const cd=popLoss(rnd(30,160)*f*myLS());S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    S.morale=clamp(S.morale-.8*f);S.equipment=clamp(S.equipment-.8*f);S.ammo=clamp(S.ammo-.5*f);S.approval=clamp(S.approval+.4*f*Math.max(.15,(100-S.approval)/50));
    let extra='';if(Math.random()<.05*f&&S.mil>1){S.mil--;extra=' Уничтожен военный завод!'}
-   r=shift/3+kills/2500;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по военным целям (${reg.name}). Погибло ${fmt(kills)} солдат, ${fmt(cd)} мирных.${extra}`)}
+   r=shift/3+kills/2500;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по военным целям (${reg.name}). Погибло ${fmt(kills)} солдат, ${fmt(cd)} мирных.${extra}`);
+   warNews(w,'🎯',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага попала по военным объектам — погибло ${fmt(kills)} солдат${extra?', '+extra.trim().toLowerCase().replace('!',''):''}`)}
   else if(t==='infra'){
    shift=1.5*f*.5;const di=Math.min(reg.infra,2.2*f),dn=Math.min(reg.industry,1.5*f);reg.infra=clamp(reg.infra-di);reg.industry=clamp(reg.industry-dn);
    S.energy=clamp(S.energy-1.2*f);S.fuel=clamp(S.fuel-.8*f);S.gdp*=1-.0008*f;
    const cd=popLoss(rnd(120,520)*f*myLS());S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    let extra='';if(Math.random()<.04*f&&S.civ>2){S.civ--;extra=' Разрушен гражданский завод!'}
    r=shift/3+(di+dn)*.05;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по инфраструктуре (${reg.name}): дороги, энергосеть, склады. Погибло ${fmt(cd)} мирных.${extra}`);
-   infraNews(w,reg.name,false)}
+   infraNews(w,reg.name,false,AIARS.WN[act.w])}
   else{
    shift=.5*f*.5;const dead=Math.round(rnd(3000,9000)*f*myLS()),d=popLoss(dead);S.warCiv=(S.warCiv||0)+d;w.civDead=(w.civDead||0)+d;
    reg.unrest=clamp(reg.unrest+2*f);S.approval=clamp(S.approval+.6*f*Math.max(.15,(100-S.approval)/50));S.stability=clamp(S.stability-.8*f);
    r=shift/3+(d/9000)*.25+(S.stability<42?.6:.2)*f*.5-.5;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по гражданским (${reg.name}). Погибло ${fmt(d)} мирных жителей. Мир осуждает противника.`);
-   warNews(w,'🏘',`${cityOf(reg.name)}: удар по жилым кварталам — погибло ${fmt(d)} мирных жителей`)}
+   warNews(w,'🏘',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага ударила по жилым кварталам — погибло ${fmt(d)} мирных жителей`)}
   w.p=clamp(w.p-shift,0,100);AIARS.learn(S,act,r-.12*f);
  });
  if(acts.length>1)log(`📡 ${w.n}: массированный удар — ${acts.length} ед. оружия, перехвачено ${stopped}, прошло ${hits}.`);
- /* анимация: удар врага летит с ЕГО территории на нашу область */
- if(show)try{strikeScene({kind:'strike',rev:1,down:show.down,k:show.w,enemy:w.n,regId:show.reg&&show.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[show.w]} → ${S.name}`,sub:show.down?`Сбито нашей ПВО · ${show.reg.name}`:`Область «${show.reg.name}»`})}catch(e){}
+ /* анимация: каждый удар врага летит с ЕГО территории в ту область, куда попал (или где был сбит) */
+ shows.forEach(x=>fxPush({kind:'strike',rev:1,down:x.down,k:x.w,enemy:w.n,regId:x.reg&&x.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[x.w]} → ${S.name}`,sub:x.down?`Сбито нашей ПВО · ${x.reg.name}`:`Попадание: область «${x.reg.name}»`}));
 }
 const WP0={cannon:{air:false},drone:{air:true},tank:{air:false},rocket:{air:true},bomb:{air:true},howitzer:{air:false},heli:{air:true},mlrs:{air:false},cruise:{air:true},bomber:{air:true}};
 const TG0={cannon:1,drone:1,tank:1,rocket:1,bomb:1,howitzer:1,heli:1,mlrs:1,cruise:1,bomber:1};
