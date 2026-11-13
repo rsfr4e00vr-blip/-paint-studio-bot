@@ -136,12 +136,19 @@ const taken=()=>(S.taken=S.taken||{});
 const MYC='#2f6fd0',VAS='#7fb0ee',isVas=n=>(S.puppets||[]).includes(n);
 function regCount(n){const r=regsOf(n);return r?r.length:(WORLD.REGS[n]||WORLD.GEN).length}
 /* сколько областей можно забрать: доля областей страны растёт вместе с перевесом на фронте (60%→0, 100%→60% областей) */
-function quota(n,w){const tot=regCount(n),c=rel(n)||{},rg=regsOf(n),free=rg?rg.filter(x=>!taken()[x.id]).length:Math.max(0,tot-(c.regTaken||[]).length),p=w.won?100:w.p,share=Math.max(0,(p-60)/40);return{tot,free,p,q:Math.min(free,Math.max(1,Math.round(tot*share*.6)))}}
+function quota(n,w){const tot=regCount(n),c=rel(n)||{},rg=regsOf(n),free=rg?rg.filter(x=>!taken()[x.id]).length:Math.max(0,tot-(c.regTaken||[]).length),p=w.won?100:w.p,share=Math.max(0,(p-60)/40);return{tot,free,p,q:Math.min(free,Math.max(1,Math.round(tot*share*.6),(w.occ||[]).length))}}
 function baseCol(iso,i){let h=0;for(const ch of iso)h=(h*31+ch.charCodeAt(0))%360;return `hsl(${h},38%,${33+(i%4)*3}%)`}
 function regFill(C,r,i){const nm=C.name,rc=nm&&S.relations.find(x=>x.name===nm);if(rc&&rc.self)return MYC;const aiOwner=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm];if(aiOwner&&WORLD.map[aiOwner])return baseCol(WORLD.map[aiOwner].iso||WORLD.map[aiOwner].name,1);if(taken()[r.id]||(rc&&rc.annexed))return MYC;if(rc&&isVas(nm))return VAS;return baseCol(C.iso,i)}
-function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).length+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+S.wars.map(w=>w.n).join(',')+'|'+(S.me||'')+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{});if(WMAP.usig===sig)return;WMAP.usig=sig;
+function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).length+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',')+'|'+(S.me||'')+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{});if(WMAP.usig===sig)return;WMAP.usig=sig;
  if(!WMAP.el){WMAP.el={r:{},o:{}};svg.querySelectorAll('[data-r]').forEach(e=>WMAP.el.r[e.getAttribute('data-r')]=e);svg.querySelectorAll('[data-o]').forEach(e=>WMAP.el.o[e.getAttribute('data-o')]=e)}
- Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e)e.setAttribute('fill',regFill(C,r,i))});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}})}
+ Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e)e.setAttribute('fill',regFill(C,r,i))});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}});
+ drawOcc(svg)}
+function drawOcc(svg){
+ const NS='http://www.w3.org/2000/svg',ids=[].concat(...S.wars.map(w=>w.occ||[]));
+ let g=svg.querySelector('#occl');
+ if(!g){const d=document.createElementNS(NS,'defs');d.innerHTML=`<pattern id="occhatch" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.4" height="2.4" fill="${MYC}" opacity=".22"/><line x1="0" y1="0" x2="0" y2="2.4" stroke="${MYC}" stroke-width="1"/></pattern>`;svg.appendChild(d);g=document.createElementNS(NS,'g');g.id='occl';g.setAttribute('pointer-events','none');svg.appendChild(g)}
+ g.replaceChildren();
+ ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');p.setAttribute('d',e.getAttribute('d')||'');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
 function buildWorldNode(){const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
  const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>r.d?`<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/>`:'').join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
  body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
@@ -175,7 +182,7 @@ const hcc=iso=>{CC.iso=iso;CC.pick=false;CC.war=null;CC.sel={};ccDraw()};
 const hpick=n=>{CC.iso=wi(n).iso;CC.pick=true;CC.war=n;CC.sel={};ccDraw()};
 const hccClose=()=>{const m=document.getElementById('ccm');if(m)m.remove()};
 const htake=rid=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;CC.sel=CC.sel||{};const Q=quota(CC.war,w);if(CC.sel[rid])delete CC.sel[rid];else{if(Object.keys(CC.sel).length>=Q.q)return toast(`При фронте ${Math.round(Q.p)}% можно взять не больше ${Q.q} обл.`);CC.sel[rid]=1}ccDraw()};
-const hauto=()=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;const Q=quota(CC.war,w);CC.sel={};[...(regsOf(CC.war)||[])].filter(x=>!taken()[x.id]).sort((a,b)=>b.s-a.s).slice(0,Q.q).forEach(x=>CC.sel[x.id]=1);ccDraw()};
+const hauto=()=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;const Q=quota(CC.war,w);CC.sel={};[...(regsOf(CC.war)||[])].filter(x=>!taken()[x.id]).sort((a,b)=>(((w.occ||[]).includes(b.id)?1:0)-((w.occ||[]).includes(a.id)?1:0))||b.s-a.s).slice(0,Q.q).forEach(x=>CC.sel[x.id]=1);ccDraw()};
 const hconfirm=()=>{const n=CC.war,ids=Object.keys(CC.sel||{});if(!ids.length)return toast('Выберите хотя бы одну область');H.ccClose();H.dictate(n,'region',ids)};
 function pickHead(){const w=S.wars.find(x=>x.n===CC.war);if(!w)return '';const Q=quota(CC.war,w),n=Object.keys(CC.sel||{}).length;return `<p><b>Фронт ${Math.round(Q.p)}% → можно взять до ${Q.q} из ${Q.free} свободных областей.</b> Нажимайте области на карте. Выбрано: ${n}/${Q.q}</p><div class="actions"><button class="good" onclick="H.confirm()">🗺 Забрать выбранные (${n})</button><button onclick="H.auto()">⚡ Выбрать крупнейшие</button></div>`}
 function ccDraw(){const C=GEO.c[CC.iso];if(!C||!C.name){return}const nm=C.name,i=S.relations.findIndex(r=>r.name===nm),r=S.relations[i]||{},W=wi(nm),atWar=S.wars.some(w=>w.n===nm),j=S.just[nm],tk=taken();
@@ -226,7 +233,7 @@ function capList(){const c=S.captured||[];if(!c.length)return card('🗺 Зах�
 function mapHtml(){let P='',T='';MAPR.forEach(m=>{let r=S.regions.find(x=>x.name===m[0])||((S.lost||[]).includes(m[0])?{loyalty:0,unrest:0,lost:1}:{loyalty:50,unrest:0});P+=`<polygon points="${m[1]}" fill="${r.lost?'#3a3d44':loyColor(r.loyalty)}" stroke="#0d1519" stroke-width="3" stroke-linejoin="round"><title>${m[0]}: лояльность ${Math.round(r.loyalty)}%, недовольство ${Math.round(r.unrest)}%</title></polygon>`;T+=`<text x="${m[2]}" y="${m[3]}" text-anchor="middle" class="maptxt">${m[0].toUpperCase()}</text><text x="${m[2]}" y="${m[3]+17}" text-anchor="middle" class="maptxt2">${r.lost?'потеряно':'лояльность '+Math.round(r.loyalty)+'%'}</text>`});return `<svg class="hoimap" viewBox="0 0 760 560" role="img" aria-label="Карта страны: цвет региона показывает лояльность"><defs><pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern></defs><rect width="760" height="560" fill="url(#mg)"/>${P}${T}${capHtml()}${SEA}</svg><div class="maplegend"><span><i style="background:#6f8a55"></i>высокая лояльность</span><span><i style="background:#a0a257"></i>средняя</span><span><i style="background:#9a5a45"></i>низкая</span></div>`}
 function warnBanner(){if(S.out)return'';if(S.grace>0)return `<section class="panel wide okbanner">🛡 Защитный срок: отставка не грозит ещё ${S.grace} мес.</section>`;if(S.crisis>0)return `<section class="panel wide warnbanner">⚠ Угроза отставки: ${S.crisisWhy||''}. Критическое состояние уже ${S.crisis} мес. подряд. ${ADVICE[S.crisisIdx]||'Нужно срочно исправить ситуацию.'} ${isPopular()?'(Тебя любят — отставка наступит позже.)':''}</section>`;return''}
 function bar(label,val){return `<div class="meter"><b>${label}: ${fmt(val)}%</b><div class="bar"><i style="width:${clamp(val)}%;background:${val<30?"linear-gradient(90deg,#c23b4b,#ff7b86)":val<55?"linear-gradient(90deg,#c9902f,#f5c76a)":"linear-gradient(90deg,#2aa56d,#7ee6ae)"}"></i></div></div>`}
-function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]];$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
+function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]].concat(S.warCiv>0?[['🏘','Жертвы мирных',fmt(S.warCiv)]]:[]);$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
 function card(title,body){return `<section class="panel"><h2>${title}</h2>${body}</section>`}
 function render(auto){if(tab==='events')tab='overview';stats();if(auto&&tab==='map'&&WMAP.node&&document.getElementById('wm-slot')){updateWorld();mountEmpire();return}if(auto&&tab==='mp'&&window.NGMP)return;if(auto&&(down||(document.activeElement&&document.activeElement.type==='range')))return;let c='';if(tab==='map')c=empireCard()+worldMapCard()+capList();
 if(tab==='overview')c=`<div class="grid">${warnBanner()}${warPanel()}${card('🗺 Карта державы','<div class="emp-slot"><p class="muted">Строится единая карта…</p></div><p class="muted">Ваши земли и все аннексированные территории показаны одним цветом; вассалы — отдельным оттенком.</p>')}${capList()}${card('Государство',`<div class="cards"><div class="mini"><b>${S.name}</b>Форма правления: ${S.gov}<br>Лидер: ${S.leader}<br>Партия: ${S.party}<br>Сложность: <b>${difficulty().label}</b><div class=\"actions\"><button onclick=\"H.chooser()\">🌍 Выбрать другое государство</button></div></div><div class="mini"><b>Состояние страны</b>${bar('Стабильность',S.stability)}${bar('Одобрение',S.approval)}${bar('Легитимность',S.legitimacy)}</div></div>`)}${card('Национальные ресурсы',`<div class="cards">${[['Продовольствие',S.food],['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo],['Энергия',S.energy],['Технологии',S.tech]].map(x=>`<div class="mini"><b>${x[0]}</b>${x[1]} / 100<div class="bar"><i style="width:${clamp(x[1])}%"></i></div></div>`).join('')}</div>`)}${card('Последние события',`<div class="log">${S.log.slice(0,9).map(x=>`<div>${x}</div>`).join('')}</div>`)}${card('Быстрые действия',`<div class="actions"><button onclick="act('roads')">Построить дороги (500 млн)</button><button onclick="act('aid')">Помощь населению (300 млн)</button><button onclick="act('reform')">Государственная реформа (700 млн)</button></div>`)}</div>`;
@@ -287,7 +294,7 @@ window.regionAct=(i,a)=>{if(blocked())return;let r=S.regions[i],cost=a==='invest
 window.diplomacy=(i,a)=>{if(blocked())return;let r=S.relations[i],cost=a==='talk'?100:a==='trade'?250:0;if(S.money<cost){toast('Недостаточно средств');return}S.money-=cost;r.value=clamp(r.value+(a==='talk'?8:a==='trade'?12:-15),-100,100);if(a==='trade')S.money+=150;log(`Изменены дипломатические отношения с государством ${r.name}.`);save();render()};
 window.createDoc=()=>{let n=$('#docname').value.trim(),t=$('#doctext').value.trim();if(!n||!t){toast('Заполните название и текст');return}S.documents.unshift({name:n,type:$('#doctype').value,text:t,date:`${months[S.month]} ${S.year}, год`});log(`Подписан документ: ${n}.`);save();render()};
 window.deleteDoc=i=>{S.documents.splice(i,1);save();render()};
-function monthTick(){if(S.campaignOver)return;S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
+function monthTick(){if(S.campaignOver)return;darkTick();S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
 window.exportSave=()=>{
  try{
   const payload={...S,exportVersion:1,exportedAt:new Date().toISOString()};
@@ -391,38 +398,92 @@ function warCasualties(w,a0){
  if(w.m>12||w.p<40)S.approval=clamp(S.approval-Math.min(1.2,(ds+dc)/30000));
  if(w.m%3===0)log(`☠ Война с ${w.n}: за всё время погибло ${fmt(w.soldDead)} солдат и ${fmt(w.civDead)} мирных жителей. Население: ${fmt(S.pop)}.`);
 }
+/* ---------- новости войны (во вкладке войны, это НЕ события-попапы) ---------- */
+const CITY={'Харьковская область':'Харьков','Киевская область':'Киев','Одесская область':'Одесса','Днепропетровская область':'Днепр','Донецкая область':'Донецк','Запорожская область':'Запорожье','Львовская область':'Львов','Николаевская область':'Николаев','Херсонская область':'Херсон','Черниговская область':'Чернигов','Сумская область':'Сумы','Полтавская область':'Полтава','Винницкая область':'Винница','Житомирская область':'Житомир','Черкасская область':'Черкассы','Кировоградская область':'Кропивницкий','Ровенская область':'Ровно','Волынская область':'Луцк','Тернопольская область':'Тернополь','Ивано-Франковская область':'Ивано-Франковск','Закарпатская область':'Ужгород','Черновицкая область':'Черновцы','Хмельницкая область':'Хмельницкий','Луганская область':'Луганск','Белгородская область':'Белгород','Курская область':'Курск','Брянская область':'Брянск','Воронежская область':'Воронеж','Ростовская область':'Ростов-на-Дону','Краснодарский край':'Краснодар','Московская область':'Подмосковье','Смоленская область':'Смоленск','Саратовская область':'Саратов','Волгоградская область':'Волгоград','Самарская область':'Самара','Свердловская область':'Екатеринбург','Новосибирская область':'Новосибирск'};
+const cityOf=n=>{n=String(n||'');return CITY[n]||n.replace(/ \(.*\)/,'')};
+const OUTAGE=[['⚡','нет света — подстанции разрушены'],['⚡','массовое отключение электричества'],['💧','нет воды — повреждён водопровод'],['🌉','разрушен мост, движение остановлено'],['🛢','горят нефтебазы и склады топлива'],['🚆','остановлены железные дороги'],['📡','пропала связь и интернет']];
+const LS=pm=>Math.max(1,Math.min(40,Math.pow(Math.max(.5,pm)/8.2,.75))*1.6);   // множитель потерь от населения (млн)
+const myLS=()=>LS(S.pop/1e6),enLS=n=>LS((wi(n).pop)||8);
+/* ---------- оккупация во время войны: область занята (заштрихована нашим цветом), но станет нашей только при мире ---------- */
+function occupyTick(w){
+ const rg=regsOf(w.n);if(!rg||!rg.length)return;
+ const free=rg.filter(x=>!taken()[x.id]);
+ w.occ=(w.occ||[]).filter(id=>free.some(x=>x.id===id));
+ const order=w.order||'balanced',sup=w.supply==null?75:w.supply;
+ const want=Math.min(free.length,Math.floor(rg.length*Math.max(0,w.p-50)/50*(order==='attack'?.85:order==='defend'?.35:.6)));
+ const nm=id=>{const x=rg.find(z=>z.id===id);return x?String(x.n).replace(/ \(.*\)/,''):id};
+ while(w.occ.length>want){const id=w.occ.pop();warNews(w,'🏳',`${cityOf(nm(id))}: наши войска отошли, область снова у врага`);log(`🏳 Отход из области «${nm(id)}» (${w.n}).`)}
+ if(w.occ.length<want&&sup>=35){
+  let pick0=null;const pref=(S.tgt&&S.wars[S.tgt.wi||0]===w&&S.tgt.r)||'';
+  if(pref)pick0=free.find(x=>x.n===pref&&!w.occ.includes(x.id));
+  if(!pick0){   // ближайшая к нашей земле или уже занятой — как продвижение фронта
+   const mine=[].concat(regsOf(S.me)||[],rg.filter(x=>w.occ.includes(x.id)));
+   let best=1e18;free.forEach(x=>{if(w.occ.includes(x.id))return;const d=mine.length?Math.min(...mine.map(m=>(m.cx-x.cx)**2+(m.cy-x.cy)**2)):Math.random();if(d<best){best=d;pick0=x}})}
+  if(pick0){w.occ.push(pick0.id);const n0=String(pick0.n).replace(/ \(.*\)/,'');warNews(w,'🚩',`${cityOf(n0)}: наши войска вошли в область — она заштрихована на карте`);log(`🚩 Занята область «${n0}» (${w.n}). Окончательно перейдёт к нам при мире (диктат «Области»).`)}
+ }
+ if(w.occ.length){ch({money:-25*w.occ.length},false);const c=rel(w.n);if(c)c.power=Math.max(10,Math.round(c.power-.15*w.occ.length))}
+}
+function warNews(w,ico,t){if(!w)return;w.news=w.news||[];w.news.unshift({m:ico,t,d:`${months[S.month].slice(0,3)}, год ${S.year}`});w.news.length=Math.min(w.news.length,12)}
+/* Удар по инфраструктуре: новость в карточке войны + отключение области на 2–4 месяца */
+function infraNews(w,name,enemySide){
+ const o=OUTAGE[Math.floor(Math.random()*OUTAGE.length)];
+ warNews(w,o[0],`${cityOf(name)}: ${o[1]}${enemySide?' (после нашего удара)':''}`);
+ if(o[0]==='⚡'||Math.random()<.5){const D=enemySide?(w.dark=w.dark||{}):(S.dark=S.dark||{});D[name]=Math.round(rnd(2,4))}
+}
+/* Отключения у нас: каждый месяц давят на промышленность, энергию и настроение области; потом свет возвращают */
+function darkTick(){
+ const D=S.dark;if(!D)return;let n=0;
+ Object.keys(D).forEach(k=>{D[k]--;const r=S.regions.find(x=>x.name===k);
+  if(D[k]<=0){delete D[k];const w=(S.wars||[])[0];if(w)warNews(w,'🔧',`${cityOf(k)}: энергетики восстановили подачу света`)}
+  else{n++;if(r){r.industry=clamp(r.industry-.4);r.unrest=clamp(r.unrest+.5)}}});
+ if(n)S.energy=clamp(S.energy-Math.min(2,n*.25));
+}
+function darkTickEnemy(w){const D=w.dark;if(!D)return;Object.keys(D).forEach(k=>{D[k]--;if(D[k]<=0){delete D[k];warNews(w,'🔧',`${cityOf(k)}: у врага восстановили подачу света`)}})}
+/* Гражданские потери врага от наземной войны */
+function warEnemyCiv(w,d){
+ const k=(Math.max(0,d)*rnd(260,640)+rnd(80,260))*enLS(w.n),c=Math.round(k*(.1+(w.encirclement||0)*.03)*(w.order==='attack'?1.35:1)*rnd(.7,1.3));
+ w.eCiv=(w.eCiv||0)+c;S.warECiv=(S.warECiv||0)+c;
+}
 function enemyStrikes(w,c){
  if(!window.AIARS)return;
- AIARS.stock(c);if(c.aa==null)c.aa=Math.round(c.power/25);
- const WP=AIARS.WEAPONS,n=Math.min(3,1+Math.floor(c.power/70));
- for(let i=0;i<n;i++){
-  const myAA=(S.aa||0)+bcount('aabat')*1.5,aggr=c.aggr||.5;
-  const act=AIARS.pick(S,c,{vs:'p',front:100-w.p,defAA:myAA,defStab:S.stability,aggr,allowBomb:c.power>=60&&w.p>72&&aggr>.6,allowCiv:aggr>.5||w.p>65});
-  if(!act)break;
-  c.ars[act.w]-=1;
+ AIARS.stock(c,true);if(c.aa==null)c.aa=Math.round(c.power/25);
+ const WP=AIARS.WEAPONS,aggr=c.aggr||.5,myAA=(S.aa||0)+bcount('aabat')*1.5;
+ /* ИИ планирует залп: несколько единиц оружия за ход, приманки против ПВО, затем ракеты */
+ const acts=AIARS.plan(S,c,{vs:'p',front:100-w.p,defAA:myAA,defStab:S.stability,aggr,war:true,allowBomb:c.power>=60&&w.p>72&&aggr>.6,allowCiv:aggr>.5||w.p>65});
+ let pool=2+(S.aa||0)*1.5+bcount('aabat')*2,show=null,hits=0,stopped=0;   // pool — сколько перехватов ПВО успевает сделать за месяц
+ acts.forEach(act=>{
   const f=WP[act.w].f,air=WP[act.w].air,t=act.t;
-  const pI=air?Math.min(.75,(S.aa||0)*.07+bcount('aabat')*.05):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
-  if(Math.random()<pI){log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,-.2*f);continue}
-  // выбор области: ИИ бьёт туда, где больнее
-  const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60:r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
+  const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60*((S.dark&&S.dark[r.name])?.55:1):r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
   const reg=regs[0]||{name:'страна',pop:0,industry:0,infra:0,unrest:0};
+  const pI=air?Math.min(.75,(S.aa||0)*.07+bcount('aabat')*.05):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
+  let caught=false;
+  if(air){if(pool>0){pool-=act.decoy?1.2:1;caught=Math.random()<pI}}else caught=Math.random()<pI;
+  if(caught){stopped++;log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);if(!show)show={w:act.w,reg,down:true,f:0};return}
+  hits++;if(!show||show.down||f>show.f)show={w:act.w,reg,down:false,f};
   let shift=0,r=0;
   if(t==='mil'){
-   shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f);S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
+   shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f*myLS());S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
+   const cd=popLoss(rnd(30,160)*f*myLS());S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    S.morale=clamp(S.morale-.8*f);S.equipment=clamp(S.equipment-.8*f);S.ammo=clamp(S.ammo-.5*f);S.approval=clamp(S.approval+.4*f*Math.max(.15,(100-S.approval)/50));
    let extra='';if(Math.random()<.05*f&&S.mil>1){S.mil--;extra=' Уничтожен военный завод!'}
-   r=shift/3+kills/2500;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по военным целям (${reg.name}). Погибло ${fmt(kills)} солдат.${extra}`)}
+   r=shift/3+kills/2500;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по военным целям (${reg.name}). Погибло ${fmt(kills)} солдат, ${fmt(cd)} мирных.${extra}`)}
   else if(t==='infra'){
    shift=1.5*f*.5;const di=Math.min(reg.infra,2.2*f),dn=Math.min(reg.industry,1.5*f);reg.infra=clamp(reg.infra-di);reg.industry=clamp(reg.industry-dn);
    S.energy=clamp(S.energy-1.2*f);S.fuel=clamp(S.fuel-.8*f);S.gdp*=1-.0008*f;
+   const cd=popLoss(rnd(120,520)*f*myLS());S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    let extra='';if(Math.random()<.04*f&&S.civ>2){S.civ--;extra=' Разрушен гражданский завод!'}
-   r=shift/3+(di+dn)*.05;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по инфраструктуре (${reg.name}): дороги, энергосеть, склады.${extra}`)}
+   r=shift/3+(di+dn)*.05;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по инфраструктуре (${reg.name}): дороги, энергосеть, склады. Погибло ${fmt(cd)} мирных.${extra}`);
+   infraNews(w,reg.name,false)}
   else{
-   shift=.5*f*.5;const dead=Math.round(rnd(3000,9000)*f),d=popLoss(dead);S.warCiv=(S.warCiv||0)+d;w.civDead=(w.civDead||0)+d;
+   shift=.5*f*.5;const dead=Math.round(rnd(3000,9000)*f*myLS()),d=popLoss(dead);S.warCiv=(S.warCiv||0)+d;w.civDead=(w.civDead||0)+d;
    reg.unrest=clamp(reg.unrest+2*f);S.approval=clamp(S.approval+.6*f*Math.max(.15,(100-S.approval)/50));S.stability=clamp(S.stability-.8*f);
-   r=shift/3+(d/9000)*.25+(S.stability<42?.6:.2)*f*.5-.5;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по гражданским (${reg.name}). Погибло ${fmt(d)} мирных жителей. Мир осуждает противника.`)}
+   r=shift/3+(d/9000)*.25+(S.stability<42?.6:.2)*f*.5-.5;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по гражданским (${reg.name}). Погибло ${fmt(d)} мирных жителей. Мир осуждает противника.`);
+   warNews(w,'🏘',`${cityOf(reg.name)}: удар по жилым кварталам — погибло ${fmt(d)} мирных жителей`)}
   w.p=clamp(w.p-shift,0,100);AIARS.learn(S,act,r-.12*f);
- }
+ });
+ if(acts.length>1)log(`📡 ${w.n}: массированный удар — ${acts.length} ед. оружия, перехвачено ${stopped}, прошло ${hits}.`);
+ /* анимация: удар врага летит с ЕГО территории на нашу область */
+ if(show)try{strikeScene({kind:'strike',rev:1,down:show.down,k:show.w,enemy:w.n,regId:show.reg&&show.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[show.w]} → ${S.name}`,sub:show.down?`Сбито нашей ПВО · ${show.reg.name}`:`Область «${show.reg.name}»`})}catch(e){}
 }
 const WP0={cannon:{air:false},drone:{air:true},tank:{air:false},rocket:{air:true},bomb:{air:true},howitzer:{air:false},heli:{air:true},mlrs:{air:false},cruise:{air:true},bomber:{air:true}};
 const TG0={cannon:1,drone:1,tank:1,rocket:1,bomb:1,howitzer:1,heli:1,mlrs:1,cruise:1,bomber:1};
@@ -472,7 +533,7 @@ if(t&&TG[k]&&atWar()){
  S[k]--;const f=TG[k],w=tgtWar(),A=ARMS[k],en=S.relations.find(r=>r.name===w.n),R2=v=>S.relations.forEach(r=>r.value=clamp(r.value+v,-100,100));
  const aaE=(en&&en.aa!=null)?en.aa:Math.round(((en&&en.power)||40)/25),air=WP0[k].air;
  if(air&&en){en.aa=Math.min(14,aaE+.5*f)}
- if(air&&Math.random()<Math.min(.55,aaE*.045)){log(`🛡 ${A.n} сбит ПВО врага (${w.n}). Враг усиливает ПВО.`);toast(`${A.n} сбит ПВО врага`);save();render();return}
+ if(air&&Math.random()<Math.min(.55,aaE*.045)){log(`🛡 ${A.n} сбит ПВО врага (${w.n}). Враг усиливает ПВО.`);toast(`${A.n} сбит ПВО врага`);{const r0=enemyRegs(w.n),w0=(S.tgt&&S.tgt.r)||'',g0=r0.find(x=>x.n===w0)||r0[Math.floor(Math.random()*r0.length)];armsFxMap(k,w.n,g0,g0?g0.n:w.n,true)}save();render();return}
  const regs=enemyRegs(w.n),want=(S.tgt&&S.tgt.r)||'';let reg=regs.find(x=>x.n===want);const rnd0=!reg;if(!reg&&regs.length)reg=regs[Math.floor(Math.random()*regs.length)];
  const avg=regs.length?regs.reduce((a,x)=>a+x.s,0)/regs.length:10,rn=reg?reg.n:w.n;
  let wt=reg?Math.max(.6,Math.min(1.6,reg.s/avg)):1;
@@ -482,9 +543,10 @@ if(t&&TG[k]&&atWar()){
  const where=` · область «${rn}»${rnd0?' (случайная)':''}`;armsFxMap(k,w.n,reg,rn);
  const rally=({mil:5,infra:4,civ:2}[t])*Math.max(.7,Math.min(1.4,f/1.5+.35))*Math.max(.15,Math.min(1,(100-S.approval)/50));
  S.approval=clamp(S.approval+rally);
- if(t==='mil'){hit(2.5*f,.3*f);S.threat=clamp(S.threat-2*f);S.morale=clamp(S.morale+1);worldReact(w.n,'mil',f);log(`${A.ic} ${A.n}: удар по военным объектам врага (${w.n})${where}.`);say(`Разбиты военные объекты врага: ${rn}`,'🎯')}
- else if(t==='infra'){hit(1.5*f,1*f);S.threat=clamp(S.threat-.5*f);worldReact(w.n,'infra',f);log(`${A.ic} ${A.n}: разрушена инфраструктура врага (${w.n})${where} — мосты, склады, энергосеть.`);say(`Инфраструктура области ${rn} разрушена — экономика врага трещит`,'🏗')}
- else{hit(.5*f,.5*f);worldReact(w.n,'civ',f);S.legitimacy=clamp(S.legitimacy-1.5*f);S.stability=clamp(S.stability-.5*f);log(`${A.ic} ${A.n}: удар по гражданским целям (${w.n})${where}. Мир осуждает.`);say(`Удар по гражданским в области ${rn}: мир возмущён`,'😡')}
+ const eC=Math.round(({mil:rnd(30,250),infra:rnd(150,700),civ:rnd(3000,9000)}[t])*f*wt*enLS(w.n));w.eCiv=(w.eCiv||0)+eC;S.warECiv=(S.warECiv||0)+eC;if(eC>400)S.legitimacy=clamp(S.legitimacy-eC/60000);
+ if(t==='mil'){hit(2.5*f,.3*f);S.threat=clamp(S.threat-2*f);S.morale=clamp(S.morale+1);worldReact(w.n,'mil',f);log(`${A.ic} ${A.n}: удар по военным объектам врага (${w.n})${where}. Побочно погибло ${fmt(eC)} мирных жителей врага.`);say(`Разбиты военные объекты врага: ${rn}`,'🎯')}
+ else if(t==='infra'){hit(1.5*f,1*f);S.threat=clamp(S.threat-.5*f);worldReact(w.n,'infra',f);log(`${A.ic} ${A.n}: разрушена инфраструктура врага (${w.n})${where} — мосты, склады, энергосеть. Погибло ${fmt(eC)} мирных жителей врага.`);say(`Инфраструктура области ${rn} разрушена — экономика врага трещит`,'🏗');infraNews(w,rn,true)}
+ else{hit(.5*f,.5*f);worldReact(w.n,'civ',f);S.legitimacy=clamp(S.legitimacy-1.5*f);S.stability=clamp(S.stability-.5*f);log(`${A.ic} ${A.n}: удар по гражданским целям (${w.n})${where}. Погибло ${fmt(eC)} мирных жителей врага. Мир осуждает.`);say(`Удар по гражданским в области ${rn}: мир возмущён`,'😡');warNews(w,'🏘',`${cityOf(rn)}: наш удар по гражданским целям — погибло ${fmt(eC)} мирных жителей`)}
  if(k==='bomb'){S.threat=clamp(S.threat-10);worldReact(w.n,'bomb',f)}
  toast(`${A.n} → ${rn} · рейтинг +${rally.toFixed(1)}%${wt<.9?' (область уже разрушена, эффект слабее)':''}`);
  save();render();return}
@@ -531,17 +593,46 @@ function tgtPanel(){if(!atWar())return'';const wi0=Math.min((S.tgt&&S.tgt.wi)||0
  return`<div class="mini" style="margin-bottom:8px"><b>🎯 Куда бить</b>${ws}<br><label>Область врага: <select onchange="tgtSet(${wi0},this.value)">${opts}</select></label><small class="muted">Крупные и промышленные области дают больший эффект. Повторные удары по одной и той же цели слабеют (цифры в списке — накопленный урон по военным, инфраструктуре и гражданским).</small></div>`}
 function tacticsCard(){
  const sm=window.AIARS?AIARS.summary(S):null;
- let h=`<div class="cards"><div class="mini">Погибло солдат за все войны<b>${fmt(S.warSold||0)}</b></div><div class="mini">Погибло мирных жителей<b>${fmt(S.warCiv||0)}</b></div><div class="mini">Население сейчас<b>${fmt(S.pop)}</b></div></div>`;
- if(atWar())h+=S.wars.map(w=>{const c=rel(w.n)||{},ars=c.ars||{};return`<div class="mini"><b>⚔️ ${w.n}</b><small>ПВО врага: ${Math.round(c.aa==null?(c.power||0)/25:c.aa)} · арсенал врага (разведка): пушки ${Math.floor(ars.cannon||0)}, дроны ${Math.floor(ars.drone||0)}, танки ${Math.floor(ars.tank||0)}, ракеты ${Math.floor(ars.rocket||0)}${ars.bomb>=1?', бомба есть':''}</small><small>Потери войны: ${fmt(w.soldDead||0)} солдат, ${fmt(w.civDead||0)} мирных</small></div>`}).join('');
+ let h=`<div class="cards"><div class="mini">Погибло солдат за все войны<b>${fmt(S.warSold||0)}</b></div><div class="mini">Погибло мирных жителей<b>${fmt(S.warCiv||0)}</b></div><div class="mini">Мирные жители врага<b>${fmt(S.warECiv||0)}</b></div><div class="mini">Население сейчас<b>${fmt(S.pop)}</b></div></div>`;
+ if(atWar())h+=S.wars.map(w=>{const c=rel(w.n)||{},ars=c.ars||{};return`<div class="mini"><b>⚔️ ${w.n}</b><small>ПВО врага: ${Math.round(c.aa==null?(c.power||0)/25:c.aa)} · арсенал врага (разведка): пушки ${Math.floor(ars.cannon||0)}, дроны ${Math.floor(ars.drone||0)}, танки ${Math.floor(ars.tank||0)}, ракеты ${Math.floor(ars.rocket||0)}${ars.bomb>=1?', бомба есть':''}</small><small>Потери войны: ${fmt(w.soldDead||0)} солдат, ${fmt(w.civDead||0)} мирных (наших) · у врага мирных: ${fmt(w.eCiv||0)}</small></div>`}).join('');
  if(sm)h+=`<p class="muted">🧠 <b>ИИ-тактик врага учится.</b> Изучено ударов: <b>${sm.steps}</b> · результативных: ${sm.skill}% · любопытство ${Math.round(sm.eps*100)}%.${sm.best.length?`<br>Лучшее по опыту: ${sm.best.join('; ')}.`:' Пока копит опыт.'}<br>Он учитывает ваши ПВО и укрепления, бьёт туда, где больнее, и меняет тактику, если вы её закрываете. Свою ПВО и бункеры стройте заранее.</p>`;
  return card('🧠 Потери и тактика врага',h)}
 /* ------------------------ АНИМАЦИЯ БОЁВ НА КАРТЕ ------------------------ */
 const SVGNS='http://www.w3.org/2000/svg';
 const SCN={drone:{n:3,dur:1.6,R:16},heli:{n:2,dur:1.8,R:18},bomber:{n:3,dur:2,R:24},cruise:{n:1,dur:1.7,R:22,rk:1},rocket:{n:1,dur:1.5,R:28,rk:1},bomb:{n:1,dur:2.2,R:62,rk:1},cannon:{n:4,dur:1.1,R:12,ar:1},howitzer:{n:3,dur:1.2,R:15,ar:1},mlrs:{n:9,dur:1.1,R:11,ar:1,gap:.11},tank:{n:5,dur:2.4,R:16,tk:1}};
 function strikeScene(o){
- wmLoad(ok=>{if(!ok)return;try{if(!WMAP.box)buildWorldNode();runScene(o)}catch(e){console.warn('scene',e)}});
+ wmLoad(ok=>{if(!ok)return;try{if(!WMAP.box)buildWorldNode();try{updateWorld()}catch(e){}runScene(o)}catch(e){console.warn('scene',e)}});
+}
+/* Точки пуска СТРОГО на территории стороны-атакующего: берём реальную границу ближайших к цели областей
+   и сдвигаем точку внутрь (isPointInFill проверяет, что она действительно внутри страны). */
+function launchSites(els,T,bb){
+ const out={pts:[],wide:[],el:null};
+ const cand=els.map(e=>({e,c:bb(e)})).filter(x=>x.c&&x.c.w*x.c.h>0).sort((a,b)=>Math.hypot(a.c.x-T.x,a.c.y-T.y)-Math.hypot(b.c.x-T.x,b.c.y-T.y)).slice(0,5);
+ const all=[];
+ cand.forEach(({e,c})=>{
+  let len=0;try{len=e.getTotalLength()}catch(_){}
+  if(!len)return;
+  const inset=Math.max(.5,Math.min(3,Math.min(c.w,c.h)*.12)),N=110;
+  for(let i=0;i<N;i++){
+   const p=e.getPointAtLength(len*i/N),dx=c.x-p.x,dy=c.y-p.y,dl=Math.hypot(dx,dy)||1;let q=null;
+   for(const m of [1,1.8,3]){
+    const x=p.x+dx/dl*inset*m,y=p.y+dy/dl*inset*m;let ok=true;
+    try{if(typeof e.isPointInFill==='function')ok=e.isPointInFill(new DOMPoint(x,y))}catch(_){}
+    if(ok){q={x,y};break}
+   }
+   if(q)all.push({x:q.x,y:q.y,d:Math.hypot(q.x-T.x,q.y-T.y),e});
+  }
+ });
+ if(!all.length)return out;
+ all.sort((a,b)=>a.d-b.d);
+ const d0=all[0].d;
+ out.pts=all.filter(p=>p.d<=d0+Math.max(8,d0*.12)).slice(0,40);
+ out.wide=all.filter(p=>p.d<=d0+Math.max(20,d0*.3)).slice(0,120);
+ out.el=all[0].e;
+ return out;
 }
 function runScene(o){
+
  const old=document.getElementById('strikeov');if(old){if(old._stop)old._stop();old.remove()}
  const ov=document.createElement('div');ov.id='strikeov';
  ov.innerHTML='<div class="strikebox"><div class="striketitle"></div><div class="strikesub"></div><div class="strikemap"></div></div>';
@@ -557,15 +648,18 @@ function runScene(o){
  let tEl=o.regId?all.find(e=>e.getAttribute('data-r')===o.regId):null;
  if(!tEl)tEl=svg.querySelector('[data-o="'+enIso+'"]');
  const T=tEl&&bb(tEl);if(!T){ov.remove();return}
- let O=null,best=1e9;
- all.filter(e=>e.getAttribute('data-c')===meIso).forEach(e=>{const c=bb(e);if(!c||!(c.w*c.h))return;const d=Math.hypot(c.x-T.x,c.y-T.y);if(d<best){best=d;O=c}});
- if(!O){const oe=svg.querySelector('[data-o="'+meIso+'"]');O=oe&&bb(oe)}
+ const fromIso=o.rev?enIso:meIso;   // откуда летит: при нашем ударе — наша страна, при ударе врага — его
+ const srcEls=all.filter(e=>e.getAttribute('data-c')===fromIso);
+ const outl=svg.querySelector('[data-o="'+fromIso+'"]');
+ const LP=launchSites(srcEls.length?srcEls:(outl?[outl]:[]),T,bb);
+ let O=LP.pts[0]||null;
+ if(!O){let best=1e9;srcEls.forEach(e=>{const c=bb(e);if(!c||!(c.w*c.h))return;const d=Math.hypot(c.x-T.x,c.y-T.y);if(d<best){best=d;O=c}});if(!O&&outl)O=bb(outl)}
  if(!O||Math.hypot(O.x-T.x,O.y-T.y)<4)O={x:T.x-80,y:T.y+45};
- const dist=Math.hypot(O.x-T.x,O.y-T.y);
  const cfg=SCN[o.k]||{n:3,dur:1.6,R:16};
- const ground=o.kind==='inf'||cfg.tk||cfg.ar;
- const k0=ground?Math.min(1,120/dist):1;
- const St={x:T.x+(O.x-T.x)*k0,y:T.y+(O.y-T.y)*k0};
+ const St={x:O.x,y:O.y};
+ const LPt=i=>LP.pts.length?LP.pts[(i*5+Math.floor(Math.random()*4))%LP.pts.length]:O;
+ const LPw=()=>LP.wide.length?LP.wide[Math.floor(Math.random()*LP.wide.length)]:O;
+
  const minx=Math.min(St.x,T.x),maxx=Math.max(St.x,T.x),miny=Math.min(St.y,T.y),maxy=Math.max(St.y,T.y);
  let w=Math.max(150,(maxx-minx)*1.5+70),h=Math.max(93,(maxy-miny)*1.5+45);
  if(h/w>.62)w=h/.62;else h=w*.62;
@@ -573,6 +667,7 @@ function runScene(o){
  svg.setAttribute('viewBox',`${cx-w/2} ${cy-h/2} ${w} ${h}`);
  const px=n=>n*w/hostW;
  const L=document.createElementNS(SVGNS,'g');L.id='fxl';svg.appendChild(L);
+ if(LP.el){const hl=document.createElementNS(SVGNS,'path');hl.setAttribute('d',LP.el.getAttribute('d')||'');hl.setAttribute('fill',o.rev?'#ff5c66':'#d6b25e');hl.setAttribute('opacity','.32');hl.setAttribute('pointer-events','none');L.appendChild(hl)}
  const mk=(tag,at,par)=>{const e=document.createElementNS(SVGNS,tag);for(const k in at)e.setAttribute(k,at[k]);(par||L).appendChild(e);return e};
  const bez=(a,c,b,t)=>({x:(1-t)*(1-t)*a.x+2*(1-t)*t*c.x+t*t*b.x,y:(1-t)*(1-t)*a.y+2*(1-t)*t*c.y+t*t*b.y});
  const acts=[];const add=(t0,dur,init,upd,end)=>acts.push({t0,dur,init,upd,end,st:null,fin:false});
@@ -581,22 +676,22 @@ function runScene(o){
   (st,p)=>{const k=(p*acts[0].dur)%1;st.b.setAttribute('r',px(4+9*k));st.b.setAttribute('opacity',1-k)},st=>{st.a.remove();st.b.remove()});
  const hit=(t0,pow)=>add(t0,.9,()=>({e:mk('path',{d:tEl.getAttribute('d')||'',fill:'#ff2d2d',stroke:'#ffd7a0','stroke-width':px(.8),opacity:0})}),
   (st,p)=>st.e.setAttribute('opacity',(p<.2?p/.2:1-(p-.2)/.8)*(.55*(pow||1))),st=>st.e.remove());
- const boom=(x,y,R,t0)=>{add(t0,.8,()=>({a:mk('circle',{cx:x,cy:y,r:0,fill:'#ffb347',opacity:.9}),b:mk('circle',{cx:x,cy:y,r:0,fill:'none',stroke:'#ff5c3a','stroke-width':px(1.6)}),c:mk('circle',{cx:x,cy:y,r:0,fill:'#fff6d0'})}),
+ const boom=(x,y,R,t0,nh)=>{add(t0,.8,()=>({a:mk('circle',{cx:x,cy:y,r:0,fill:'#ffb347',opacity:.9}),b:mk('circle',{cx:x,cy:y,r:0,fill:'none',stroke:'#ff5c3a','stroke-width':px(1.6)}),c:mk('circle',{cx:x,cy:y,r:0,fill:'#fff6d0'})}),
   (st,p)=>{const r=px(R)*Math.sqrt(p);st.a.setAttribute('r',r);st.a.setAttribute('opacity',(1-p)*.9);st.b.setAttribute('r',px(R*1.7)*p);st.b.setAttribute('opacity',1-p);st.c.setAttribute('r',r*.45*(1-p));},st=>{st.a.remove();st.b.remove();st.c.remove()});
   for(let i=0;i<7;i++){const a=Math.random()*6.28,d=px(R*(.8+Math.random()*.9));add(t0,.7,()=>({e:mk('circle',{cx:x,cy:y,r:px(1.2),fill:'#ffd37a'})}),(st,p)=>{st.e.setAttribute('cx',x+Math.cos(a)*d*p);st.e.setAttribute('cy',y+Math.sin(a)*d*p-px(6)*Math.sin(p*3.14));st.e.setAttribute('opacity',1-p)},st=>st.e.remove())}
-  hit(t0,R>40?1.4:1)};
+  if(!nh)hit(t0,R>40?1.4:1)};
  const muzzle=(P,t0)=>add(t0,.25,()=>({e:mk('circle',{cx:P.x,cy:P.y,r:0,fill:'#fff2b0'})}),(st,p)=>{st.e.setAttribute('r',px(7)*Math.sin(p*3.14));},st=>st.e.remove());
  const flyer=(P0,i,t0,dur,arc,rk,big)=>{
   const d=Math.hypot(T.x-P0.x,T.y-P0.y)||1,nx=-(T.y-P0.y)/d,ny=(T.x-P0.x)/d,side=(i%2?1:-1)*arc*d*(.6+Math.random()*.6);
   const C={x:(P0.x+T.x)/2+nx*side,y:(P0.y+T.y)/2+ny*side};
-  const tg={x:T.x+(Math.random()-.5)*px(34),y:T.y+(Math.random()-.5)*px(22)};
+  const f0=o.down?.35+Math.random()*.3:1,tg={x:P0.x+(T.x-P0.x)*f0+(Math.random()-.5)*px(o.down?8:34),y:P0.y+(T.y-P0.y)*f0+(Math.random()-.5)*px(o.down?6:22)};
   muzzle(P0,t0);
   add(t0,dur,()=>({tr:mk('polyline',{fill:'none',stroke:rk?'#ffb06a':'#fff3c4','stroke-width':px(rk?2:1.3),opacity:.85,'stroke-linecap':'round','stroke-linejoin':'round'}),b:mk('path',{fill:rk?'#ff6a3d':'#e8eef5',stroke:'#0b1218','stroke-width':px(.5)}),pts:[]}),
    (st,p)=>{const q=bez(P0,C,tg,p),q2=bez(P0,C,tg,Math.min(1,p+.02)),a=Math.atan2(q2.y-q.y,q2.x-q.x),c=Math.cos(a),s2=Math.sin(a),L1=px(big?10:7),W=px(big?5:3.6);
     st.pts.push(q.x.toFixed(1)+','+q.y.toFixed(1));if(st.pts.length>18)st.pts.shift();st.tr.setAttribute('points',st.pts.join(' '));
     st.b.setAttribute('d',`M${q.x+c*L1},${q.y+s2*L1}L${q.x-c*L1*.6-s2*W},${q.y-s2*L1*.6+c*W}L${q.x-c*L1*.6+s2*W},${q.y-s2*L1*.6-c*W}Z`)},
    st=>{st.tr.remove();st.b.remove()});
-  boom(tg.x,tg.y,cfg.R,t0+dur);
+  boom(tg.x,tg.y,o.down?9:cfg.R,t0+dur,!!o.down);
  };
  /* ---- сценарии ---- */
  if(o.kind==='inf'){
@@ -606,7 +701,7 @@ function runScene(o){
   const ang=Math.atan2(T.y-St.y,T.x-St.x),nx=-Math.sin(ang),ny=Math.cos(ang),front=px(64);
   for(let r=0;r<4;r++)for(let c=0;c<11;c++){
    const off=(c/10-.5)*front+(Math.random()-.5)*px(4),t0=.15+r*.55+Math.random()*.25,dur=2.3+Math.random()*.4,wob=Math.random()*6;
-   const sx=St.x+nx*off,sy=St.y+ny*off,ex=T.x+nx*off*.45+(Math.random()-.5)*px(8),ey=T.y+ny*off*.45+(Math.random()-.5)*px(8);
+   const sp=LPw(),sx=sp.x,sy=sp.y,ex=T.x+nx*off*.45+(Math.random()-.5)*px(8),ey=T.y+ny*off*.45+(Math.random()-.5)*px(8);
    add(t0,dur,()=>({e:mk('circle',{cx:sx,cy:sy,r:px(2.1),fill:'#f0bd58',stroke:'#0b1218','stroke-width':px(.5)})}),
     (st,p)=>{const k=p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2;st.e.setAttribute('cx',sx+(ex-sx)*k+Math.sin(p*20+wob)*px(.9));st.e.setAttribute('cy',sy+(ey-sy)*k+Math.cos(p*17+wob)*px(.9));st.e.setAttribute('opacity',p>.9?(1-p)/.1:1)},st=>st.e.remove());
   }
@@ -617,7 +712,7 @@ function runScene(o){
  }else if(cfg.tk){
   const ang=Math.atan2(T.y-St.y,T.x-St.x),nx=-Math.sin(ang),ny=Math.cos(ang);
   for(let i=0;i<cfg.n;i++){
-   const off=(i-(cfg.n-1)/2)*px(9),t0=i*.28,sx=St.x+nx*off,sy=St.y+ny*off,ex=T.x+nx*off*.5,ey=T.y+ny*off*.5;
+   const off=(i-(cfg.n-1)/2)*px(9),t0=i*.28,sp=LPw(),sx=sp.x,sy=sp.y,ex=T.x+nx*off*.5,ey=T.y+ny*off*.5;
    add(t0,cfg.dur,()=>({d:mk('rect',{x:-px(5),y:-px(3),width:px(10),height:px(6),rx:px(1),fill:'#8aa05a',stroke:'#0b1218','stroke-width':px(.6)}),g:mk('line',{x1:0,y1:0,x2:px(7),y2:0,stroke:'#2d3a1e','stroke-width':px(1.6)})}),
     (st,p)=>{const x=sx+(ex-sx)*p,y=sy+(ey-sy)*p,tr=`translate(${x} ${y}) rotate(${ang*57.3})`;st.d.setAttribute('transform',tr);st.g.setAttribute('transform',tr);
      if(Math.random()<.25)mk('circle',{cx:x-Math.cos(ang)*px(7),cy:y-Math.sin(ang)*px(7),r:px(1.8),fill:'#9b8a6a',opacity:.5},L)},
@@ -625,9 +720,9 @@ function runScene(o){
    muzzle({x:ex,y:ey},t0+cfg.dur-.2);boom(T.x+(Math.random()-.5)*px(24),T.y+(Math.random()-.5)*px(16),cfg.R,t0+cfg.dur);
   }
  }else if(cfg.ar){
-  for(let i=0;i<cfg.n;i++)flyer(St,i,.1+i*(cfg.gap||.35),cfg.dur,.32,0,false);
+  for(let i=0;i<cfg.n;i++)flyer(LPt(i),i,.1+i*(cfg.gap||.35),cfg.dur,.32,0,false);
  }else{
-  for(let i=0;i<cfg.n;i++)flyer(O,i,.1+i*.24,cfg.dur,.2,!!cfg.rk,o.k==='bomb'||o.k==='bomber');
+  for(let i=0;i<cfg.n;i++)flyer(LPt(i),i,.1+i*.24,cfg.dur,.2,!!cfg.rk,o.k==='bomb'||o.k==='bomber');
  }
  /* ---- цикл ---- */
  const t00=performance.now();let raf=0,stopped=false;
@@ -644,9 +739,9 @@ window.armyAttack=n=>{
  const regs=enemyRegs(w.n),want=(S.tgt&&S.tgt.r)||'';let reg=regs.find(x=>x.n===want);if(!reg&&regs.length)reg=regs[Math.floor(Math.random()*regs.length)];
  strikeScene({kind:'inf',k:'inf',enemy:w.n,regId:reg&&reg.id,title:`🪖 Наступление на ${w.n}`,sub:reg?`Область «${reg.n}»`:'Вся страна'});
 };
-function armsFxMap(k,wname,reg,rn){
+function armsFxMap(k,wname,reg,rn,down){
  const A=ARMS[k];if(!SCN[k])return;
- strikeScene({kind:'strike',k,enemy:wname,regId:reg&&reg.id,title:`${A.ic} ${A.n} → ${wname}`,sub:`Область «${rn}»`});
+ strikeScene({kind:'strike',k,down:!!down,enemy:wname,regId:reg&&reg.id,title:`${A.ic} ${A.n} → ${wname}`,sub:down?`Сбит ПВО · область «${rn}»`:`Область «${rn}»`});
 }
 /* ------------------------ АНИМАЦИЯ И ПРОИЗВОДСТВО АРСЕНАЛА ------------------------ */
 function armFx(k,mode){
@@ -1735,11 +1830,11 @@ function warTick(){
   w.p=clamp(w.p+d,0,100);w.aid=aid;w.mine=Math.round(my);w.theirs=Math.round(en);const a0=S.army;w.frontLine=w.frontLine||'Центральный фронт';if(w.m%4===0)w.frontLine=pick(FRONTS);w.encirclement=w.encirclement||0;
   if(w.p>68&&supply>55&&Math.random()<.12){w.encirclement=clamp(w.encirclement+1,0,5);if(w.encirclement===1||w.encirclement===5)log(`⭕ Окружение войск ${w.n}: ${w.encirclement}/5.`)}else if(w.p<45)w.encirclement=Math.max(0,w.encirclement-1);
   const dc=DOCS[S.doc],lossK=(1+Math.max(0,-d)/10)*(dc?dc.loss:1)*(1-advSum('loss'));
-  S.army=Math.max(5000,S.army-Math.round(rnd(250,800)*lossK*(en/(my+en))*2+(supply<35?260:0)+w.encirclement*90));
-  w.lost=(w.lost||0)+Math.max(0,a0-S.army);w.kills=(w.kills||0)+Math.round(Math.max(0,d)*rnd(260,640)+rnd(80,260));battleEvent(w,d,c);ch({money:-120-(100-supply)*2},false);S.approval=clamp(S.approval+(w.m<=12&&w.p>=40?.35:-.12));S.fuel=clamp(S.fuel-(supply<45?3:1));S.ammo=clamp(S.ammo-(supply<45?3:1));
+  S.army=Math.max(5000,S.army-Math.round((rnd(250,800)*lossK*(en/(my+en))*2+(supply<35?260:0)+w.encirclement*90)*myLS()));
+  w.lost=(w.lost||0)+Math.max(0,a0-S.army);w.kills=(w.kills||0)+Math.round((Math.max(0,d)*rnd(260,640)+rnd(80,260))*enLS(w.n));battleEvent(w,d,c);ch({money:-120-(100-supply)*2},false);S.approval=clamp(S.approval+(w.m<=12&&w.p>=40?.35:-.12));S.fuel=clamp(S.fuel-(supply<45?3:1));S.ammo=clamp(S.ammo-(supply<45?3:1));
   if(dc&&dc.ammoS)S.ammo=clamp(S.ammo+dc.ammoS);if(dc&&dc.fuelC)S.fuel=clamp(S.fuel-dc.fuelC);
   c.power=Math.max(10,Math.round(c.power-Math.max(0,d)*(.35+w.encirclement*.12)+Math.max(0,-d)*.1+(d>0?Math.max(1,c.power*.012):0)));
-  warCasualties(w,a0);enemyStrikes(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
+  warCasualties(w,a0);occupyTick(w);warEnemyCiv(w,d);darkTickEnemy(w);enemyStrikes(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
   if(w.m%3===0&&supply<30)log(`🚚 Критический кризис снабжения на фронте с ${w.n}: наступление замедлено.`);if(d>0&&w.m%6===0)log(`🪖 ${w.n} проводит мобилизацию, чтобы удержать фронт.`);c.value=clamp(c.value-.8,-100,100);
   if(w.p>=100){w.won=true;w.wm=0;log(`🏆 Победа над государством ${w.n}! Выбери плоды победы во вкладке «Штаб».`);say('Мы победили в войне!','🎉');toast('🏆 Победа над '+w.n+'!');pause()}
   else if(w.p>=90&&w.encirclement>=4){w.p=100;w.won=true;w.wm=0;log(`🏳️ ${w.n} запросила капитуляцию после окружения основных сил!`);toast('Противник капитулирует');pause()}
@@ -1899,6 +1994,9 @@ const BEV=[
  [d=>d<0,w=>`🌧 Распутица и перебои со снабжением замедлили операции у «${w.frontLine}»`],
  [()=>true,w=>`⚔️ Затяжные бои на участке «${w.frontLine}»`]];
 function battleEvent(w,d,c){if(Math.random()>.4)return;const e=pick(BEV.filter(x=>x[0](d)).slice(0,3)),t=e[1](w,c);w.blog=w.blog||[];w.blog.unshift(`${months[S.month].slice(0,3)}, год ${S.year}: ${t}`);w.blog.length=Math.min(w.blog.length,5)}
+function warNewsHtml(w){const a=Object.keys(S.dark||{}).length,b=Object.keys(w.dark||{}).length,n=w.news||[];
+ const oc=(w.occ||[]),rgo=regsOf(w.n)||[];
+ return `<div class="wnews"><b>📰 Новости войны</b>${oc.length?`<small class="muted">🚩 Заняты (заштрихованы на карте): ${oc.map(id=>{const x=rgo.find(z=>z.id===id);return x?String(x.n).replace(/ \(.*\)/,''):id}).join(', ')}. Станут нашими при мире — диктат «Области».</small>`:''}${(a||b)?`<small class="muted">Без света/в разрухе сейчас: у нас ${a} обл., у врага ${b} обл.</small>`:''}${n.length?n.slice(0,6).map(x=>`<div class="wn"><span>${x.m}</span> ${x.t} <small class="muted">· ${x.d}</small></div>`).join(''):'<p class="muted wnolog">Пока тихо. Новости о разрушениях и жертвах появятся после ударов.</p>'}</div>`}
 function warCard(w){
  const c=rel(w.n)||{power:0},p=Math.round(w.p),mine=Math.round(w.mine||warPower(w)),theirs=Math.round(w.theirs||c.power*1.45),sum=Math.max(1,mine+theirs),
   st=w.won?['🏆','Победа','ok']:p>=65?['💪','Мы побеждаем','ok']:p>=45?['⚖','Равные силы','mid']:p>=25?['⚠','Мы отступаем','warn']:['🔥','Критическое положение','bad'],
@@ -1908,7 +2006,8 @@ function warCard(w){
  <div class="wmeta">${w.frontLine||'Центральный фронт'} · месяц войны: ${w.m}${w.def?' · на нас напали':''}</div>
  <div class="wforce"><div class="fs us"><small>Наша сила</small><b>${fmt(mine)}</b></div><div class="fbar"><i style="width:${Math.round(mine/sum*100)}%"></i></div><div class="fs them"><small>Сила врага</small><b>${fmt(theirs)}</b></div></div>
  <div class="wtrack"><div class="wfill" style="width:${p}%"></div><div class="wmark" style="left:${p}%"></div></div><div class="wscale"><span>Поражение</span><b>Фронт ${p}%</b><span>Победа</span></div>
- <div class="wtiles">${tile('🚚','Снабжение',sup+'%')}${tile('⭕','Окружение',(w.encirclement||0)+'/5')}${tile('👑','Вассалы','+'+fmt(w.aid||vassalAid()))}${tile('🤝','Союзники',allyL.length?allyL.length:'—')}${tile('🪦','Наши потери',fmt(w.lost||0))}${tile('☠','Потери врага',fmt(w.kills||0))}</div>
+ <div class="wtiles">${tile('🚚','Снабжение',sup+'%')}${tile('⭕','Окружение',(w.encirclement||0)+'/5')}${tile('👑','Вассалы','+'+fmt(w.aid||vassalAid()))}${tile('🤝','Союзники',allyL.length?allyL.length:'—')}${tile('🪦','Наши потери',fmt(w.lost||0))}${tile('☠','Потери врага',fmt(w.kills||0))}${tile('🚩','Занято областей',(w.occ||[]).length+'/'+regCount(w.n))}${tile('🏘','Мирные у нас',fmt(w.civDead||0))}${tile('🏚','Мирные у врага',fmt(w.eCiv||0))}</div>
+ ${warNewsHtml(w)}
  ${allyL.length?`<div class="wallies">На нашей стороне: ${allyL.map(n=>`<span class="chip">${n}</span>`).join('')}</div>`:''}
  <div class="worders"><button class="${ord==='attack'?'on atk':''}" onclick="H.warOrder(${nm},'attack')">⚔ Наступать</button><button class="${ord==='balanced'?'on bal':''}" onclick="H.warOrder(${nm},'balanced')">⚖ Баланс</button><button class="${ord==='defend'?'on def':''}" onclick="H.warOrder(${nm},'defend')">🛡 Оборона</button></div><div class="actions"><button onclick="armyAttack(${nm})">🪖 Показать атаку пехоты на карте</button></div>
  ${(w.blog&&w.blog.length)?`<ul class="wlog">${w.blog.map(x=>`<li>${x}</li>`).join('')}</ul>`:'<p class="muted wnolog">Боевые донесения появятся в ходе войны.</p>'}

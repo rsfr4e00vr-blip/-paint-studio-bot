@@ -158,3 +158,9 @@ input,select,textarea{min-height:44px;font-size:16px}
 input[type=range]{min-height:34px;accent-color:var(--gold)}
 .actions{display:flex;flex-wrap:wrap;gap:8px}.actions button{flex:1 1 145px;margin:0;min-height:48px}.mini .actions button{flex:1 1 135px}
 @media(max-width:760px){.nav-primary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}.nav-primary button{width:100%;min-width:0;white-space:normal;line-height:1.2}.nav-primary button:first-child{grid-column:span 2}.nav-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.nav-group{min-width:0;margin:0}.nav-group summary{font-size:13px;padding:0 10px;min-height:50px}.nav-group .nav-menu{grid-template-columns:1fr;max-height:55vh;overflow:auto}.nav-group .nav-menu button{font-size:14px;min-height:48px}.panel{padding:13px}.mini{padding:13px}.timebar button{min-height:46px;padding:10px}}
+
+/* новости войны */
+.wnews{margin:8px 0;padding:8px 10px;border:1px solid rgba(214,178,94,.35);border-radius:10px;background:rgba(10,18,26,.55)}
+.wnews>b{display:block;margin-bottom:4px}
+.wnews .wn{padding:3px 0;font-size:13px;border-top:1px solid rgba(255,255,255,.06)}
+.wnews .wn span{font-size:16px;margin-right:4px}

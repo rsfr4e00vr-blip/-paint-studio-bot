@@ -14,7 +14,13 @@ let curS=null;
 /* Удар страны att по стране def: оружие и цель выбирает общий обучаемый тактик (AIARS). */
 function strike(W,w,att,def,isA){
  if(!window.AIARS||!curS)return;
- const WP=AIARS.WEAPONS;AIARS.stock(att);
+ AIARS.stock(att,true);
+ const n=Math.max(1,Math.min(4,1+Math.floor(att.power/55)+(att.intrigue>40?1:0)));
+ for(let i=0;i<n;i++)strike1(W,w,att,def,isA);
+}
+function strike1(W,w,att,def,isA){
+ if(!window.AIARS||!curS)return;
+ const WP=AIARS.WEAPONS;
  if(def.aa==null)def.aa=Math.round(def.power/25);
  const front=isA?w.front:100-w.front;
  const act=AIARS.pick(curS,att,{vs:'n',front,defAA:def.aa,defStab:def.stability,aggr:C(.45+att.intrigue/200,.2,.9),allowBomb:att.power>=70&&front>70&&def.power<att.power*.6,allowCiv:true});
