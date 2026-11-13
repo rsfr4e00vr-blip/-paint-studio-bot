@@ -233,7 +233,7 @@ function capList(){const c=S.captured||[];if(!c.length)return card('🗺 Зах�
 function mapHtml(){let P='',T='';MAPR.forEach(m=>{let r=S.regions.find(x=>x.name===m[0])||((S.lost||[]).includes(m[0])?{loyalty:0,unrest:0,lost:1}:{loyalty:50,unrest:0});P+=`<polygon points="${m[1]}" fill="${r.lost?'#3a3d44':loyColor(r.loyalty)}" stroke="#0d1519" stroke-width="3" stroke-linejoin="round"><title>${m[0]}: лояльность ${Math.round(r.loyalty)}%, недовольство ${Math.round(r.unrest)}%</title></polygon>`;T+=`<text x="${m[2]}" y="${m[3]}" text-anchor="middle" class="maptxt">${m[0].toUpperCase()}</text><text x="${m[2]}" y="${m[3]+17}" text-anchor="middle" class="maptxt2">${r.lost?'потеряно':'лояльность '+Math.round(r.loyalty)+'%'}</text>`});return `<svg class="hoimap" viewBox="0 0 760 560" role="img" aria-label="Карта страны: цвет региона показывает лояльность"><defs><pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M40 0H0V40" fill="none" stroke="#fff" stroke-opacity=".05"/></pattern></defs><rect width="760" height="560" fill="url(#mg)"/>${P}${T}${capHtml()}${SEA}</svg><div class="maplegend"><span><i style="background:#6f8a55"></i>высокая лояльность</span><span><i style="background:#a0a257"></i>средняя</span><span><i style="background:#9a5a45"></i>низкая</span></div>`}
 function warnBanner(){if(S.out)return'';if(S.grace>0)return `<section class="panel wide okbanner">🛡 Защитный срок: отставка не грозит ещё ${S.grace} мес.</section>`;if(S.crisis>0)return `<section class="panel wide warnbanner">⚠ Угроза отставки: ${S.crisisWhy||''}. Критическое состояние уже ${S.crisis} мес. подряд. ${ADVICE[S.crisisIdx]||'Нужно срочно исправить ситуацию.'} ${isPopular()?'(Тебя любят — отставка наступит позже.)':''}</section>`;return''}
 function bar(label,val){return `<div class="meter"><b>${label}: ${fmt(val)}%</b><div class="bar"><i style="width:${clamp(val)}%;background:${val<30?"linear-gradient(90deg,#c23b4b,#ff7b86)":val<55?"linear-gradient(90deg,#c9902f,#f5c76a)":"linear-gradient(90deg,#2aa56d,#7ee6ae)"}"></i></div></div>`}
-function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]].concat(S.warCiv>0?[['🏘','Жертвы мирных',fmt(S.warCiv)]]:[]);$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
+function stats(){let a=[[IC.money,'Казна',fmt(S.money)+' млн'],[IC.gdp,'ВВП',fmt(S.gdp)+' млрд'],[IC.pop,'Население',fmt(S.pop)],[IC.stab,'Стабильность',Math.round(S.stability)+'%'],[IC.appr,'Одобрение',Math.round(S.approval)+'%'],[IC.army,'Армия',fmt(S.army)],['⭐','Пол. власть',Math.floor(S.pp)]].concat(S.warCiv>0?[['🏘','Жертвы мирных',fmt(S.warCiv)]]:[]).concat(fxStat());$('#stats').innerHTML=a.map(x=>`<div class="stat">${x[0]}<div><small>${x[1]}</small><b>${x[2]}</b></div></div>`).join('');$('#clock').textContent=`${S.year} год · ${months[S.month]}`;$('#runstate').textContent=running?'Идёт время':'Пауза';$('#play').classList.toggle('active',running)}
 function card(title,body){return `<section class="panel"><h2>${title}</h2>${body}</section>`}
 function render(auto){if(tab==='events')tab='overview';stats();if(auto&&tab==='map'&&WMAP.node&&document.getElementById('wm-slot')){updateWorld();mountEmpire();return}if(auto&&tab==='mp'&&window.NGMP)return;if(auto&&(down||(document.activeElement&&document.activeElement.type==='range')))return;let c='';if(tab==='map')c=empireCard()+worldMapCard()+capList();
 if(tab==='overview')c=`<div class="grid">${warnBanner()}${warPanel()}${card('🗺 Карта державы','<div class="emp-slot"><p class="muted">Строится единая карта…</p></div><p class="muted">Ваши земли и все аннексированные территории показаны одним цветом; вассалы — отдельным оттенком.</p>')}${capList()}${card('Государство',`<div class="cards"><div class="mini"><b>${S.name}</b>Форма правления: ${S.gov}<br>Лидер: ${S.leader}<br>Партия: ${S.party}<br>Сложность: <b>${difficulty().label}</b><div class=\"actions\"><button onclick=\"H.chooser()\">🌍 Выбрать другое государство</button></div></div><div class="mini"><b>Состояние страны</b>${bar('Стабильность',S.stability)}${bar('Одобрение',S.approval)}${bar('Легитимность',S.legitimacy)}</div></div>`)}${card('Национальные ресурсы',`<div class="cards">${[['Продовольствие',S.food],['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo],['Энергия',S.energy],['Технологии',S.tech]].map(x=>`<div class="mini"><b>${x[0]}</b>${x[1]} / 100<div class="bar"><i style="width:${clamp(x[1])}%"></i></div></div>`).join('')}</div>`)}${card('Последние события',`<div class="log">${S.log.slice(0,9).map(x=>`<div>${x}</div>`).join('')}</div>`)}${card('Быстрые действия',`<div class="actions"><button onclick="act('roads')">Построить дороги (500 млн)</button><button onclick="act('aid')">Помощь населению (300 млн)</button><button onclick="act('reform')">Государственная реформа (700 млн)</button></div>`)}</div>`;
@@ -294,7 +294,7 @@ window.regionAct=(i,a)=>{if(blocked())return;let r=S.regions[i],cost=a==='invest
 window.diplomacy=(i,a)=>{if(blocked())return;let r=S.relations[i],cost=a==='talk'?100:a==='trade'?250:0;if(S.money<cost){toast('Недостаточно средств');return}S.money-=cost;r.value=clamp(r.value+(a==='talk'?8:a==='trade'?12:-15),-100,100);if(a==='trade')S.money+=150;log(`Изменены дипломатические отношения с государством ${r.name}.`);save();render()};
 window.createDoc=()=>{let n=$('#docname').value.trim(),t=$('#doctext').value.trim();if(!n||!t){toast('Заполните название и текст');return}S.documents.unshift({name:n,type:$('#doctype').value,text:t,date:`${months[S.month]} ${S.year}, год`});log(`Подписан документ: ${n}.`);save();render()};
 window.deleteDoc=i=>{S.documents.splice(i,1);save();render()};
-function monthTick(){if(S.campaignOver)return;darkTick();S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
+function monthTick(){if(S.campaignOver)return;darkTick();S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.lastInc=inc;S.lastExp=exp;S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();try{fxTick()}catch(e){console.error('fxTick',e)}log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
 window.exportSave=()=>{
  try{
   const payload={...S,exportVersion:1,exportedAt:new Date().toISOString()};
@@ -348,7 +348,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 /* ===== ДОПОЛНЕНИЯ v2 ===== */
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
 const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
-function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust}}
+function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust,t:S.year*12+S.month,war:(S.wars&&S.wars.length)?1:0,fxA:S.fx?S.fx.rate:null,fxB:S.fx?S.fx.rate*fxReal(S.fx.ref)/fxReal(S.fx.refB):null,fxMom:S.fx?S.fx.mom:null,pg:S.econ?S.econ.pg:null,lossPct:S.econ?S.econ.lossPct:0,lossCum:S.econ?S.econ.loss-(S.econ.loss0||0):0,income:S.lastInc==null?null:S.lastInc,expense:S.lastExp==null?null:S.lastExp,civDead:S.warCiv||0,soldDead:S.warSold||0,legit:S.legitimacy,coup:S.coupRisk,energy:S.energy,morale:S.morale,ammo:S.ammo,equip:S.equipment}}
 const C0_OLD=[['Аркания',15,65,.4,'Торговая держава'],['Белория',48,42,.2,'Дружелюбный сосед'],['Тарвия',-20,80,.8,'Милитаристы'],['Дорвин',5,55,.5,'Союз торговцев'],['Силезия',-5,38,.3,'Горная республика'],['Мерейя',25,48,.2,'Морская федерация'],['Остмарк',-35,70,.7,'Имперские амбиции']];
 const C0=window.WORLD?WORLD.list.map(c=>[c.name,c.value,c.power,c.aggr,c.trait]):C0_OLD;
 const WM=(window.WORLD&&WORLD.map)||{},RLAB=(window.WORLD&&WORLD.RL)||{},CONTN=(window.WORLD&&WORLD.CONT)||{};
@@ -588,12 +588,12 @@ if(S.crisis===1&&S.grace<=0){log(`⚠️ Власти грозит отстав�
 if(S.crisis>=crisisNeed()&&S.grace<=0&&Math.random()<ousterChance()){S.crisis=0;ouster(pick(OUST[hit][1]))}}}
 const CH=[['chartEconomy','Экономика: ВВП, казна, долг',[{key:'gdp',name:'ВВП',color:'#69aef2'},{key:'money',name:'Казна',color:'#55c58a'},{key:'debt',name:'Долг',color:'#ef6d72'}]],['chartPolitics','Политика: партия, одобрение, стабильность',[{key:'partySupport',name:'Партия',color:'#f0bd58'},{key:'approval',name:'Одобрение',color:'#69aef2'},{key:'stability',name:'Стабильность',color:'#55c58a'}]],['chartPopulation','Население и ресурсы',[{key:'pop',name:'Население',color:'#69aef2'},{key:'food',name:'Еда',color:'#55c58a'},{key:'fuel',name:'Топливо',color:'#f0bd58'}]],['chartInfl','Цены и работа',[{key:'inflation',name:'Инфляция',color:'#ef6d72'},{key:'employment',name:'Занятость',color:'#55c58a'},{key:'trust',name:'Доверие рынков',color:'#f0bd58'}]],['chartArmy','Армия и угроза',[{key:'army',name:'Армия',color:'#f0bd58'},{key:'threat',name:'Угроза',color:'#ef6d72'}]]];
 function trend(s){let h=S.history;if(h.length<2)return'<p class="muted">Нужно хотя бы 2 месяца игры</p>';return'<div style="overflow:auto"><table><tr><th>Показатель</th><th>Старт</th><th>Сейчас</th><th>Динамика</th><th>Мин / Макс</th></tr>'+s.map(z=>{let v=h.map(q=>+q[z.key]||0),a=v[0],b=v[v.length-1],d=a?(b-a)/Math.abs(a)*100:0;return`<tr><td style="color:${z.color}">● ${z.name}</td><td>${fmt(a)}</td><td>${fmt(b)}</td><td style="color:var(${d>=0?'--green':'--red'})">${d>=0?'▲ рост':'▼ упадок'} ${Math.abs(d).toFixed(1)}%</td><td>${fmt(Math.min(...v))} / ${fmt(Math.max(...v))}</td></tr>`}).join('')+'</table></div>'}
-const chartsHtml=()=>`<p class="muted" style="margin:0 0 8px">С начала партии: ${S.history.length} мес. Каждая линия нарисована в своём масштабе — так видны рост и падение.</p><div class="grid">`+CH.map(c=>card(c[1],`<div class="chart-wrap"><canvas id="${c[0]}"></canvas></div>${trend(c[2])}`)).join('')+'</div>';
+const chartsHtmlOld=()=>`<p class="muted" style="margin:0 0 8px">С начала партии: ${S.history.length} мес. Каждая линия нарисована в своём масштабе — так видны рост и падение.</p><div class="grid">`+CH.map(c=>card(c[1],`<div class="chart-wrap"><canvas id="${c[0]}"></canvas></div>${trend(c[2])}`)).join('')+'</div>';
 function drawOne(id,series){let cv=document.getElementById(id);if(!cv)return;let r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;cv.width=Math.max(300,r.width*d);cv.height=Math.max(160,r.height*d);let x=cv.getContext('2d'),w=cv.width,h=cv.height,L=8*d,T=20*d,B=22*d,hs=S.history,n=hs.length;x.clearRect(0,0,w,h);x.font=`${11*d}px system-ui`;x.strokeStyle='#344b63';x.lineWidth=d;for(let i=0;i<=4;i++){let y=T+(h-T-B)*i/4;x.beginPath();x.moveTo(L,y);x.lineTo(w-L,y);x.stroke()}
 if(n<2){x.fillStyle='#a9bacb';x.fillText('График появится после нескольких месяцев игры',L,h/2);return}
 series.forEach((z,j)=>{let v=hs.map(q=>+q[z.key]||0),mn=Math.min(...v),mx=Math.max(...v);if(mx===mn)mx=mn+1;let Y=a=>T+(1-(a-mn)/(mx-mn))*(h-T-B);x.strokeStyle=z.color;x.lineWidth=2.5*d;x.beginPath();v.forEach((a,i)=>{let px=L+i/(n-1)*(w-2*L);i?x.lineTo(px,Y(a)):x.moveTo(px,Y(a))});x.stroke();x.fillStyle=z.color;x.beginPath();x.arc(w-L,Y(v[n-1]),3.5*d,0,7);x.fill();x.fillText(`${z.name}: ${fmt(v[n-1])}`,L+j*(w/series.length),13*d)});
 x.fillStyle='#a9bacb';x.fillText(`Год ${hs[0].year}`,L,h-6*d);let t=`Год ${hs[n-1].year}`;x.fillText(t,w-L-x.measureText(t).width,h-6*d)}
-function drawCharts(){CH.forEach(c=>drawOne(c[0],c[2]))}
+function drawChartsOld(){CH.forEach(c=>drawOne(c[0],c[2]))}
 const mood=v=>v>40?'🤝 Друг':v>10?'🙂 Дружелюбен':v>-20?'😐 Нейтрален':v>-50?'🧊 Холоден':'😠 Враждебен';
 const feedHtml=()=>S.feed.length?S.feed.slice(0,14).map(f=>`<div class="choice"><span style="font-size:20px">${f.m}</span> ${f.t} <small class="muted">· ${f.d}</small></div>`).join(''):'<p class="muted">Пока тихо. Пустите время — люди начнут говорить.</p>';
 function outBanner(){return S.out?`<section class="panel" style="border-color:#c3943e;margin-bottom:10px"><h2>🚨 Вы в оппозиции</h2><p>${S.out.cause}.<br>Правит: <b>${S.party}</b>. Месяцев в оппозиции: ${S.out.months} / 72. Партийная касса: <b>${fmt(S.fund)} млн</b>.</p></section>`:''}
@@ -793,7 +793,7 @@ function mfgPanel(){
 }
 function armsCard(){return card('💣 Арсенал',tgtPanel()+mfgPanel()+`<div class="cards">${ARMK.map(k=>{const A=ARMS[k],lock=A.mil&&S.mil<A.mil;return`<div class="mini"><b>${A.ic} ${A.n}: ${S[k]||0} шт.</b><small class="muted">${A.t}${A.eq?` · −${A.eq} вооружения`:''}</small><div class="actions"><button onclick="buy('${k}')">${lock?'🔒 ':''}Купить · ${A.c} млн</button>${k==='petard'?'':`<button class="good" onclick="make('${k}')">🏭 Произвести · ${mCost(k).m} млн · ${A.mt} мес.</button>`}${atWar()&&TG0[k]?`<button class="danger" onclick="fire('${k}','mil')">🎯 Военные</button><button class="danger" onclick="fire('${k}','infra')">🏗 Инфраструктура</button><button class="danger" onclick="fire('${k}','civ')">🏘 Гражданские</button>`:`<button class="danger" onclick="fire('${k}')">Применить</button>`}</div></div>`}).join('')}</div><p class="muted">На войне пушки, дроны, танки, ракеты и ПВО сбивают угрозу и поднимают дух, в мирное время — скандал (кроме парадов и учений). На войне выбираете цель: военные объекты (лучший эффект на фронте), инфраструктура (бьёт по силе и экономике врага) или гражданские (почти ничего не даёт на фронте, зато мировое осуждение и падение легитимности; рейтинг на войне всё равно растёт, но меньше всего от ударов по гражданским). Врага и область выбираете в блоке «Куда бить». Бомба пугает всех соседей. Петарда — для парада 🎆. Тяжёлое оружие требует военных заводов и вооружения со склада.</p>`)}
 function addonTab(){ensure();let b=outBanner();if(tab==='resources'&&window.NGRES)return b+NGRES.panel();let hx=hoiTab();if(hx!=null)return b+hx;
-if(tab=='charts')return b+chartsHtml();if(tab=='finance')return b+finTab0()+card('🏭 Экономические программы',xcards(ECO2,'e'));if(tab=='power')return b+card('🗳 Власть и политика',`<p class="muted">Режим: <b>${S.gov}</b> · легитимность ${Math.round(S.legitimacy)}% · риск переворота ${Math.round(S.coupRisk)}%</p>`+xcards(POL,'p'));
+if(tab=='charts')return b+chartsHtml();if(tab=='finance')return b+finTab0()+fxCard()+card('🏭 Экономические программы',xcards(ECO2,'e'));if(tab=='power')return b+card('🗳 Власть и политика',`<p class="muted">Режим: <b>${S.gov}</b> · легитимность ${Math.round(S.legitimacy)}% · риск переворота ${Math.round(S.coupRisk)}%</p>`+xcards(POL,'p'));
 if(tab=='people')return b+`<div class="grid">${card('👥 Что говорят люди',feedHtml())}${card('Настроение страны',bar('Одобрение',S.approval)+bar('Стабильность',S.stability)+`<p class="muted">Недовольство регионов: ${S.regions.map(r=>`${r.name} ${Math.round(r.unrest)}%`).join(' · ')}</p>`)}</div>`;
 if(tab=='deputies')return b+card('🏛 Депутаты парламента',`<p class="muted">Средняя лояльность: <b>${Math.round(depLoyal())}%</b>. Если она упадёт ниже 20% — возможен вотум недоверия.</p><div class="cards">${S.deps.map((d,i)=>`<div class="mini"><b>${d.n}</b>${d.p}${bar('Лояльность',d.l)}<div class="actions"><button onclick="dep(${i},'meet')">Встреча</button><button onclick="dep(${i},'bribe')">Подкуп · 200</button><button class="danger" onclick="dep(${i},'expel')">Заменить</button></div></div>`).join('')}</div>`);
 if(tab=='arms')return b+armsCard();
@@ -813,8 +813,8 @@ freeze:[600,()=>{S.inflation=clamp(S.inflation-3,0,100);S.fuel=clamp(S.fuel-5);S
 gamble:[3000,()=>{if(Math.random()<.45){S.money+=6000;say('Государство выиграло на бирже!','🤑');log('Биржа принесла прибыль +6000')}else{S.approval=clamp(S.approval-3);S.legitimacy=clamp(S.legitimacy-3);say('Правительство проиграло наши налоги на бирже!','🤬');log('Биржевая авантюра провалилась')}},'Игра на бирже','45% удвоить деньги, 55% потерять всё · 3000'],
 steal:[0,()=>{S.money=Math.max(0,S.money-2000);S.stolen=(S.stolen||0)+2000;if(Math.random()<.25){S.legitimacy=clamp(S.legitimacy-15);S.approval=clamp(S.approval-10);S.coupRisk=clamp(S.coupRisk+8);say('Журналисты нашли дворцы у министров!','🤬');log('Скандал: хищение из казны вскрыто')}},'Присвоено из казны 2000','Вы богатеете, но 25% шанс скандала'],
 mega:[6000,()=>{S.mega=(S.mega||0)+1;S.approval=clamp(S.approval+6);S.gdp+=300;S.legitimacy=clamp(S.legitimacy-3)},'Начат мегапроект (дворец/олимпиада)','Одобрение +6, но −80/мес · 6000'],
-devalue:[0,()=>{S.inflation=clamp(S.inflation+6,0,100);S.trust=clamp(S.trust-5);S.gdp*=1.01},'Девальвация валюты','Экспорт растёт, но цены и недоверие'],
-default:[0,()=>{S.debt=0;S.trust=5;S.gdp*=.95;S.stability=clamp(S.stability-10);S.approval=clamp(S.approval-5)},'ОБЪЯВЛЕН ДЕФОЛТ','Долг = 0, но рынки закрыты и хаос']};
+devalue:[0,()=>{S.inflation=clamp(S.inflation+6,0,100);S.trust=clamp(S.trust-5);S.gdp*=1.01;fxShock(.12)},'Девальвация валюты','Экспорт растёт, но цены и недоверие'],
+default:[0,()=>{S.debt=0;S.trust=5;S.gdp*=.95;S.stability=clamp(S.stability-10);S.approval=clamp(S.approval-5);fxShock(.5)},'ОБЪЯВЛЕН ДЕФОЛТ','Долг = 0, но рынки закрыты и хаос']};
 window.fin=k=>{if(blocked())return;let e=ECO[k];if(S.money<e[0])return toast('Недостаточно средств');S.money-=e[0];e[1]();clampFix();log(e[2]);doc0(e[2]);save();render();toast(e[2])};
 const doc0=t=>{S.documents.unshift({name:t,type:'Бюджет',text:'Решение правительства.',date:`${months[S.month]} ${S.year}, год`});S.documents=S.documents.slice(0,60)};
 const clampFix=()=>{['stability','approval','legitimacy','food','fuel','steel','coupRisk'].forEach(k=>S[k]=clamp(S[k]))};
@@ -874,8 +874,8 @@ function ask(t,cb,yes,no,onNo){let d=document.createElement('div');d.className='
    =================================================================== */
 const mt=()=>(S.year-1)*12+S.month;
 const H=window.H={};
-const FXN={'gdp%':'ВВП %',approval:'Одобрение',stability:'Стабильность',legitimacy:'Легитимность',money:'Казна',gdp:'ВВП',food:'Еда',fuel:'Топливо',steel:'Сталь',equipment:'Вооружение',ammo:'Боеприпасы',energy:'Энергия',tech:'Технологии',army:'Армия',morale:'Боевой дух',training:'Подготовка',threat:'Угроза',coupRisk:'Риск переворота',inflation:'Инфляция',employment:'Занятость',trust:'Доверие рынков',pop:'Население',debt:'Долг',pp:'Пол. власть',party:'Рейтинг партии',rivals:'Соперники',rel:'Отношения',relr:'Отношения с одной страной',reg:'Недовольство регионов',loy:'Лояльность регионов',dep:'Депутаты',navy:'Флот',air:'Авиация',infra:'Инфраструктура',civ:'Гражд. заводы',mil:'Воен. заводы',dock:'Верфи',rslots:'Слоты науки',bslots:'Слоты стройки',peace:'Мир'};
-const BADUP=new Set(['threat','coupRisk','inflation','debt','reg']);
+const FXN={'gdp%':'ВВП %',fxs:'Курс валюты %',approval:'Одобрение',stability:'Стабильность',legitimacy:'Легитимность',money:'Казна',gdp:'ВВП',food:'Еда',fuel:'Топливо',steel:'Сталь',equipment:'Вооружение',ammo:'Боеприпасы',energy:'Энергия',tech:'Технологии',army:'Армия',morale:'Боевой дух',training:'Подготовка',threat:'Угроза',coupRisk:'Риск переворота',inflation:'Инфляция',employment:'Занятость',trust:'Доверие рынков',pop:'Население',debt:'Долг',pp:'Пол. власть',party:'Рейтинг партии',rivals:'Соперники',rel:'Отношения',relr:'Отношения с одной страной',reg:'Недовольство регионов',loy:'Лояльность регионов',dep:'Депутаты',navy:'Флот',air:'Авиация',infra:'Инфраструктура',civ:'Гражд. заводы',mil:'Воен. заводы',dock:'Верфи',rslots:'Слоты науки',bslots:'Слоты стройки',peace:'Мир'};
+const BADUP=new Set(['threat','coupRisk','inflation','debt','reg','fxs']);
 const SCALED=new Set(['approval','stability','legitimacy','food','fuel','steel','energy','trust','coupRisk','inflation','threat','morale','reg','loy','dep']);
 const myP=()=>S.parties.find(p=>p.name===S.playerParty);
 const fv=v=>{v=Math.abs(v);return v>=100?fmt(v):(v<1?Math.round(v*100)/100:Math.round(v*10)/10).toString().replace('.',',')};
@@ -903,7 +903,7 @@ function ch(o,sc){
    case'dep':dl(v);break;
    case'peace':if(v)peaceAll(true);break;
    case'gdp':S.gdp=Math.max(100,S.gdp+v);break;
-   case'gdp%':S.gdp=Math.max(100,S.gdp*(1+v/100));break;
+   case'gdp%':S.gdp=Math.max(100,S.gdp*(1+v/100));break;case'fxs':fxShock(v/100);break;
    case'money':S.money+=v;if(S.money<0){S.debt+=-S.money;S.money=0}break;
    case'debt':S.debt=Math.max(0,S.debt+v);break;
    case'pop':S.pop=Math.max(100000,Math.round(S.pop+v));break;
@@ -999,8 +999,8 @@ E('port','Продажа порта','Иностранная компания п
  O('Сдать порт в аренду',{money:800,trust:2,legitimacy:-3,approval:-1},'Порт передан в аренду на 30 лет.'),
  O('Оставить государственным',{gdp:100,approval:1,legitimacy:1},'Порт остался нашим.')]),
 E('currency','Скачок курса валюты','Курс национальной валюты резко колеблется.',[
- O('Вмешаться в рынок',{trust:4,inflation:-.5},'Центробанк потратил резервы.',500),
- O('Не вмешиваться',{trust:-3,money:250,inflation:1},'Курс упал, рынок «сам разберётся».')]),
+ O('Вмешаться в рынок',{trust:4,inflation:-.5,fxs:-8},'Центробанк потратил резервы.',500),
+ O('Не вмешиваться',{trust:-3,money:250,inflation:1,fxs:10},'Курс упал, рынок «сам разберётся».')]),
 E('tourism','Туристический бум','Страной заинтересовались путешественники.',[
  O('Инвестировать в инфраструктуру',{gdp:350,approval:1,infra:2},'Отели и дороги улучшены.',400),
  O('Просто собрать налоги',{money:400},'Туристы заплатили в казну.')]),
@@ -2300,6 +2300,274 @@ function hoiTick(){
 /* ===== МУЛЬТИПЛЕЕР: точка входа для nations.js ===== */
 const MPSTART={story:{money:26000,approval:72,stability:78,sup:[42,22,19,17]},easy:{money:22000,approval:67,stability:73,sup:[38,23,20,19]},hard:{money:14500,approval:54,stability:59,sup:[30,28,22,20]},expert:{money:10500,approval:47,stability:50,sup:[29,27,24,20]}};
 function mpFresh(diff,name){S=initial();ensure();S.difficulty=DIFFICULTIES[diff]?diff:'normal';const m=MPSTART[S.difficulty];if(m){S.money=m.money;S.approval=m.approval;S.stability=m.stability;m.sup.forEach((v,i)=>S.parties[i].support=v)}if(name)S.name=String(name).slice(0,28);S.history=[];S.history.push(snap())}
+/* ================= ВАЛЮТА · ПОТЕРИ ВОЙНЫ · НОВЫЕ ГРАФИКИ (v2) ================= */
+const okn=v=>typeof v==='number'&&isFinite(v);
+function fxCode(){const w=S.me&&WM[S.me];return w&&w.iso&&window.FXD?FXD.cur(w.iso):'NVT'}
+function fxReal(c){const g=window.FXD&&FXD.get(c);return g?g.v:1}
+function fxEnsure(){
+ const me=S.me||'',cur=fxCode();
+ if(!S.fx||S.fx.me!==me||S.fx.cur!==cur){
+  const ref=cur==='USD'?'EUR':'USD',refB=(cur==='EUR'||ref==='EUR')?'GBP':'EUR';
+  const b=cur==='NVT'?36:fxReal(cur)/fxReal(ref);
+  S.fx={me,cur,ref,refB,base:b,base0:b,rate:b,mom:0,shock:0,lastAlert:-99};S.econ=null;
+ }
+ if(!S.econ)S.econ={pg:S.gdp,last:S.gdp,tr:.002,loss:0,tax:0,gap:0,lossPct:0,peak:0,drag:0,wm:0,war0:null};
+}
+const fxB=()=>{const F=S.fx;return F.rate*fxReal(F.ref)/fxReal(F.refB)};
+function fxMarket(){const F=S.fx;return F.cur==='NVT'?null:fxReal(F.cur)/fxReal(F.ref)}
+function fxShock(p){fxEnsure();const F=S.fx;F.base*=1+p*.8;F.rate*=1+p}
+function fxRebase(){
+ try{
+  if(!S.fx||S.fx.cur==='NVT')return;const F=S.fx;
+  if((S.history||[]).length>3||(S.wars||[]).length||F.moved)return;
+  const nb=fxReal(F.cur)/fxReal(F.ref),k=nb/F.base;if(!isFinite(k)||Math.abs(k-1)<1e-6)return;
+  F.base*=k;F.base0*=k;F.rate*=k;
+  (S.history||[]).forEach(p=>{if(okn(p.fxA))p.fxA*=k;if(okn(p.fxB))p.fxB*=k});
+ }catch(e){}
+}
+const avgReg=k=>(S.regions||[]).reduce((a,r)=>a+(+r[k]||0),0)/Math.max(1,(S.regions||[]).length);
+/* --- потери экономики во время войны --- */
+function econWarTick(){
+ const E=S.econ,t=S.year*12+S.month,ws=S.wars||[],atWar=ws.length>0;
+ if(atWar&&(!E.war0||E.war0.over)){
+  E.war0={t,gdp:S.gdp,infra:avgReg('infra'),ind:avgReg('industry'),emp:S.employment,infl:S.inflation,rate:S.fx.rate,pop:S.pop,army:S.army,tax:S.tax,sold:S.warSold||0,civ:S.warCiv||0};
+  E.loss0=E.loss;E.tax0=E.tax;E.peak=0;
+  log('📉 Начат учёт экономических потерь войны (вкладка «Графики» → «Война и экономика»).');
+ }
+ if(!atWar&&E.war0&&!E.war0.over){E.war0.over=true;E.war0.end=t;E.war0.endGdp=S.gdp;E.war0.endRate=S.fx.rate;
+  S.fx.base*=1+Math.max(0,S.fx.rate/S.fx.base-1)*.5;
+  log(`📊 Война окончена. ВВП ниже довоенной траектории на ${E.lossPct.toFixed(1)}%, накопленные потери выпуска ≈ ${fmt(E.loss-(E.loss0||0))} млрд.`)}
+ const post=!!(E.war0&&E.war0.over&&t-E.war0.end<=36);
+ if(!atWar&&!post&&E.last>0){const g=S.gdp/E.last-1;if(okn(g))E.tr=clamp(E.tr*.85+g*.15,-.004,.012)}
+ let drag=0;
+ if(atWar){
+  ws.forEach(w=>{drag+=.003+.004*(1-clamp(w.p,0,100)/100)+.001*(w.encirclement||0)});
+  drag+=.004*Math.max(0,S.army/Math.max(1,S.pop)*100-.8);
+  if(S.energy<30)drag+=.001;if(S.fuel<25)drag+=.001;
+  drag=Math.min(.022,drag);
+  S.gdp=Math.max(100,S.gdp*(1-drag));E.wm=(E.wm||0)+1;
+ }else if(post&&E.pg>S.gdp*1.012&&S.stability>30){
+  S.gdp*=1+Math.min(.006,(E.pg/S.gdp-1)*.05);
+ }
+ E.drag=drag;
+ if(atWar||(post&&S.gdp<E.pg*.985))E.pg=Math.max(S.gdp,E.pg*(1+E.tr));else E.pg=S.gdp;
+ const gap=Math.max(0,E.pg-S.gdp);
+ E.gap=gap;E.lossPct=E.pg>0?gap/E.pg*100:0;E.peak=Math.max(E.peak||0,E.lossPct);
+ E.loss+=gap/12;E.tax+=gap*S.tax/100/12*1.12;E.last=S.gdp;
+}
+/* --- курс национальной валюты --- */
+function fxStress(){
+ const g=Math.max(1,S.gdp),E=S.econ,ws=S.wars||[];let x=0;
+ x+=.020*Math.max(0,S.inflation-6);
+ x+=.008*Math.max(0,60-(S.trust==null?70:S.trust));
+ x+=.5*Math.max(0,S.debt/g-.15);
+ if(S.money<500)x+=.08;
+ x+=.006*Math.max(0,50-S.stability);
+ x+=.002*Math.max(0,S.threat-40);
+ ws.forEach(w=>{x+=.10+.12*(1-clamp(w.p,0,100)/100)+.02*(w.encirclement||0)});
+ x+=.010*Math.max(0,E.lossPct||0);
+ x-=.003*Math.max(0,S.stability-70)+.002*Math.max(0,(S.trust==null?70:S.trust)-75);
+ return clamp(x,-.12,1.6,1.6);
+}
+function fxTick(){
+ fxEnsure();econWarTick();
+ const F=S.fx,prev=F.rate,t=S.year*12+S.month;
+ let r=prev+(F.base*Math.exp(fxStress())-prev)*.16;
+ r*=Math.exp(rnd(-.006,.006)*(1+((S.wars||[]).length?1.2:0)));
+ r=Math.max(F.base0*.5,r);
+ F.rate=r;F.mom=(r/prev-1)*100;if(Math.abs(r/F.base0-1)>.02)F.moved=1;
+ if(F.mom>2)S.inflation=clamp(S.inflation+Math.min(.8,(F.mom-2)*.08),0,100);
+ if(F.mom>8&&t-F.lastAlert>=3){F.lastAlert=t;log(`💱 Валютный кризис: 1 ${F.ref} подорожал на ${F.mom.toFixed(1)}% за месяц (теперь ${nf(r)} ${F.cur}).`);say('Курс валюты рушится — цены пересматривают каждый день','💸')}
+}
+window.fxShock=fxShock;
+function fxStat(){try{fxEnsure();const F=S.fx;return[['💱',`1 ${F.ref}`,nf(F.rate,F.rate<10?2:F.rate<100?1:0)+' '+F.cur]]}catch(e){return[]}}
+/* --- форматирование --- */
+function nf(v,d,u){
+ if(!okn(v))return '—';const a=Math.abs(v);
+ if(d!=null)return v.toLocaleString('ru-RU',{minimumFractionDigits:d,maximumFractionDigits:d});
+ if(!u&&a>=1e9)return (v/1e9).toFixed(2)+' млрд';
+ if(!u&&a>=1e6)return (v/1e6).toFixed(2)+' млн';
+ if(a>=1000)return Math.round(v).toLocaleString('ru-RU');
+ if(a>=100)return v.toFixed(1);if(a>=10)return v.toFixed(2);return v.toFixed(3).replace(/0$/,'');
+}
+const pct=(v,d=1)=>okn(v)?(v>=0?'+':'−')+Math.abs(v).toFixed(d)+'%':'—';
+const mon=p=>`${months[p.month].slice(0,3)} ${p.year} г.`;
+const TT=p=>p.t!=null?p.t:p.year*12+p.month;
+/* --- состояние окна графиков --- */
+const CHU={g:'econ',p:'all',m:'auto',h:{},hov:{},reg:{}};
+function chGroups(){
+ const F=S.fx||{cur:'—',ref:'USD',refB:'EUR'},cur=F.cur,ref=F.ref,rb=F.refB;
+ return[
+ {id:'econ',ic:'💹',n:'Экономика',charts:[
+  {t:'ВВП, казна и долг',m:'idx',s:[{k:'gdp',n:'ВВП',c:'#69aef2',u:' млрд'},{k:'money',n:'Казна',c:'#55c58a',u:' млн'},{k:'debt',n:'Долг',c:'#ef6d72',u:' млн',bad:1}],note:'Режим «% от старта» показывает рост и падение всех линий в одном масштабе. Проведите пальцем по графику — появятся точные значения.'},
+  {t:'Бюджет: доходы и расходы за месяц',m:'abs',s:[{k:'income',n:'Доходы',c:'#55c58a',u:' млн'},{k:'expense',n:'Расходы',c:'#ef6d72',u:' млн',bad:1}]}]},
+ {id:'fx',ic:'💱',n:'Валюта',charts:[
+  {t:`Курс: сколько ${cur} стоит 1 ${ref} и 1 ${rb}`,m:'abs',s:[{k:'fxA',n:`1 ${ref}`,c:'#f0bd58',u:' '+cur,d:2,bad:1},{k:'fxB',n:`1 ${rb}`,c:'#69aef2',u:' '+cur,d:2,bad:1}],note:'Выше линия — слабее национальная валюта. Красные зоны — время войны.'},
+  {t:'Рост курса за месяц и инфляция',m:'abs',s:[{k:'fxMom',n:'Курс за месяц',c:'#f0bd58',u:'%',d:1,bad:1},{k:'inflation',n:'Инфляция',c:'#ef6d72',u:'%',d:1,bad:1}]}],extra:'fx'},
+ {id:'war',ic:'⚔️',n:'Война и экономика',charts:[
+  {t:'ВВП: факт и «если бы не было войны»',m:'abs',s:[{k:'pg',n:'Без войны',c:'#8aa0b6',u:' млрд',dash:1},{k:'gdp',n:'Факт',c:'#69aef2',u:' млрд'}],note:'Разрыв между линиями — потерянная экономика.'},
+  {t:'Война: ВВП падает — курс растёт',m:'idx',win:'war',s:[{k:'gdp',n:'ВВП',c:'#69aef2'},{k:'fxA',n:`Курс ${ref}`,c:'#f0bd58',bad:1},{k:'income',n:'Доходы бюджета',c:'#55c58a'}],note:'Окно — с начала последней войны (за 3 месяца до неё).'},
+  {t:'Потери экономики',m:'own',s:[{k:'lossPct',n:'Потеря ВВП, %',c:'#ef6d72',u:'%',d:1,bad:1},{k:'lossCum',n:'Накоплено потерь, млрд',c:'#f0bd58',u:' млрд',bad:1},{k:'civDead',n:'Мирные жертвы',c:'#a98be8',bad:1}]}],extra:'war'},
+ {id:'pol',ic:'🏛',n:'Политика',charts:[
+  {t:'Партия, одобрение, стабильность',m:'abs',s:[{k:'partySupport',n:'Партия',c:'#f0bd58',u:'%',d:1},{k:'approval',n:'Одобрение',c:'#69aef2',u:'%',d:1},{k:'stability',n:'Стабильность',c:'#55c58a',u:'%',d:1},{k:'legit',n:'Легитимность',c:'#a98be8',u:'%',d:1}]},
+  {t:'Риск переворота',m:'abs',s:[{k:'coup',n:'Риск переворота',c:'#ef6d72',u:'%',d:1,bad:1}]}]},
+ {id:'soc',ic:'👥',n:'Общество',charts:[
+  {t:'Население и ресурсы',m:'idx',s:[{k:'pop',n:'Население',c:'#69aef2',u:''},{k:'food',n:'Еда',c:'#55c58a',u:'%',d:0},{k:'fuel',n:'Топливо',c:'#f0bd58',u:'%',d:0},{k:'energy',n:'Энергия',c:'#a98be8',u:'%',d:0}]},
+  {t:'Цены и работа',m:'abs',s:[{k:'inflation',n:'Инфляция',c:'#ef6d72',u:'%',d:1,bad:1},{k:'employment',n:'Занятость',c:'#55c58a',u:'%',d:1},{k:'trust',n:'Доверие рынков',c:'#f0bd58',u:'%',d:0}]}]},
+ {id:'mil',ic:'🎖',n:'Армия',charts:[
+  {t:'Армия и угроза',m:'idx',s:[{k:'army',n:'Армия',c:'#f0bd58',u:''},{k:'threat',n:'Угроза',c:'#ef6d72',u:'%',d:0,bad:1},{k:'morale',n:'Боевой дух',c:'#55c58a',u:'%',d:0}]},
+  {t:'Склады и потери',m:'own',s:[{k:'ammo',n:'Боеприпасы',c:'#f0bd58',u:'%',d:0},{k:'equip',n:'Вооружение',c:'#69aef2',u:'%',d:0},{k:'soldDead',n:'Погибло солдат',c:'#ef6d72',u:'',bad:1}]}]}
+ ];
+}
+function chPts(ch){
+ const h=S.history||[];if(!h.length)return[];
+ const tn=TT(h[h.length-1]),P=CHU.p,E=S.econ;let from=-Infinity;
+ if((ch.win==='war'||P==='war')&&E&&E.war0)from=E.war0.t-3;else if(P!=='all'&&P!=='war')from=tn-(+P);
+ let a=h.filter(p=>TT(p)>=from);if(a.length<2)a=h.slice(-Math.max(2,Math.min(h.length,12)));return a;
+}
+function chLegend(id,ch,pts){
+ return ch.s.map(z=>{
+  const vs=pts.map(p=>okn(p[z.k])?+p[z.k]:null),a=vs.find(v=>v!=null),b=[...vs].reverse().find(v=>v!=null),off=CHU.h[id+':'+z.k];
+  let dl='';if(okn(a)&&okn(b)&&a!==0){const d=(b/a-1)*100,good=z.bad?d<=0:d>=0;dl=`<small class="${Math.abs(d)<.05?'':good?'up':'dn'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}%</small>`}
+  return `<button class="chp${off?' off':''}" style="--c:${z.c}" onclick="chTog('${id}','${z.k}')"><i></i>${z.n}<b>${okn(b)?nf(b,z.d,z.u)+(z.u||''):'—'}</b>${dl}</button>`}).join('');
+}
+function chCard(ch,id){
+ const pts=chPts(ch);CHU.reg[id]={ch:{...ch,id},pts};
+ return `<section class="panel chcard"><h2>${ch.t}</h2><div class="chcv"><canvas id="cv_${id}"></canvas></div><div class="chleg">${chLegend(id,ch,pts)}</div>${ch.note?`<p class="chnote">${ch.note}</p>`:''}</section>`;
+}
+function kpi(l,v,sub,cls){return `<div class="kpi"><small>${l}</small><b class="${cls||''}">${v}</b><i class="${cls||''}">${sub||'&nbsp;'}</i></div>`}
+function dlt(a,b,bad){if(!okn(a)||!okn(b)||!a)return['',''];const d=(b/a-1)*100;return[pct(d),(Math.abs(d)<.05?'':(bad?d<=0:d>=0)?'up':'dn')]}
+function chKpis(gid){
+ const h=S.history||[],L=h[h.length-1]||{},F0=h[0]||{},E=S.econ||{},F=S.fx||{};
+ const y=h.length>12?h[h.length-13]:F0;let k=[];
+ if(gid==='econ'){
+  let d=dlt(y.gdp,L.gdp);k=[kpi('ВВП',fmt(S.gdp)+' млрд','за год '+d[0],d[1]),kpi('Казна',fmt(S.money)+' млн'),kpi('Долг',fmt(S.debt)+' млн'),(()=>{const b=(S.lastInc||0)-(S.lastExp||0);return kpi('Баланс за месяц',(b>=0?'+':'−')+fmt(Math.abs(b))+' млн','',b>=0?'up':'dn')})()];
+ }else if(gid==='fx'){
+  const m=fxMarket(),d=dlt(F.base0,F.rate,1);
+  k=[kpi(`1 ${F.ref}`,nf(F.rate,F.rate<10?2:F.rate<100?1:0)+' '+F.cur,'с начала '+d[0],d[1]),kpi('За месяц',pct(F.mom),'',F.mom>0?'dn':'up'),
+     kpi('Рынок (реальный)',m?nf(m,m<10?2:m<100?1:0)+' '+F.cur:'вымышленная валюта',m?'на старте игры':''),kpi('Инфляция',S.inflation.toFixed(1)+'%')];
+ }else if(gid==='war'){
+  const w0=E.war0,dead=(S.warSold||0)+(S.warCiv||0);
+  const r=w0?dlt(w0.rate,F.rate,1):['',''];
+  k=[kpi('Потеря ВВП',(E.lossPct||0).toFixed(1)+'%','пик '+(E.peak||0).toFixed(1)+'%',(E.lossPct||0)>.5?'dn':''),kpi('Потери выпуска',fmt((E.loss||0)-(E.loss0||0))+' млрд','за войну'),
+     kpi(`Курс ${F.ref}`,nf(F.rate,F.rate<10?2:F.rate<100?1:0),w0?'с войны '+r[0]:'',r[1]),kpi('Погибших',fmt(dead),'солдат и мирных')];
+ }else{
+  const g=chGroups().find(z=>z.id===gid),s=g.charts[0].s.slice(0,4);
+  k=s.map(z=>{const a=okn(F0[z.k])?F0[z.k]:null,b=okn(L[z.k])?L[z.k]:null,d=dlt(a,b,z.bad);return kpi(z.n,okn(b)?nf(b,z.d,z.u)+(z.u||''):'—','с начала '+d[0],d[1])});
+ }
+ return `<div class="kpis">${k.join('')}</div>`;
+}
+function fxRate(v){return v>=1000?fmt(v):v>=100?v.toFixed(1):v>=10?v.toFixed(2):v.toFixed(4)}
+function chFxExtra(){
+ const F=S.fx,st=FXD.status(),codes=[...FXD.KEY];if(F.cur!=='NVT'&&!codes.includes(F.cur))codes.unshift(F.cur);
+ const rows=codes.map(c=>{const g=FXD.get(c);if(!g)return'';return `<tr class="${c===F.cur?'me':''}"><td><b>${c}</b> <span class="muted">${FXD.name(c)}</span></td><td class="r">${fxRate(g.v)}${g.src==='approx'?' ≈':''}</td></tr>`}).join('');
+ const m=fxMarket();
+ return card('🌍 Реальные курсы валют мира',`<p class="chnote">${st.txt}</p>${m?`<p>Ваша валюта <b>${F.cur}</b>: рынок — 1 ${F.ref} = <b>${fxRate(m)}</b>, в игре сейчас — <b>${fxRate(F.rate)}</b> (${pct((F.rate/m-1)*100)}).</p>`:'<p class="muted">Новария — вымышленное государство, её валюта (талер) в реальном мире не торгуется; реальные курсы ниже даны для сравнения.</p>'}<div style="overflow:auto"><table class="fxt"><tr><th>Валюта</th><th style="text-align:right">за 1 USD</th></tr>${rows}</table></div><p class="chnote">≈ — приблизительное значение (нет в снимке рынка); при подключении к интернету курсы обновляются автоматически.</p><button onclick="fxRefresh()">🔄 Обновить курсы</button>`);
+}
+function chWarExtra(){
+ const E=S.econ||{},w=E.war0,F=S.fx;
+ if(!w)return card('📊 Итоги экономики войны','<p class="muted">Войны ещё не было. Как только начнётся война, здесь появятся потери ВВП, курс валюты, разрушения и расходы.</p>');
+ const now=S.year*12+S.month,dur=(w.over?w.end:now)-w.t;
+ const row=(n,a,b,bad,f)=>{f=f||fmt;const d=a?(b/a-1)*100:0,good=bad?d<=0:d>=0;return `<tr><td>${n}</td><td class="r">${f(a)}</td><td class="r">${f(b)}</td><td class="r ${Math.abs(d)<.05?'':good?'up':'dn'}">${a?pct(d):''}</td></tr>`};
+ const f1=v=>v.toFixed(1);
+ return card('📊 Итоги экономики войны',`<p class="chnote">${w.over?'Война окончена':'⚔ Война идёт'} · длительность ${dur} мес.</p><div style="overflow:auto"><table class="fxt"><tr><th></th><th style="text-align:right">До войны</th><th style="text-align:right">Сейчас</th><th style="text-align:right">Δ</th></tr>
+ ${row('ВВП, млрд',w.gdp,S.gdp)}${row(`Курс 1 ${F.ref}, ${F.cur}`,w.rate,F.rate,1,v=>nf(v,v<10?2:v<100?1:0))}${row('Инфляция, %',w.infl,S.inflation,1,f1)}${row('Занятость, %',w.emp,S.employment,0,f1)}
+ ${row('Инфраструктура (ср.)',w.infra,avgReg('infra'),0,f1)}${row('Промышленность (ср.)',w.ind,avgReg('industry'),0,f1)}${row('Армия',w.army,S.army)}${row('Население',w.pop,S.pop)}</table></div>
+ <p>Потеря выпуска за войну: <b>${fmt((E.loss||0)-(E.loss0||0))} млрд</b> · недополученные налоги: <b>${fmt((E.tax||0)-(E.tax0||0))} млн</b> · погибло: <b>${fmt((S.warSold||0)-(w.sold||0))}</b> солдат и <b>${fmt((S.warCiv||0)-(w.civ||0))}</b> мирных.</p>`);
+}
+function chartsHtml(){
+ fxEnsure();CHU.reg={};CHU.hov={};
+ const gs=chGroups();if(!gs.some(g=>g.id===CHU.g))CHU.g='econ';
+ const g=gs.find(z=>z.id===CHU.g),E=S.econ||{},hasWar=!!E.war0;
+ if(CHU.p==='war'&&!hasWar)CHU.p='all';
+ const per=[['12','12 мес.'],['36','3 года'],['60','5 лет'],['all','Всё']].concat(hasWar?[['war','⚔ С войны']]:[]);
+ const mod=[['auto','Авто'],['idx','% от старта'],['own','Свой масштаб'],['abs','Значения']];
+ const seg=(arr,k)=>`<div class="seg">${arr.map(a=>`<button class="${CHU[k]===a[0]?'on':''}" onclick="chSet('${k}','${a[0]}')">${a[1]}</button>`).join('')}</div>`;
+ const n=(S.history||[]).length;
+ return `<div id="chroot" class="chroot"><div class="chtabs">${gs.map(z=>`<button class="${z.id===CHU.g?'on':''}" onclick="chSet('g','${z.id}')">${z.ic} ${z.n}</button>`).join('')}</div>
+ <div class="chbar">${seg(per,'p')}${seg(mod,'m')}</div><p class="chnote" style="margin:0 0 8px">С начала партии: ${n} мес.${n<2?' Графики появятся после нескольких месяцев игры.':''}</p>
+ ${chKpis(g.id)}<div class="grid">${g.charts.map((c,i)=>chCard(c,g.id+i)).join('')}</div>${g.extra==='fx'?chFxExtra():''}${g.extra==='war'?chWarExtra():''}</div>`;
+}
+window.chSet=(k,v)=>{CHU[k]=v;render()};
+window.chTog=(id,k)=>{const key=id+':'+k;CHU.h[key]=!CHU.h[key];render()};
+window.chGo=g=>{CHU.g=g;tab='charts';render()};
+window.fxRefresh=()=>{toast('Обновляю курсы валют…');FXD.fetchLive(ok=>{fxRebase();toast(ok?'Курсы валют обновлены':'Нет связи — показан последний снимок рынка');render()},true)};
+function chRng(a){a=a.filter(okn);if(!a.length)return[0,1];let lo=Math.min(...a),hi=Math.max(...a);if(lo===hi){const p=Math.abs(lo)*.05||1;lo-=p;hi+=p}const p=(hi-lo)*.07;return[lo-p,hi+p]}
+function chDraw(id){
+ const R=CHU.reg[id],cv=document.getElementById('cv_'+id);if(!R||!cv)return;
+ const ch=R.ch,pts=R.pts,d=window.devicePixelRatio||1,rc=cv.getBoundingClientRect();
+ cv.width=Math.max(300,Math.round(rc.width*d));cv.height=Math.max(200,Math.round(rc.height*d));
+ const x=cv.getContext('2d'),w=cv.width,h=cv.height,n=pts.length,txt='#a9bacb';
+ x.clearRect(0,0,w,h);x.font=`${11*d}px system-ui,sans-serif`;
+ if(n<2){x.fillStyle=txt;x.fillText('График появится после нескольких месяцев игры',14*d,h/2);return}
+ const ser=ch.s.filter(z=>!CHU.h[id+':'+z.k]&&pts.some(p=>okn(p[z.k])));
+ if(!ser.length){x.fillStyle=txt;x.fillText(ch.s.every(z=>CHU.h[id+':'+z.k])?'Все линии скрыты — включите их ниже':'Нет данных для этого графика пока что',14*d,h/2);return}
+ let mode=CHU.m==='auto'?ch.m:CHU.m,fell=false;
+ const V=ser.map(z=>pts.map(p=>okn(p[z.k])?+p[z.k]:null));
+ if(mode==='abs'&&ser.length>1){const mx=V.map(a=>Math.max(...a.filter(okn).map(Math.abs))),hi=Math.max(...mx),lo=Math.min(...mx.filter(v=>v>0));if(lo>0&&hi/lo>12){mode='own';fell=true}}
+ const L=(mode==='own'?12:58)*d,Rr=12*d,T=16*d,B=28*d,pw=w-L-Rr,ph=h-T-B;
+ let P=V,base=[],mm=[],g=null;
+ if(mode==='idx'){base=V.map(a=>a.find(v=>okn(v)&&v!==0));P=V.map((a,i)=>a.map(v=>okn(v)&&base[i]?(v/base[i]-1)*100:null));g=chRng([].concat(...P,[0]))}
+ else if(mode==='own')mm=V.map(a=>chRng(a));
+ else g=chRng([].concat(...V));
+ const X=i=>L+i/(n-1)*pw,Yf=f=>T+ph*(1-f);
+ const fr=(i,v)=>mode==='own'?(v-mm[i][0])/(mm[i][1]-mm[i][0]):(v-g[0])/(g[1]-g[0]);
+ /* зоны войны */
+ x.fillStyle='rgba(239,109,114,.13)';let st=-1;
+ for(let i=0;i<=n;i++){const wv=i<n&&pts[i].war;if(wv&&st<0)st=i;if(!wv&&st>=0){x.fillRect(X(st)-(st?0:0),T,Math.max(2*d,X(i-1)-X(st)),ph);x.fillStyle='#ef6d72';x.fillText('война',X(st)+4*d,T+11*d);x.fillStyle='rgba(239,109,114,.13)';st=-1}}
+ /* сетка и подписи оси Y */
+ x.strokeStyle='#27415c';x.lineWidth=d;x.fillStyle=txt;x.textAlign='right';
+ for(let i=0;i<=4;i++){const y=T+ph*i/4;x.beginPath();x.moveTo(L,y);x.lineTo(w-Rr,y);x.stroke();
+  if(mode!=='own'){const v=g[1]-(g[1]-g[0])*i/4,sp=g[1]-g[0];
+   x.fillText(mode==='idx'?(v>=0?'+':'−')+Math.abs(v).toFixed(Math.abs(v)>=100?0:1)+'%':nf(v,sp<10?2:sp<100?1:0,'x'),L-6*d,y+4*d)}}
+ x.textAlign='left';
+ if(mode==='idx'&&g[0]<0&&g[1]>0){const y0=Yf((0-g[0])/(g[1]-g[0]));x.strokeStyle='#6f8aa6';x.setLineDash([5*d,4*d]);x.beginPath();x.moveTo(L,y0);x.lineTo(w-Rr,y0);x.stroke();x.setLineDash([])}
+ /* подписи оси X */
+ const tk=Math.max(2,Math.min(5,Math.floor(w/(110*d))));x.fillStyle=txt;
+ for(let j=0;j<tk;j++){const i=Math.round(j/(tk-1)*(n-1)),s=mon(pts[i]),tw=x.measureText(s).width;let px=X(i)-tw/2;px=Math.max(L-10*d,Math.min(w-Rr-tw,px));x.fillText(s,px,h-8*d)}
+ /* линии */
+ ser.forEach((z,si)=>{
+  x.strokeStyle=z.c;x.lineWidth=2.4*d;x.lineJoin='round';x.setLineDash(z.dash?[7*d,5*d]:[]);x.beginPath();let pen=false;
+  P[si].forEach((v,i)=>{if(!okn(v)){pen=false;return}const px=X(i),py=Yf(fr(si,v));pen?x.lineTo(px,py):x.moveTo(px,py);pen=true});x.stroke();x.setLineDash([]);
+  let li=-1;for(let i=n-1;i>=0;i--)if(okn(P[si][i])){li=i;break}
+  if(li>=0){x.fillStyle=z.c;x.beginPath();x.arc(X(li),Yf(fr(si,P[si][li])),3.6*d,0,7);x.fill()}
+ });
+ if(fell){x.fillStyle=txt;x.textAlign='right';x.fillText('значения сильно отличаются — свой масштаб',w-Rr,T+11*d);x.textAlign='left'}
+ /* подсказка при касании */
+ const hi=CHU.hov[id];
+ if(hi!=null&&hi>=0&&hi<n){
+  const px=X(hi);x.strokeStyle='#cfe0f2';x.lineWidth=d;x.beginPath();x.moveTo(px,T);x.lineTo(px,T+ph);x.stroke();
+  const lines=[];
+  ser.forEach((z,si)=>{const v=V[si][hi];if(!okn(v))return;const py=Yf(fr(si,P[si][hi]));x.fillStyle=z.c;x.beginPath();x.arc(px,py,4.4*d,0,7);x.fill();x.strokeStyle='#0b1522';x.lineWidth=1.5*d;x.stroke();
+   let extra='';if(base[si])extra=' ('+pct((v/base[si]-1)*100)+')';lines.push([z.c,`${z.n}: ${nf(v,z.d,z.u)}${z.u||''}${extra}`])});
+  const head=mon(pts[hi])+(pts[hi].war?' · война':'');x.font=`${12*d}px system-ui,sans-serif`;
+  let bw=x.measureText(head).width;lines.forEach(l=>{bw=Math.max(bw,x.measureText(l[1]).width+16*d)});bw+=16*d;
+  const lh=17*d,bh=(lines.length+1)*lh+12*d;let bx=px+12*d;if(bx+bw>w-4*d)bx=px-12*d-bw;bx=Math.max(4*d,bx);const by=T+4*d;
+  x.fillStyle='rgba(8,16,28,.94)';x.strokeStyle='#4a6a8c';x.lineWidth=d;x.beginPath();x.rect(bx,by,bw,bh);x.fill();x.stroke();
+  x.fillStyle='#fff';x.font=`bold ${12*d}px system-ui,sans-serif`;x.fillText(head,bx+8*d,by+lh);x.font=`${12*d}px system-ui,sans-serif`;
+  lines.forEach((l,i)=>{x.fillStyle=l[0];x.fillRect(bx+8*d,by+lh*(i+1)+6*d,8*d,8*d);x.fillStyle='#eaf3ff';x.fillText(l[1],bx+22*d,by+lh*(i+2)+3*d)});
+ }
+ R.geo={L:L/d,R:Rr/d};
+}
+function drawCharts(){
+ if(!document.getElementById('chroot'))return;
+ Object.keys(CHU.reg).forEach(id=>{
+  chDraw(id);const cv=document.getElementById('cv_'+id);if(!cv)return;
+  const mv=e=>{const R=CHU.reg[id];if(!R||!R.geo)return;const rc=cv.getBoundingClientRect(),cx=(e.touches?e.touches[0].clientX:e.clientX)-rc.left,n=R.pts.length;
+   const i=Math.max(0,Math.min(n-1,Math.round((cx-R.geo.L)/Math.max(1,rc.width-R.geo.L-R.geo.R)*(n-1))));if(CHU.hov[id]!==i){CHU.hov[id]=i;chDraw(id)}};
+  const clr=()=>{if(CHU.hov[id]!=null){delete CHU.hov[id];chDraw(id)}};
+  cv.addEventListener('pointermove',mv);cv.addEventListener('pointerdown',mv);cv.addEventListener('pointerleave',clr);cv.addEventListener('pointercancel',clr);
+  cv.addEventListener('pointerup',e=>{if(e.pointerType==='touch')setTimeout(clr,2200)});
+ });
+}
+if(!window.__chResize){window.__chResize=1;window.addEventListener('resize',()=>{try{if(tab==='charts')drawCharts()}catch(e){}})}
+function fxCard(){
+ try{fxEnsure();const F=S.fx,m=fxMarket(),d=(F.rate/F.base0-1)*100;
+  return card('💱 Валюта',`<p>1 ${F.ref} = <b>${fxRate(F.rate)} ${F.cur}</b> <span class="${d>0?'dn':'up'}">${pct(d)} с начала игры</span>${(S.wars||[]).length?' · <span class="dn">война давит на курс</span>':''}</p>${m?`<p class="muted">Реальный рынок: 1 ${F.ref} = ${fxRate(m)} ${F.cur}</p>`:''}<button onclick="chGo('fx')">📈 Графики валюты</button> <button onclick="chGo('war')">⚔️ Потери войны</button>`)}catch(e){return''}
+}
+/* курсы: онлайн-обновление при запуске */
+try{if(window.FXD)FXD.fetchLive(ok=>{if(ok){fxRebase();if(tab==='charts'||tab==='finance')render(true)}})}catch(e){}
+
 window.NG={
  get S(){return S},
  begin(diff,name){NG._bak=NG._bak||S;window.__NG_MP=1;pause();mpFresh(diff,name);tab='overview';render()},
