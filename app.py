@@ -488,7 +488,7 @@ async def group_text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
             )
 
 
-async def drawscores_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def draw_scores_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     if not chat:
         return
@@ -564,7 +564,7 @@ async def lifespan(app: FastAPI):
         tg.add_handler(CommandHandler("draw", draw_command))
         tg.add_handler(CommandHandler("drawgroup", drawgroup_command))
         tg.add_handler(CommandHandler("guessdraw", drawgroup_command))
-        tg.add_handler(CommandHandler("drawscores", drawscores_command))
+        tg.add_handler(CommandHandler("drawscores", draw_scores_command))
         tg.add_handler(CommandHandler("drawhelp", drawhelp_command))
         tg.add_handler(CallbackQueryHandler(drawgroup_callback, pattern=r"^tgdraw:"))
         tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, group_text_handler))

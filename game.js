@@ -280,8 +280,41 @@ window.diplomacy=(i,a)=>{if(blocked())return;let r=S.relations[i],cost=a==='talk
 window.createDoc=()=>{let n=$('#docname').value.trim(),t=$('#doctext').value.trim();if(!n||!t){toast('Заполните название и текст');return}S.documents.unshift({name:n,type:$('#doctype').value,text:t,date:`${months[S.month]} ${S.year}, год`});log(`Подписан документ: ${n}.`);save();render()};
 window.deleteDoc=i=>{S.documents.splice(i,1);save();render()};
 function monthTick(){if(S.campaignOver)return;S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
-window.exportSave=()=>{let blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='novaria-save.json';a.click();URL.revokeObjectURL(a.href)};
-window.importSave=()=>{let f=$('#importfile').files[0];if(!f){toast('Выберите файл');return}let r=new FileReader();r.onload=()=>{try{let x=JSON.parse(r.result);if(!x.regions||!x.parties)throw 0;S={...initial(),...x};save();render();toast('Сохранение загружено')}catch{toast('Неверный файл сохранения')}};r.readAsText(f)};
+window.exportSave=()=>{
+ try{
+  const payload={...S,exportVersion:1,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=`paint-studio-save-${S.year||1}-${String((S.month||0)+1).padStart(2,'0')}.json`;
+  a.style.display='none';document.body.appendChild(a);a.click();a.remove();
+  // Delay revocation: revoking immediately can cancel downloads on mobile browsers.
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  toast('Файл сохранения подготовлен');
+ }catch(err){console.error('Export save failed',err);toast('Не удалось экспортировать сохранение')}
+};
+window.importSave=()=>{
+ const input=$('#importfile'),f=input?.files?.[0];
+ if(!f){toast('Сначала выберите JSON-файл');return}
+ const reader=new FileReader();
+ reader.onerror=()=>toast('Не удалось прочитать файл');
+ reader.onload=()=>{
+  try{
+   const x=JSON.parse(String(reader.result||''));
+   if(!x||typeof x!=='object'||!Array.isArray(x.regions)||!Array.isArray(x.parties))throw new Error('Invalid save structure');
+   if(x.regions.length===0||x.parties.length===0)throw new Error('Empty save');
+   pause();
+   S={...initial(),...x};
+   delete S.exportVersion;delete S.exportedAt;
+   ensure();
+   selectedDifficulty=DIFFICULTIES[S.difficulty]?S.difficulty:'normal';
+   if(window.NationsAI)NationsAI.init(S);
+   save();render();
+   toast('Сохранение успешно импортировано');
+  }catch(err){console.error('Import save failed',err);toast('Файл повреждён или это не сохранение Paint Studio')}
+  finally{input.value=''}
+ };
+ reader.readAsText(f);
+};
 function doReset(){stop();S=initial();S.geoV=GEOV;ensure();if(window.NationsAI)NationsAI.init(S);S.difficulty=selectedDifficulty||'normal';if(S.difficulty==='story'){S.money=26000;S.approval=72;S.stability=78;S.parties[0].support=42;S.parties[1].support=22;S.parties[2].support=19;S.parties[3].support=17}else if(S.difficulty==='easy'){S.money=22000;S.approval=67;S.stability=73;S.parties[0].support=38;S.parties[1].support=23;S.parties[2].support=20;S.parties[3].support=19}else if(S.difficulty==='hard'){S.money=14500;S.approval=54;S.stability=59;S.parties[0].support=30;S.parties[1].support=28;S.parties[2].support=22;S.parties[3].support=20}else if(S.difficulty==='expert'){S.money=10500;S.approval=47;S.stability=50;S.parties[0].support=29;S.parties[1].support=27;S.parties[2].support=24;S.parties[3].support=20}applyCountry();if(window.NationsAI)NationsAI.init(S);S.history=[];let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());save();document.getElementById('gameover')?.remove();tab='overview';render();window.scrollTo(0,0);toast('Новая кампания: '+(S.me?S.name+' · ':'')+difficulty().label)}
 window.resetGame=()=>{ask('Начать новую кампанию? Текущий прогресс будет удалён.',()=>{NEWC=null;doReset()})};
 function play(){if(running||S.campaignOver){if(S.campaignOver)toast('Кампания завершена — начни новую игру');return}running=true;timer=setInterval(monthTick,+$('#speed').value);stats()}
