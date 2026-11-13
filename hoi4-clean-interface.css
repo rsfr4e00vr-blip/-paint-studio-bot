@@ -33,3 +33,30 @@ header{background:linear-gradient(100deg,#0b1724,#17283a 58%,#101b27)!important;
  .nav-menu{position:fixed;left:8px;right:8px;top:auto;max-height:55vh;grid-template-columns:repeat(2,minmax(0,1fr))}
  .topline{grid-template-columns:repeat(2,minmax(0,1fr))!important}
 }
+
+/* Novaria mobile usability pass: touch-friendly controls and compact grouped navigation */
+button{min-height:46px;padding:11px 15px;font-size:14px;touch-action:manipulation}
+.nav-primary button{min-height:50px;padding:12px 15px;font-size:14px}
+.nav-group summary{min-height:48px;display:flex;align-items:center;padding:0 16px;font-size:15px;font-weight:700;cursor:pointer;list-style:none}
+.nav-group summary::-webkit-details-marker{display:none}
+.nav-group summary:after{content:'＋';margin-left:auto;color:var(--gold);font-size:18px}
+.nav-group[open] summary:after{content:'−'}
+.nav-menu button{min-height:48px;width:100%;text-align:left;padding:12px 15px;font-size:14px}
+.tabbar{gap:9px;padding:9px}.nav-primary{gap:8px}.nav-groups{gap:8px}
+.nav-group{border:1px solid var(--line);background:#111a20;margin:5px 0}
+.nav-group .nav-menu{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;padding:9px}
+.nav-group .nav-menu button{white-space:normal;line-height:1.25}
+input,select,textarea{min-height:44px;font-size:16px}
+input[type=range]{min-height:34px;accent-color:var(--gold)}
+.actions{display:flex;flex-wrap:wrap;gap:8px}.actions button{flex:1 1 145px;margin:0;min-height:48px}.mini .actions button{flex:1 1 135px}
+@media(max-width:760px){
+ .nav-primary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+ .nav-primary button{width:100%;min-width:0;white-space:normal;line-height:1.2}
+ .nav-primary button:first-child{grid-column:span 2}
+ .nav-groups{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .nav-group{min-width:0;margin:0}
+ .nav-group summary{font-size:13px;padding:0 10px;min-height:50px}
+ .nav-group .nav-menu{grid-template-columns:1fr;max-height:55vh;overflow:auto}
+ .nav-group .nav-menu button{font-size:14px;min-height:48px}
+ .panel{padding:13px}.mini{padding:13px}.timebar button{min-height:46px;padding:10px}
+}
