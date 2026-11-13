@@ -59,7 +59,7 @@ const OBL=[['Волынь','Волынская',25.3,51.2,'Западный ок
 let NEWC=null;const CHS={q:'',c:'all',n:30};
 function applyCountry(){const n=NEWC;NEWC=null;if(!n||n==='Новария')return;const w=WM[n];if(!w)return;
  const p=Math.max(.1,Math.min(1.15,w.power/100)),inc=[0,.35,.6,1,1.5,2.4][w.inc]||1,e=Math.max(.5,Math.min(2.5,Math.pow(Math.max(.05,w.pop*1e6/8.2e6*inc),.4)));
- S.name=n;S.me=n;S.pop=Math.round(w.pop*1e6);const k=S.pop/8.2e6;S.regions.forEach(r=>r.pop=Math.round(r.pop*k));
+ S.name=n;S.me=n;S.deposits=null;S.pop=Math.round(w.pop*1e6);const k=S.pop/8.2e6;S.regions.forEach(r=>r.pop=Math.round(r.pop*k));
  S.gdp=Math.round(42000*e);S.money=Math.round(S.money*e);S.army=Math.max(500,Math.round(42000*p));S.air=Math.max(2,Math.round(45*p));S.navy=Math.max(1,Math.round(8*p));
  const rl=S.relations.find(r=>r.name===n);if(rl)rl.self=true;
  const C=GEO.c[w.iso];if(C&&C.regs.length>1){const top=[...C.regs].filter(r=>r.n).sort((a,b)=>b.s-a.s).slice(0,S.regions.length);top.forEach((r,i)=>{S.regions[i].name=r.n.replace(/ \(.*\)/,'');S.regions[i].geo=r.id;S.regions[i].resource=RLAB[(r.res||'f')[0]]||S.regions[i].resource})}}
