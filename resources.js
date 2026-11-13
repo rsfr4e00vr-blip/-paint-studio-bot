@@ -106,14 +106,14 @@ const API={
   panel(){
     const s=S();if(!s)return'';const d=ensure();if(!d||!d.list.length)return'';
     const sup=supply(),base=d.base||sup;
-    const stocks=Object.keys(STOCK).map(k=>{const ratio=base[k]?sup[k]/base[k]:1,price=API.prices[Object.keys(FEED[k])[0]]||1;return`<div class="mini"><b>${STOCK[k][1]} ${STOCK[k][0]}</b>${Math.round(s[k])} / 100 · добыча ${Math.round(ratio*100)}% от начальной${price>1.01?`<br><small class="muted">мировая цена ×${price.toFixed(2)}</small>`:''}<div class="actions"><button type="button" onclick="NGRES.imp('${k}')">🚢 Импорт · ${Math.round(IMPORT_COST*price)}</button></div></div>`}).join('');
+    const stocks=Object.keys(STOCK).map(k=>{const ratio=base[k]?sup[k]/base[k]:1,price=API.prices[Object.keys(FEED[k])[0]]||1;return`<div class="mini"><b>${STOCK[k][1]} ${STOCK[k][0]}</b>${Math.round(s[k])} / 100 · добыча ${Math.round(ratio*100)}% от начальной${price>1.01?`<br><small class="muted">мировая цена ×${price.toFixed(2)}</small>`:''}</div>`}).join('');
     const regs=d.list.map(r=>{
       const chips=Object.keys(r.res).map(t=>{const x=r.res[t],p=pctLeft(x);
         const state=x.dead?`<span class="bad">⛔ ${NAME[t]} истощена</span>`:x.left==null?`${ICON[t]} ${NAME[t]} · возобновляется`:`${ICON[t]} ${NAME[t]} · осталось ${p}%`;
         const btn=(x.dead||(x.left!=null&&p<40))?`<button type="button" onclick="NGRES.explore('${esc(r.id)}','${t}')">🔎 Разведка · ${EXPLORE_COST}</button>`:'';
         return`<div style="margin:4px 0">${state}${x.left!=null&&!x.dead?`<div class="bar"><i style="width:${p}%;background:${p<25?'#c23b4b':p<50?'#c9902f':'#2aa56d'}"></i></div>`:''}${btn}</div>`}).join('');
       return`<div class="mini"><b>${esc(r.name)}</b><small class="muted">${esc(r.note)}</small>${chips}</div>`}).join('');
-    return`<section class="panel wide"><h2>🛢 Ресурсы регионов</h2><p class="muted">Нефть, газ, уголь и руда истощаются. Когда месторождения пустеют, запасы страны падают: закупайте импорт, ищите новые залежи или захватывайте богатые земли.</p><div class="cards">${stocks}</div><div class="cards" style="margin-top:8px">${regs}</div></section>`;
+    return`<section class="panel wide"><h2>🛢 Ресурсы регионов</h2><p class="muted">Нефть, газ, уголь и руда истощаются. Когда месторождения пустеют, запасы страны падают: импорт доступен во вкладке «Торговля и рынок», ищите новые залежи или захватывайте богатые земли.</p><div class="cards">${stocks}</div><div class="cards" style="margin-top:8px">${regs}</div></section>`;
   },
   depleted(){const d=S()&&S().deposits;if(!d)return[];const o=[];d.list.forEach(r=>Object.keys(r.res).forEach(t=>{if(r.res[t].dead)o.push({region:r.name,t})}));return o}
 };

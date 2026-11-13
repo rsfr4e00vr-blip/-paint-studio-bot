@@ -231,7 +231,7 @@ function card(title,body){return `<section class="panel"><h2>${title}</h2>${body
 function render(auto){stats();if(auto&&tab==='map'&&WMAP.node&&document.getElementById('wm-slot')){updateWorld();mountEmpire();return}if(auto&&tab==='mp'&&window.NGMP)return;if(auto&&(down||(document.activeElement&&document.activeElement.type==='range')))return;let c='';if(tab==='map')c=empireCard()+worldMapCard()+capList();
 if(tab==='overview')c=`<div class="grid">${warnBanner()}${warPanel()}${card('🗺 Карта державы','<div class="emp-slot"><p class="muted">Строится единая карта…</p></div><p class="muted">Ваши земли и все аннексированные территории показаны одним цветом; вассалы — отдельным оттенком.</p>')}${capList()}${card('Государство',`<div class="cards"><div class="mini"><b>${S.name}</b>Форма правления: ${S.gov}<br>Лидер: ${S.leader}<br>Партия: ${S.party}<br>Сложность: <b>${difficulty().label}</b><div class=\"actions\"><button onclick=\"H.chooser()\">🌍 Выбрать другое государство</button></div></div><div class="mini"><b>Состояние страны</b>${bar('Стабильность',S.stability)}${bar('Одобрение',S.approval)}${bar('Легитимность',S.legitimacy)}</div></div>`)}${card('Национальные ресурсы',`<div class="cards">${[['Продовольствие',S.food],['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo],['Энергия',S.energy],['Технологии',S.tech]].map(x=>`<div class="mini"><b>${x[0]}</b>${x[1]} / 100<div class="bar"><i style="width:${clamp(x[1])}%"></i></div></div>`).join('')}</div>`)}${card('Последние события',`<div class="log">${S.log.slice(0,9).map(x=>`<div>${x}</div>`).join('')}</div>`)}${card('Быстрые действия',`<div class="actions"><button onclick="act('roads')">Построить дороги (500 млн)</button><button onclick="act('aid')">Помощь населению (300 млн)</button><button onclick="act('reform')">Государственная реформа (700 млн)</button></div>`)}</div>`;
 if(tab==='economy')c=`<div class="grid">${card('Экономика',`<div class="cards"><div class="mini">Доходы в месяц <b>${fmt(income())} млн</b></div><div class="mini">Расходы в месяц <b>${fmt(expenses())} млн</b></div><div class="mini">Государственный долг <b>${fmt(S.debt)} млн</b></div><div class="mini">Инфляция <b>${S.inflation}%</b></div></div>${bar('Занятость',S.employment)}<div class="row"><button onclick="act('industry')">Развивать промышленность · 800 млн</button><button onclick="act('trade')">Торговое соглашение · 200 млн</button><button onclick="act('debt')">Погасить 1000 млн долга</button></div>`)}${card('Бюджетные настройки',`<div class="row"><label>Налоговая ставка <b id="taxv">${S.tax}%</b></label><input type="range" min="5" max="50" value="${S.tax}" oninput="setv('tax',this.value,'taxv','%')"></div><div class="row"><label>Здравоохранение <b id="healthv">${S.health}%</b></label><input type="range" min="0" max="35" value="${S.health}" oninput="setv('health',this.value,'healthv','%')"></div><div class="row"><label>Образование <b id="educationv">${S.education}%</b></label><input type="range" min="0" max="35" value="${S.education}" oninput="setv('education',this.value,'educationv','%')"></div><div class="row"><label>Оборона <b id="defensev">${S.defense}%</b></label><input type="range" min="0" max="45" value="${S.defense}" oninput="setv('defense',this.value,'defensev','%')"></div><button class="primary" onclick="saveBudget()">Применить бюджет</button>`)}${taxCard()}${budCard()}</div>`;
-if(tab==='military')c=`<div class="grid">${warPanel()}${card('Вооружённые силы',`<div class="cards">${[['Сухопутные войска',fmt(S.army)+' чел.'],['Флот',S.navy+' кораблей'],['Авиация',S.air+' эскадрилий'],['Подготовка',S.training+'%'],['Боевой дух',S.morale+'%'],['Военная угроза',S.threat+'%']].map(x=>`<div class="mini">${x[0]}<b>${x[1]}</b></div>`).join('')}</div>${bar('Боевой дух',S.morale)}<div class="actions"><button onclick="act('recruit')">Набрать 5 000 солдат · 400 млн</button><button onclick="act('train')">Военные учения · 250 млн</button><button onclick="act('equipment')">Закупить вооружение · 500 млн</button><button onclick="act('mobilize')">Мобилизация</button><button class="danger" onclick="act('demobilize')">Сократить армию</button></div><p>Состояние: <b>${S.war?'ВОЙНА':'Мирное время'}</b></p><button class="${S.war?'good':'danger'}" onclick="act('war')">${S.wars&&S.wars.length?'Заключить мир со всеми':S.martial?'Отменить военное положение':'Ввести военное положение'}</button>`)}${card('Военные запасы',`<div class="cards">${[['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo]].map(x=>`<div class="mini">${x[0]} <b>${x[1]}/100</b></div>`).join('')}</div>`)}</div>`;
+if(tab==='military')c=`<div class="grid">${warPanel()}${card('Вооружённые силы',`<div class="cards">${[['Сухопутные войска',fmt(S.army)+' чел.'],['Флот',S.navy+' кораблей'],['Авиация',S.air+' эскадрилий'],['Подготовка',S.training+'%'],['Боевой дух',S.morale+'%'],['Военная угроза',S.threat+'%']].map(x=>`<div class="mini">${x[0]}<b>${x[1]}</b></div>`).join('')}</div>${bar('Боевой дух',S.morale)}<div class="actions"><button onclick="act('recruit')">Набрать 5 000 солдат · 400 млн</button><button onclick="act('train')">Военные учения · 250 млн</button><button onclick="act('equipment')">Закупить вооружение · 500 млн</button><button onclick="act('mobilize')">Мобилизация</button><button class="danger" onclick="act('demobilize')">Сократить армию</button></div><p>Состояние: <b>${S.war?'ВОЙНА':'Мирное время'}</b></p><button class="${S.war?'good':'danger'}" onclick="act('war')">${S.wars&&S.wars.length?'Заключить мир со всеми':S.martial?'Отменить военное положение':'Ввести военное положение'}</button>`)}${card('Военные запасы',`<div class="cards">${[['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo]].map(x=>`<div class="mini">${x[0]} <b>${x[1]}/100</b></div>`).join('')}</div>`)}${armsCard()}</div>`;
 if(tab==='politics')c=`<div class="grid">${card('Твоя партия',`<div class="mini party-card"><b>🎖 ${S.playerParty}</b>Ты играешь за эту партию. Если она проиграет выборы и потеряет власть — кампания будет проиграна.</div><p>Правящая партия: <b>${S.party}</b></p><p>Глава правительства: <b>${S.leader}</b></p><p>До выборов: <b>${S.election} мес.</b></p><div class="actions"><button class="good" onclick="campaignAction('rally')">Провести митинг · 250 млн</button><button onclick="campaignAction('program')">Опубликовать программу · 400 млн</button><button onclick="act('speech')">Обращение к нации</button><button onclick="act('law')">Принять социальный закон</button><button class="primary" onclick="act('election')">Провести досрочные выборы</button><button onclick="act('security')">Усилить охрану правительства</button></div>${bar('Одобрение правительства',S.approval)}${bar('Риск переворота',S.coupRisk)}${S.grace>0?`<p class="muted">🛡 Защитный срок: ещё ${S.grace} мес. — отставка не грозит</p>`:S.crisis>0?`<p class="muted">⚠️ Угроза отставки (${S.crisisWhy||''}): ${S.crisis} мес. подряд. Власть могут сменить после ${crisisNeed()}-го месяца</p>`:''}</div>`)}${card('Политические партии и парламент',`<div class="cards">${S.parties.slice().sort((a,b)=>b.support-a.support).map(p=>`<div class="mini ${p.name===S.playerParty?'party-card':''}"><b>${p.name} ${p.name===S.playerParty?'★ ТВОЯ ПАРТИЯ':''}</b>${p.ideology}<br>Поддержка: <b>${Math.round(p.support)}%</b> · Мест: ${p.seats}<div class="bar"><i style="width:${clamp(p.support)}%"></i></div></div>`).join('')}</div><p class="action-note">Рейтинг партий меняется каждый месяц в зависимости от экономики, стабильности и решений правительства.</p>`)}</div>`;
 if(tab==='charts')c=`<div class="grid">${card('Экономика: рост и падение',`<div class="chart-wrap"><canvas id="chartEconomy"></canvas></div><p class="action-note">ВВП, казна и государственный долг. История последних 60 месяцев.</p>`)}${card('Политика и общество',`<div class="chart-wrap"><canvas id="chartPolitics"></canvas></div><p class="action-note">Поддержка твоей партии, одобрение правительства и стабильность.</p>`)}${card('Население и ресурсы',`<div class="chart-wrap"><canvas id="chartPopulation"></canvas></div><p class="action-note">Население, продовольствие и топливо.</p>`)}</div>`;
 if(tab==='regions')c=`<div class="cards">${S.regions.map((r,i)=>`<div class="mini"><b>${r.name}</b>Население: ${fmt(r.pop)}<br>Благосостояние: ${r.wealth}%<br>Лояльность: ${r.loyalty}%<br>Недовольство: ${r.unrest}%<br>Промышленность: ${r.industry}%<br>Инфраструктура: ${r.infra}%<br>Ресурс: ${r.resource}<div class="actions"><button onclick="regionAct(${i},'invest')">Инвестиции · 250 млн</button><button onclick="regionAct(${i},'aid')">Помощь · 100 млн</button><button onclick="regionAct(${i},'police')">Порядок</button></div></div>`).join('')}</div>`;
@@ -349,11 +349,22 @@ const cdSet=(k,n)=>{S.cd=S.cd||{};S.cd[k]=n};
 const cdTick=()=>{if(!S.cd)return;for(let k in S.cd)if(S.cd[k]>0)S.cd[k]--};
 const cdMsg=k=>`Подождите ещё ${cdLeft(k)} мес.`;
 const DN=['Иван Корнев','Мария Лозинская','Павел Рудь','Олег Баранов','Елена Ветрова','Артём Щукин','Нина Орлова','Глеб Сомов'];
+/* ------------------------ АРСЕНАЛ (вкладка «Армия») ------------------------ */
+const ARMS={
+ cannon:{n:'Пушка',ic:'💥',c:300,pw:.5,t:'Артиллерия: на войне давит врага'},
+ drone:{n:'Ударный дрон',ic:'🛩',c:250,pw:.4,t:'Дешёвый удар по врагу'},
+ tank:{n:'Танк',ic:'🛡',c:450,pw:1,mil:7,eq:3,t:'Бронетехника · нужно 7+ воен. заводов'},
+ aa:{n:'Комплекс ПВО',ic:'📡',c:700,pw:1.5,mil:7,eq:3,t:'Защита неба · нужно 7+ воен. заводов'},
+ rocket:{n:'Ракета',ic:'🚀',c:600,pw:3,mil:8,eq:4,t:'Дальний удар · нужно 8+ воен. заводов'},
+ bomb:{n:'Бомба',ic:'💣',c:900,pw:15,t:'Оружие устрашения'},
+ petard:{n:'Петарда',ic:'🎆',c:20,pw:0,t:'Для парада'}
+};
+const ARMK=Object.keys(ARMS);
 function ensure(){ensureHoi();if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
-C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}});['cannon','bomb','petard'].forEach(k=>{if(S[k]==null)S[k]=0})}
+C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}});ARMK.forEach(k=>{if(S[k]==null)S[k]=0})}
 function say(t,m){ensure();S.feed.unshift({t,m:m||'🙂',d:`${months[S.month]} ${S.year}`});S.feed=S.feed.slice(0,40)}
 const blocked=()=>{if(S.campaignOver){toast('Кампания завершена. Начни новую игру.');return true}if(S.out){toast('Вы в оппозиции — вернуться к власти можно во вкладке «Возврат»');return true}return false};
-const myPower=()=>S.army/1000+S.air*1.5+S.navy*2+(S.bomb||0)*15+(S.cannon||0)*.5;
+const myPower=()=>S.army/1000+S.air*1.5+S.navy*2+ARMK.reduce((a,k)=>a+(S[k]||0)*ARMS[k].pw,0);
 function aiTick(){let me=myPower(),trade=0,help=0,sanc=0,thr=0,cand=[];
  S.relations.forEach(c=>{if(c.annexed||c.self)return;c.power=Math.max(10,Math.round(c.power+rnd(-1,1.3)));c.value=clamp(c.value+(c.value>0?.1:-.1)*c.aggr,-100,100);
   if(c.value>40){c.intent='Хочет дружить и торговать';if(Math.random()<.08)trade++}
@@ -388,9 +399,16 @@ const OUSTWHY=['низкое одобрение','хаос и беспорядк
 const RET=['Массовые митинги','Народный референдум','Коалиция с другими партиями','Всеобщая забастовка','Компромат на правительство','Досрочные выборы','Популярный новый лидер','Переговоры с депутатами','Международная поддержка','Агитация в СМИ','Сбор подписей','Обращение к армии','Судебный иск','Союз с профсоюзами','Благотворительные акции','Тайные переговоры','Реформа партии','Уличный фестиваль','Антикоррупционное расследование','Поддержка регионов','Голосование в парламенте','Обещание налоговых льгот','Союз с общинами','Голоса диаспоры','Партийный съезд'];
 function ouster(c){if(S.out||S.campaignOver)return;S.crisis=0;let w=S.parties.filter(p=>p.name!==S.playerParty).sort((a,b)=>b.support-a.support)[0];S.out={cause:c,months:0};S.fund=800;S.party=w.name;S.leader='Новое правительство';log(`🚨 Вы потеряли власть: ${c}`);say('Власть сменилась!','😮');pause();toast('Вы потеряли власть! Откройте «Возврат»');tab='comeback';setTimeout(render,120)}
 window.ret=i=>{if(!S.out)return;let cost=100+(i%6)*80,my=S.parties.find(p=>p.name===S.playerParty),ch=(8+(i*7)%22)/100+(my?my.support:0)/300;if(S.fund<cost)return toast('В партийной кассе не хватает денег');S.fund-=cost;if(Math.random()<ch){S.out=null;S.grace=12;S.crisis=0;S.party=S.playerParty;S.leader='Александр Ветров';S.approval=55;S.stability=50;S.legitimacy=50;S.coupRisk=20;S.election=36;S.deps.forEach(d=>d.l=55);log(`✅ Вы вернулись к власти: ${RET[i]}!`);say('Старый лидер вернулся!','🎉');toast('ВЫ ВЕРНУЛИСЬ К ВЛАСТИ!');tab='overview'}else{if(my)my.support=clamp(my.support-1);log(`Попытка не удалась: ${RET[i]}`);toast('Не вышло. Попробуйте другой путь')}save();render()};
-window.buy=k=>{if(blocked())return;let c={cannon:300,bomb:900,petard:20}[k];if(S.money<c)return toast('Недостаточно средств');S.money-=c;S[k]++;log(`Закуплено: ${{cannon:'пушка',bomb:'бомба',petard:'петарда'}[k]}`);if(k=='bomb')S.relations.forEach(r=>r.value=clamp(r.value-3,-100,100));save();render()};
+window.buy=k=>{if(blocked())return;const A=ARMS[k];if(!A)return;if(A.mil&&S.mil<A.mil)return toast(`Нужно ${A.mil}+ военных заводов`);if(S.money<A.c)return toast('Недостаточно средств');if(A.eq&&S.equipment<A.eq)return toast('Не хватает вооружения на складе');S.money-=A.c;if(A.eq)S.equipment=clamp(S.equipment-A.eq);S[k]=(S[k]||0)+1;log(`Закуплено: ${A.n.toLowerCase()}`);if(k=='bomb')S.relations.forEach(r=>r.value=clamp(r.value-3,-100,100));save();render()};
 window.fire=k=>{if(blocked())return;if(!(S[k]>0))return toast('Сначала купите');S[k]--;let R=v=>S.relations.forEach(r=>r.value=clamp(r.value+v,-100,100));
-if(k=='cannon'){if(S.war){S.threat=clamp(S.threat-6);S.morale=clamp(S.morale+2);log('Пушки накрыли позиции врага');say('Наша артиллерия работает!','💪')}else{R(-4);S.approval=clamp(S.approval-1);log('Холостой залп из пушки — соседи нервничают');say('Зачем стрелять из пушек в мирное время?','😟')}}
+const FX={
+ cannon:{w:{thr:-6,mor:2,m:'Пушки накрыли позиции врага',s:['Наша артиллерия работает!','💪']},p:{rel:-4,app:-1,m:'Холостой залп из пушки — соседи нервничают',s:['Зачем стрелять из пушек в мирное время?','😟']}},
+ drone:{w:{thr:-4,mor:1,m:'🛩 Ударные дроны поразили цели врага',s:['Дроны работают по тылам врага','🛩']},p:{rel:-3,app:-1,m:'Дрон над границей — соседи протестуют',s:['Дроны над границей? Соседи в ярости','😬']}},
+ tank:{w:{thr:-8,mor:1,m:'🛡 Танковый удар прорвал оборону',s:['Танки пошли вперёд!','🛡']},p:{rel:-1,app:1,m:'Танковый парад поднял гордость за армию',s:['Парад бронетехники впечатляет','🛡']}},
+ aa:{w:{thr:-5,mor:1,stab:1,m:'📡 ПВО прикрыло города от налётов',s:['Небо над городами защищено','📡']},p:{tr:1,mor:1,m:'📡 Учения ПВО повысили боеготовность',s:['Учения ПВО прошли успешно','📡']}},
+ rocket:{w:{thr:-12,app:-1,rel:-5,m:'🚀 Ракетный удар по тылам врага',s:['Ракеты нанесли удар. Мир наблюдает','🚀']},p:{rel:-12,app:-5,stab:-4,coup:4,m:'🚀 Ракетный пуск в мирное время! Соседи в панике',s:['Ракетный пуск без войны?! Это провокация','😨']}}
+};
+if(FX[k]){const e=S.war?FX[k].w:FX[k].p;if(e.thr)S.threat=clamp(S.threat+e.thr);if(e.mor)S.morale=clamp(S.morale+e.mor);if(e.app)S.approval=clamp(S.approval+e.app);if(e.stab)S.stability=clamp(S.stability+e.stab);if(e.coup)S.coupRisk=clamp(S.coupRisk+e.coup);if(e.tr)S.training=clamp(S.training+e.tr);if(e.rel)R(e.rel);log(e.m);say(e.s[0],e.s[1])}
 if(k=='bomb'){if(S.war){S.threat=clamp(S.threat-18);S.approval=clamp(S.approval-3);R(-10);log('💣 Применена бомба! Мир осуждает');say('Это ужас… нас осудит весь мир','😱')}else{R(-25);S.stability=clamp(S.stability-8);S.approval=clamp(S.approval-12);S.coupRisk=clamp(S.coupRisk+10);log('💣 Бомба в мирное время! Скандал!');say('Вы сошли с ума?! Бомба в мирное время!','🤬')}}
 if(k=='petard'){S.approval=clamp(S.approval+.5);if(Math.random()<.12){S.stability=clamp(S.stability-2);log('Петарда подожгла ларёк на параде');say('Горит ларёк! Ха-ха… и ужас','😂')}else{log('Петарды на празднике подняли настроение');say('Классный салют на параде!','😂')}}
 save();render()};
@@ -414,11 +432,12 @@ function drawCharts(){CH.forEach(c=>drawOne(c[0],c[2]))}
 const mood=v=>v>40?'🤝 Друг':v>10?'🙂 Дружелюбен':v>-20?'😐 Нейтрален':v>-50?'🧊 Холоден':'😠 Враждебен';
 const feedHtml=()=>S.feed.length?S.feed.slice(0,14).map(f=>`<div class="choice"><span style="font-size:20px">${f.m}</span> ${f.t} <small class="muted">· ${f.d}</small></div>`).join(''):'<p class="muted">Пока тихо. Пустите время — люди начнут говорить.</p>';
 function outBanner(){return S.out?`<section class="panel" style="border-color:#c3943e;margin-bottom:10px"><h2>🚨 Вы в оппозиции</h2><p>${S.out.cause}.<br>Правит: <b>${S.party}</b>. Месяцев в оппозиции: ${S.out.months} / 72. Партийная касса: <b>${fmt(S.fund)} млн</b>.</p></section>`:''}
+function armsCard(){return card('💣 Арсенал',`<div class="cards">${ARMK.map(k=>{const A=ARMS[k],lock=A.mil&&S.mil<A.mil;return`<div class="mini"><b>${A.ic} ${A.n}: ${S[k]||0} шт.</b><small class="muted">${A.t}${A.eq?` · −${A.eq} вооружения`:''}</small><div class="actions"><button onclick="buy('${k}')">${lock?'🔒 ':''}Купить · ${A.c} млн</button><button class="danger" onclick="fire('${k}')">Применить</button></div></div>`}).join('')}</div><p class="muted">На войне пушки, дроны, танки, ракеты и ПВО сбивают угрозу и поднимают дух, в мирное время — скандал (кроме парадов и учений). Бомба пугает всех соседей. Петарда — для парада 🎆. Тяжёлое оружие требует военных заводов и вооружения со склада.</p>`)}
 function addonTab(){ensure();let b=outBanner();if(tab==='resources'&&window.NGRES)return b+NGRES.panel();let hx=hoiTab();if(hx!=null)return b+hx;
 if(tab=='charts')return b+chartsHtml();if(tab=='finance')return b+finTab0()+card('🏭 Экономические программы',xcards(ECO2,'e'));if(tab=='power')return b+card('🗳 Власть и политика',`<p class="muted">Режим: <b>${S.gov}</b> · легитимность ${Math.round(S.legitimacy)}% · риск переворота ${Math.round(S.coupRisk)}%</p>`+xcards(POL,'p'));
 if(tab=='people')return b+`<div class="grid">${card('👥 Что говорят люди',feedHtml())}${card('Настроение страны',bar('Одобрение',S.approval)+bar('Стабильность',S.stability)+`<p class="muted">Недовольство регионов: ${S.regions.map(r=>`${r.name} ${Math.round(r.unrest)}%`).join(' · ')}</p>`)}</div>`;
 if(tab=='deputies')return b+card('🏛 Депутаты парламента',`<p class="muted">Средняя лояльность: <b>${Math.round(depLoyal())}%</b>. Если она упадёт ниже 20% — возможен вотум недоверия.</p><div class="cards">${S.deps.map((d,i)=>`<div class="mini"><b>${d.n}</b>${d.p}${bar('Лояльность',d.l)}<div class="actions"><button onclick="dep(${i},'meet')">Встреча</button><button onclick="dep(${i},'bribe')">Подкуп · 200</button><button class="danger" onclick="dep(${i},'expel')">Заменить</button></div></div>`).join('')}</div>`);
-if(tab=='arms')return b+card('💣 Арсенал',`<div class="cards">${[['cannon','Пушка','300 млн'],['bomb','Бомба','900 млн'],['petard','Петарда','20 млн']].map(a=>`<div class="mini"><b>${a[1]}: ${S[a[0]]} шт.</b><div class="actions"><button onclick="buy('${a[0]}')">Купить · ${a[2]}</button><button class="danger" onclick="fire('${a[0]}')">Применить</button></div></div>`).join('')}</div><p class="muted">Пушка и бомба помогают на войне, но в мирное время — скандал. Бомба пугает всех соседей. Петарда — для парада 🎆</p>`);
+if(tab=='arms')return b+armsCard();
 if(tab=='comeback')return S.out?b+card('🔙 Путь к возвращению (25 способов)',`<div class="cards">${RET.map((n,i)=>{let my=S.parties.find(p=>p.name===S.playerParty);return`<div class="mini"><b>${n}</b>Цена ${100+(i%6)*80} млн · шанс ~${Math.round(((8+(i*7)%22)/100+(my?my.support:0)/300)*100)}%<div class="actions"><button class="primary" onclick="ret(${i})">Попробовать</button></div></div>`}).join('')}</div>`):card('Возврат','Вы у власти. Эта вкладка нужна, только если вас сместят.');
 if(tab=='diplomacy')return b+`<div class="grid">${vassalPanel()}${aiPanel()}${window.NationsAI?NationsAI.panel(S):''}${card('🌐 Дипломатия и отношения',wlPanel('dip'))}</div>`;
 return null}
@@ -1004,7 +1023,7 @@ function evTab(){
 
 /* ------------------------ ИНИЦИАЛИЗАЦИЯ ------------------------ */
 function ensureHoi(){
- const d={captured:[],lost:[],pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0}};
+ const d={captured:[],lost:[],pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bld:{},bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0}};
  for(const k in d)if(S[k]==null)S[k]=d[k];
  if(S.event&&!S.event.id)S.event=null;
  if(!S.regions.find(r=>r.name==='Центральный округ')&&!(S.lost||[]).includes('Центральный округ'))S.regions.push({name:'Центральный округ',pop:1100000,wealth:58,loyalty:66,unrest:15,industry:52,infra:62,resource:'Агро'});
@@ -1095,23 +1114,80 @@ function taxCard(){
 }
 
 /* ------------------------ ЗАВОДЫ И СТРОЙКА ------------------------ */
-const BUILD={civ:{n:'Гражданский завод',c:500,m:4,t:'+10 млн/мес к доходу',ic:'🏭'},mil:{n:'Военный завод',c:450,m:4,t:'Выпуск вооружения и боеприпасов · −6 млн/мес, тратит сталь',ic:'⚙️'},dock:{n:'Верфь',c:600,m:5,t:'Нужна для кораблей (до 6 кораблей на верфь)',ic:'⚓'},ship:{n:'Боевой корабль',c:700,m:5,t:'Флот +1',ic:'🚢'},sq:{n:'Авиаэскадрилья',c:550,m:4,t:'Авиация +2 (нужно 4+ воен. завода)',ic:'✈️'},fort:{n:'Укрепрайон',c:350,m:3,t:'Угроза −5, боевой дух +1',ic:'🧱'}};
-const bslotsN=()=>S.bslots+(S.flags.bs?1:0)+advSum('bs');
+const BUILD={
+ // k: гражданские объекты
+ civ:{g:'civ',n:'Гражданский завод',c:500,m:12,t:'+10 млн/мес к доходу · стройка ~год',ic:'🏭'},
+ power:{g:'civ',n:'Электростанция',c:650,m:10,t:'Энергия +0.15/мес',ic:'⚡'},
+ refinery:{g:'civ',n:'Нефтеперерабатывающий завод',c:600,m:9,t:'Топливо +0.12/мес',ic:'⛽'},
+ steelw:{g:'civ',n:'Металлургический комбинат',c:550,m:9,t:'Сталь +0.12/мес',ic:'🔩'},
+ agro:{g:'civ',n:'Агрокомплекс',c:400,m:6,t:'Продовольствие +0.12/мес',ic:'🌾'},
+ port:{g:'civ',n:'Торговый порт',c:700,m:10,t:'+6 млн/мес торговли',ic:'🚢'},
+ rail:{g:'civ',n:'Железная дорога',c:800,m:12,t:'Инфраструктура регионов +2, стабильность +1',ic:'🚆'},
+ hospital:{g:'civ',n:'Больница',c:350,m:6,t:'Одобрение +2, стабильность +1',ic:'🏥'},
+ univ:{g:'civ',n:'Университет',c:500,m:10,t:'ВВП +0.4%, одобрение +1',ic:'🎓'},
+ // военные объекты (доступны всегда)
+ mil:{g:'mil',n:'Военный завод',c:450,m:12,t:'Выпуск вооружения и боеприпасов · −6 млн/мес, тратит сталь · стройка ~год',ic:'⚙️'},
+ dock:{g:'mil',n:'Верфь',c:600,m:12,t:'Нужна для кораблей (до 6 кораблей на верфь) · стройка ~год',ic:'⚓'},
+ ship:{g:'mil',n:'Боевой корабль',c:700,m:8,t:'Флот +1',ic:'🚢'},
+ sq:{g:'mil',n:'Авиаэскадрилья',c:550,m:6,t:'Авиация +2 (нужно 4+ воен. завода)',ic:'✈️'},
+ fort:{g:'mil',n:'Укрепрайон',c:350,m:4,t:'Угроза −5, боевой дух +1',ic:'🧱'},
+ barracks:{g:'mil',n:'Казармы',c:400,m:6,t:'Армия +8 000 чел.',ic:'🏕'},
+ depot:{g:'mil',n:'Военный склад',c:350,m:4,t:'Вооружение +12, боеприпасы +12',ic:'📦'},
+ // военные объекты только во время войны
+ bunker:{g:'war',n:'Бункерная линия',c:500,m:5,t:'Угроза −8, боевой дух +1',ic:'🛡'},
+ aabat:{g:'war',n:'Позиции ПВО',c:450,m:4,t:'Угроза −4 и ещё −0.3/мес на войне',ic:'📡'},
+ milhosp:{g:'war',n:'Военный госпиталь',c:400,m:4,t:'Боевой дух +3 и +0.2/мес на войне',ic:'🏥'},
+ airfield:{g:'war',n:'Военный аэродром',c:800,m:6,t:'Авиация +3 (нужна 1 эскадрилья)',ic:'🛫'},
+ base:{g:'war',n:'Военная база',c:900,m:8,t:'Армия +15 000 чел., подготовка +3',ic:'🏰'},
+ silo:{g:'war',n:'Ракетная шахта',c:1200,m:10,t:'Ракеты в арсенале +2 (нужно 8+ воен. заводов)',ic:'🚀'}
+};
+const BGROUPS=[['civ','🏙 Гражданские объекты'],['mil','⚔️ Военные объекты'],['war','🔥 Только во время войны']];
+const atWar=()=>!!(S.wars&&S.wars.length);
+const bcount=k=>(S.bld&&S.bld[k])||0;
+const bslotsN=()=>Math.max(S.bslots,4)+(S.flags.bs?1:0)+advSum('bs');
 H.build=k=>{
  if(blocked())return;const B=BUILD[k];
  if(S.build.length>=bslotsN())return toast('Нет свободных слотов стройки');
  if(k==='ship'&&S.navy>=S.dock*6)return toast('Нужно больше верфей');
  if(k==='sq'&&S.mil<4)return toast('Нужно 4+ военных завода');
+ if(B.g==='war'&&!atWar())return toast('Этот объект можно строить только во время войны');
+ if(k==='airfield'&&S.air<1)return toast('Нужна хотя бы одна авиаэскадрилья');
+ if(k==='silo'&&S.mil<8)return toast('Нужно 8+ военных заводов');
  if(S.money<B.c)return toast('Недостаточно средств');
- S.money-=B.c;S.build.push({t:k,left:B.m});log(`Начато строительство: ${B.n}.`);save();render();
+ S.money-=B.c;S.build.push({t:k,left:B.m,m:B.m});log(`Начато строительство: ${B.n}.`);save();render();
 };
 function buildTick(){
  S.build=S.build.filter(b=>{
   b.left--;if(b.left>0)return true;
   const k=b.t;
+  if(!BUILD[k])return false;
   if(k==='civ')S.civ++;else if(k==='mil')S.mil++;else if(k==='dock')S.dock++;else if(k==='ship')S.navy++;else if(k==='sq')S.air+=2;else if(k==='fort'){S.threat=clamp(S.threat-5);S.morale=clamp(S.morale+1)}
+  else{
+   if(!S.bld)S.bld={};S.bld[k]=(S.bld[k]||0)+1;
+   if(k==='rail'){S.stability=clamp(S.stability+1);S.regions.forEach(r=>r.infra=clamp(r.infra+2))}
+   else if(k==='hospital'){S.approval=clamp(S.approval+2);S.stability=clamp(S.stability+1)}
+   else if(k==='univ'){S.gdp*=1.004;S.approval=clamp(S.approval+1)}
+   else if(k==='barracks')S.army+=8000;
+   else if(k==='depot'){S.equipment=clamp(S.equipment+12);S.ammo=clamp(S.ammo+12)}
+   else if(k==='bunker'){S.threat=clamp(S.threat-8);S.morale=clamp(S.morale+1)}
+   else if(k==='aabat')S.threat=clamp(S.threat-4);
+   else if(k==='milhosp')S.morale=clamp(S.morale+3);
+   else if(k==='airfield')S.air+=3;
+   else if(k==='base'){S.army+=15000;S.training=clamp(S.training+3)}
+   else if(k==='silo')S.rocket=(S.rocket||0)+2;
+  }
   log(`${BUILD[k].ic} Построено: ${BUILD[k].n}.`);toast('Построено: '+BUILD[k].n);return false;
  });
+ // постоянные эффекты построенных объектов
+ if(S.bld){
+  const B=bcount;
+  if(B('power'))S.energy=clamp(S.energy+.15*B('power'));
+  if(B('refinery'))S.fuel=clamp(S.fuel+.12*B('refinery'));
+  if(B('steelw'))S.steel=clamp(S.steel+.12*B('steelw'));
+  if(B('agro'))S.food=clamp(S.food+.12*B('agro'));
+  if(B('port'))S.money+=6*B('port');
+  if(atWar()){S.threat=clamp(S.threat-.3*B('aabat'));S.morale=clamp(S.morale+.2*B('milhosp'))}
+ }
 }
 function prodTick(){
  const L=ECOL[S.law.eco]||ECOL.civ;
@@ -1567,9 +1643,11 @@ function staffTab(){
 }
 function indTab(){
  const L=ECOL[S.law.eco]||ECOL.civ;
- let h=card('🏭 Промышленность',`<div class="cards"><div class="mini">Гражданские заводы<b>${S.civ}</b>доход ${incFlat()>=0?'+':''}${incFlat()} млн/мес относительно базы</div><div class="mini">Военные заводы<b>${S.mil}</b>выпуск ×${(L.out*(1+techSum('mo')+advSum('mo'))).toFixed(2)}</div><div class="mini">Верфи<b>${S.dock}</b>флот: ${S.navy}</div><div class="mini">Слоты стройки<b>${S.build.length} / ${bslotsN()}</b></div></div><p class="muted">Военные заводы расходуют сталь и дают вооружение и боеприпасы. Закон экономики влияет на выпуск и доход. Стройка стоит денег сразу.</p>`);
- h+=card('🏗 Очередь строительства',S.build.length?`<div class="cards">${S.build.map(b=>`<div class="mini party-card"><b>${BUILD[b.t].ic} ${BUILD[b.t].n}</b>осталось ${b.left} мес.<div class="bar"><i style="width:${(1-b.left/BUILD[b.t].m)*100}%"></i></div></div>`).join('')}</div>`:'<p>Очередь пуста.</p>');
- h+=card('➕ Построить',`<div class="cards">${Object.keys(BUILD).map(k=>`<div class="mini"><b>${BUILD[k].ic} ${BUILD[k].n}</b><small>${BUILD[k].t}</small><br><span class="muted">${BUILD[k].m} мес.</span><div class="actions"><button class="primary" onclick="H.build('${k}')">${BUILD[k].c} млн</button></div></div>`).join('')}</div>`);
+ let h=card('🏭 Промышленность',`<div class="cards"><div class="mini">Гражданские заводы<b>${S.civ}</b>доход ${incFlat()>=0?'+':''}${incFlat()} млн/мес относительно базы</div><div class="mini">Военные заводы<b>${S.mil}</b>выпуск ×${(L.out*(1+techSum('mo')+advSum('mo'))).toFixed(2)}</div><div class="mini">Верфи<b>${S.dock}</b>флот: ${S.navy}</div><div class="mini">Слоты стройки<b>${S.build.length} / ${bslotsN()}</b></div></div><p class="muted">Военные заводы расходуют сталь и дают вооружение и боеприпасы. Закон экономики влияет на выпуск и доход. Стройка стоит денег сразу. Заводы строятся около года, остальные объекты — от 4 до 12 месяцев. Военные объекты (бункеры, ПВО, госпитали, аэродромы, базы, ракетные шахты) строятся только на войне.</p>`);
+ h+=card('🏗 Очередь строительства',S.build.length?`<div class="cards">${S.build.filter(b=>BUILD[b.t]).map(b=>`<div class="mini party-card"><b>${BUILD[b.t].ic} ${BUILD[b.t].n}</b>осталось ${b.left} мес.<div class="bar"><i style="width:${Math.max(0,Math.min(100,(1-b.left/(b.m||BUILD[b.t].m))*100))}%"></i></div></div>`).join('')}</div>`:'<p>Очередь пуста.</p>');
+ h+=card('🏭 Построенные объекты',`<div class="cards">${Object.keys(BUILD).filter(k=>bcount(k)>0).map(k=>`<div class="mini"><b>${BUILD[k].ic} ${BUILD[k].n}</b>${bcount(k)} шт.</div>`).join('')||'<p class="muted">Пока нет особых объектов — стройте электростанции, порты, больницы и военные базы.</p>'}</div>`);
+ BGROUPS.forEach(([gk,title])=>{const ks=Object.keys(BUILD).filter(k=>BUILD[k].g===gk),lock=gk==='war'&&!atWar();
+  h+=card('➕ '+title,(gk==='war'?`<p class="muted">${lock?'🔒 Сейчас вы не воюете со страной — эти объекты откроются с началом войны.':'⚔️ Идёт война — военные объекты доступны.'}</p>`:'')+`<div class="cards">${ks.map(k=>`<div class="mini"><b>${BUILD[k].ic} ${BUILD[k].n}</b><small>${BUILD[k].t}</small><br><span class="muted">${BUILD[k].m} мес.</span><div class="actions"><button class="primary" onclick="H.build('${k}')">${lock?'🔒 ':''}${BUILD[k].c} млн</button></div></div>`).join('')}</div>`)});
  return `<div class="grid">${h}</div>`;
 }
 
