@@ -68,6 +68,8 @@ function on(m){
   case'dictate_open':NG.toast(`💪 Перевес на фронте против ${m.enemy}! Выберите условия во вкладке «Мультиплеер»`);note(`💪 Можно диктовать условия: ${m.enemy}`,'war');paintAll();break;
   case'cede_request':cedeRegion(m);break;
   case'region_gain':gainLand(m);break;
+  case'vassal_tax_set':note(`💰 ${m.side==='lord'?'Вы установили':'Сюзерен установил'} дань ${m.rate}% для ${m.country}`,'dip');paintAll();break;
+  case'vassal_revolt':note(`⚠️ ${m.country} вышел из вассалитета!`,'warn');paintAll();break;
   case'annexed':{const S=NG.S;S.campaignOver=true;NG.log(`🏴 Наша страна полностью захвачена: ${m.by}`);NG.say('Страна захвачена…','😢');note(`🏴 ${m.by} захватил вашу страну. Вы наблюдаете за игрой.`,'warn');afterEffect();break}
   case'peace_offer':peaceOffer=m;showProposal({id:'peace',what:'peace',text:`${m.from} предлагает мир.`,ttl:30});break;
   case'final':finalData=m;view='final';active=false;paintModal();openModal();setBar();break;
@@ -234,6 +236,7 @@ function table(list){
 }
 function chips(c){if(!c)return'';const n={eco:'Эко',welfare:'Нар.',gov:'Упр.',fin:'Фин.',mil:'Арм.'};return Object.keys(n).map(k=>`<span class="chip">${n[k]} ${c[k]}</span>`).join('')}
 window.NGMP={
+  setVassalTax(id,rate){send({type:'vassal_tax',vassal:id,rate:Number(rate)})},
   tab(){
     if(!room.code)return `<section class="panel"><h2>🌍 Мультиплеер</h2><p>Вы не в комнате.</p><button class="primary" onclick="NGMP.open()">Создать или войти</button></section>`;
     if(room.state==='lobby')return `<section class="panel"><h2>🌍 Комната ${esc(room.code)}</h2><p>Игра ещё не началась.</p><button class="primary" onclick="NGMP.open()">Открыть лобби</button></section>`;
@@ -261,7 +264,9 @@ function paintMods(){
     (theyWon?`<p><b>🏳 Вы разгромлены.</b> Противник выбирает условия (${3-(w.wm||0)} мес.), иначе — контрибуция.</p>`:
     `<p class="muted2">${iWon?`🏆 Полная победа! Вы решаете, чем закончить войну (${3-(w.wm||0)} мес., иначе контрибуция):`:can?'💪 Перевес! Вы решаете, чем закончить войну:':'Условия можно диктовать при перевесе от 60%, область — от 70%, захват страны — при полной победе.'}</p>
     <div class="row"><button class="good" data-term="tribute" ${can?'':'disabled'}>💰 Контрибуция</button><button class="primary" data-term="vassal" ${can?'':'disabled'}>👑 Вассал (24 мес.)</button><button class="danger" data-term="region" ${reg?'':'disabled'}>🗺 Отнять область</button><button class="danger" data-term="annex" ${iWon?'':'disabled'}>🏴 Захватить страну</button></div>`)}
-  e.innerHTML=`<h2>📊 Моя экономика в мультиплеере</h2><div>${[['📜 Торговые пакты',md.pact],['⛔ Санкции',md.sanction],['👑 Вассалитет',md.vassal||0],['⚖️ Баланс (догоняющий бонус / бремя лидера)',md.rubber]].map(x=>`<span class="chip ${x[1]>0?'good':x[1]<0?'bad':''}">${x[0]} ${pct(x[1])}</span>`).join('')}</div><p class="muted2">Итоговая поправка к доходу: <b>${pct(md.total)}</b> (${S.mpFlat>0?'+':''}${fmt(S.mpFlat||0)} млн/мес). Последний в таблице получает до +5%, лидер платит до −3%.</p>${wh}${S.campaignOver?'<p><b>💀 Ваша кампания окончена — вы наблюдатель.</b></p>':S.out?'<p><b>🪧 Вы в оппозиции: очки ×0,6, пока не вернётесь к власти.</b></p>':''}`;
+  const myVassals=standings.filter(q=>q.vassal_of===me.id);
+  const vassalUI=myVassals.length?`<h3>👑 Управление вассалами</h3>${myVassals.map(q=>`<div class="mini"><b>${esc(q.country)}</b><p class="muted2">Текущая дань: ${q.vassal_tax??10}% · высокая дань повышает риск восстания</p><label>Доля дохода: <b id="vt-${q.id}">${q.vassal_tax??10}%</b></label><input type="range" min="0" max="40" step="1" value="${q.vassal_tax??10}" oninput="document.getElementById('vt-${q.id}').textContent=this.value+'%'" onchange="window.NGMP.setVassalTax('${q.id}',this.value)"><small class="muted2">0% — вассал почти не платит; 40% — больше доход, но риск отделения значительно выше.</small></div>`).join('')}`:'';
+  e.innerHTML=`<h2>📊 Моя экономика в мультиплеере</h2><div>${[['📜 Торговые пакты',md.pact],['⛔ Санкции',md.sanction],['👑 Вассалитет',md.vassal||0],['⚖️ Баланс (догоняющий бонус / бремя лидера)',md.rubber]].map(x=>`<span class="chip ${x[1]>0?'good':x[1]<0?'bad':''}">${x[0]} ${pct(x[1])}</span>`).join('')}</div><p class="muted2">Итоговая поправка к доходу: <b>${pct(md.total)}</b> (${S.mpFlat>0?'+':''}${fmt(S.mpFlat||0)} млн/мес). Последний в таблице получает до +5%, лидер платит до −3%.</p>${vassalUI}${wh}${S.campaignOver?'<p><b>💀 Ваша кампания окончена — вы наблюдатель.</b></p>':S.out?'<p><b>🪧 Вы в оппозиции: очки ×0,6, пока не вернётесь к власти.</b></p>':''}`;
 }
 function paintDip(){
   const e=$('#mpDip');if(!e)return;const S=NG.S,list=(standings.length?standings:room.players).filter(p=>p.id!==me.id);

@@ -109,6 +109,7 @@ class Player:
         self.war = None               # id войны
         self.vassal_of = None         # id сюзерена
         self.vassal_end = 0
+        self.vassal_tax = 10          # процент дохода, который вассал платит сюзерену
         self.vassals: dict = {}       # id вассала -> конец срока
         self.regions_lost = 0
 
@@ -117,7 +118,7 @@ class Player:
                 "connected": self.connected, "ready": self.ready,
                 "eliminated": self.eliminated, "out": self.out,
                 "score": round(self.score, 1), "comp": self.comp,
-                "vassal_of": self.vassal_of,
+                "vassal_of": self.vassal_of, "vassal_tax": self.vassal_tax,
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
                 "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"])}
@@ -220,8 +221,8 @@ class Room:
         rub = self.rubber(p)
         vas = 0.0
         if p.vassal_of and p.vassal_end > self.month:
-            vas -= VASSAL_TAKE
-        vas += VASSAL_GAIN * sum(1 for end in p.vassals.values() if end > self.month)
+            vas -= p.vassal_tax / 100.0
+        vas += sum((self.players[k].vassal_tax / 100.0) * 0.70 for k, end in p.vassals.items() if end > self.month and k in self.players)
         return {"pact": round(pact, 4), "sanction": round(-sanc - self_cost, 4),
                 "rubber": round(rub, 4), "vassal": round(vas, 4),
                 "total": round(pact - sanc - self_cost + rub + vas, 4)}
@@ -256,6 +257,7 @@ class Room:
         self.month += 1
         await self.process_wars()
         self.expire()
+        await self.check_vassal_rebellions()
         for p in self.players.values():
             self.compute_score(p)
         order = self.ranking()
@@ -265,6 +267,29 @@ class Room:
             "standings": [p.pub() for p in order], "mods": mods,
             "wars": [self.war_pub(w) for w in self.wars.values()],
         })
+
+    async def check_vassal_rebellions(self):
+        """Чем выше дань и слабее стабильность вассала, тем выше шанс выхода из вассалитета."""
+        for v in list(self.players.values()):
+            if not v.vassal_of or v.vassal_end <= self.month:
+                continue
+            lord = self.players.get(v.vassal_of)
+            if not lord:
+                v.vassal_of = None
+                continue
+            tax = max(0, min(40, int(v.vassal_tax)))
+            stab = float(v.rep.get("stab", 60))
+            # До 10% налог почти безопасен; 40% при низкой стабильности — серьёзный риск.
+            chance = max(0.0, tax - 10) * 0.0015 + max(0.0, 55 - stab) * 0.0012
+            chance = min(0.065, chance)
+            if random.random() < chance:
+                lord.vassals.pop(v.id, None)
+                v.vassal_of = None
+                v.vassal_end = 0
+                v.vassal_tax = 10
+                await self.notice(f"⚠️ {v.country} восстал и вышел из вассалитета страны {lord.country}!", "war")
+                await self.send(lord, {"type": "vassal_revolt", "country": v.country, "side": "lord"})
+                await self.send(v, {"type": "vassal_revolt", "country": lord.country, "side": "vassal"})
 
     def expire(self):
         for pid, pr in list(self.proposals.items()):
@@ -345,6 +370,7 @@ class Room:
         elif mode == "vassal":
             win.vassals[lose.id] = self.month + VASSAL_MONTHS
             lose.vassal_of, lose.vassal_end = win.id, self.month + VASSAL_MONTHS
+            lose.vassal_tax = 10
             await self.send(win, {"type": "war_end", "result": "win", "enemy": lose.country, "money": 0, "approval": 4, "stability": 0})
             await self.send(lose, {"type": "war_end", "result": "lose", "enemy": win.country, "money": 0, "approval": -6, "stability": -3})
             await self.notice(f"👑 {lose.country} стал вассалом страны {win.country} на {VASSAL_MONTHS} мес.", "war")
@@ -496,6 +522,8 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_peace(room, p, msg)
     elif kind == "dictate":
         await on_dictate(room, p, msg)
+    elif kind == "vassal_tax":
+        await on_vassal_tax(room, p, msg)
     elif kind == "cede":
         await on_cede(room, p, msg)
 
@@ -696,6 +724,25 @@ async def on_dictate(room: Room, p: Player, msg: dict):
             await room.notice("Вассалом не может стать тот, кто сам вассал или имеет сюзерена.", "warn", p)
             return
     await room.resolve(w, p, other, mode)
+
+
+async def on_vassal_tax(room: Room, p: Player, msg: dict):
+    """Сюзерен задаёт налог своему вассалу: 0–40% дохода."""
+    try:
+        vid = str(msg.get("vassal", ""))
+        rate = int(num(msg.get("rate"), 0, 40, 10))
+    except (TypeError, ValueError):
+        return
+    if vid not in p.vassals or p.vassals.get(vid, 0) <= room.month:
+        await room.notice("Этот игрок больше не является вашим вассалом.", "warn", p)
+        return
+    v = room.players.get(vid)
+    if not v or v.vassal_of != p.id:
+        return
+    v.vassal_tax = rate
+    await room.send(p, {"type": "vassal_tax_set", "country": v.country, "rate": rate, "side": "lord"})
+    await room.send(v, {"type": "vassal_tax_set", "country": p.country, "rate": rate, "side": "vassal"})
+    await room.notice(f"💰 Сюзерен {p.country} установил дань для {v.country}: {rate}% дохода.", "dip")
 
 
 async def on_cede(room: Room, p: Player, msg: dict):
