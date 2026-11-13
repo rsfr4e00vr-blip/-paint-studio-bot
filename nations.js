@@ -22,7 +22,7 @@ const hdr=document.querySelector('header');(hdr?hdr.parentNode:document.body).in
 bar.style.cssText='margin:10px auto 0;max-width:1226px;width:calc(100% - 24px)';
 const modal=document.createElement('div');modal.id='mpModal';document.body.appendChild(modal);
 const prop=document.createElement('div');prop.id='mpProp';document.body.appendChild(prop);
-const tabs=$('#tabs');if(tabs){const b=document.createElement('button');b.dataset.tab='mp';b.textContent='🌍 Мультиплеер';b.className='nav-main';const np=tabs.querySelector('.nav-primary');if(np)np.insertBefore(b,np.firstChild);else tabs.insertBefore(b,tabs.firstChild)}
+const tabs=$('#tabs');if(tabs){const b=document.createElement('button');b.dataset.tab='mp';b.textContent='🌍 Мультиплеер';b.className='nav-main';const np=tabs.querySelector('.sub[data-cat="main"]');if(np)np.insertBefore(b,np.firstChild);else tabs.insertBefore(b,tabs.firstChild)}
 ['play','pause','stop','step','speed'].forEach(id=>{const e=$('#'+id);if(e)orig[id]=e.onclick||e.onchange});
 
 /* ---------- сеть ---------- */
