@@ -690,6 +690,14 @@ def ai_nations_js():
 def resources_js():
     return FileResponse(BASE / "resources.js", media_type="application/javascript")
 
+@app.get("/fx.js")
+def fx_js():
+    return FileResponse(BASE / "fx.js", media_type="application/javascript")
+
+@app.get("/charts.css")
+def charts_css():
+    return FileResponse(BASE / "charts.css", media_type="text/css")
+
 @app.get("/geo.js")
 def geo_js():
     return FileResponse(BASE / "geo.js", media_type="application/javascript")

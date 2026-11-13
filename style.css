@@ -164,7 +164,3 @@ input[type=range]{min-height:34px;accent-color:var(--gold)}
 .wnews>b{display:block;margin-bottom:4px}
 .wnews .wn{padding:3px 0;font-size:13px;border-top:1px solid rgba(255,255,255,.06)}
 .wnews .wn span{font-size:16px;margin-right:4px}
-
-.chart-wrap{min-height:230px;height:245px;overflow-x:auto;border:1px solid rgba(130,160,190,.18);border-radius:12px;padding:8px;background:rgba(7,18,29,.28)}
-.chart-wrap canvas{display:block;width:100%;min-width:280px;height:220px}.chart-help{margin-bottom:12px}
-.fxrow{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(130,160,190,.18);font-size:13px}.fxrow b{text-align:right}.big-number{font-size:28px;font-weight:800;margin:6px 0}
