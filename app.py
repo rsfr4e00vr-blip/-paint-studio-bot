@@ -645,6 +645,21 @@ def nations_js():
     return FileResponse(BASE / "nations.js", media_type="application/javascript")
 
 
+@app.get("/interface-v4.css")
+def interface_v4_css():
+    return FileResponse(BASE / "interface-v4.css", media_type="text/css")
+
+
+@app.get("/hoi4-clean-interface.css")
+def hoi4_clean_css():
+    return FileResponse(BASE / "hoi4-clean-interface.css", media_type="text/css")
+
+
+@app.get("/nav-fix.css")
+def nav_fix_css():
+    return FileResponse(BASE / "nav-fix.css", media_type="text/css")
+
+
 @app.get("/nations.css")
 def nations_css():
     return FileResponse(BASE / "nations.css", media_type="text/css")
