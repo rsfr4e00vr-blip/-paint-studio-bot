@@ -17,59 +17,39 @@ const S=()=>window.NG&&NG.S;
 const tm=()=>{const s=S();return s?(s.year-1)*12+s.month:0};
 
 function mkRes(t,tier){return t==='g'?{tier,left:null,dead:false}:{tier,left:tier*LIFE[t]*rnd(.7,1.3),max:0,rate:rnd(.8,2.0),dead:false}}
-// Ресурсы формируются по выбранной стране и её реальным регионам из WORLD_SEEDS / WORLD.REGS.
-// Для остальных государств используется национальный профиль ресурсов из WORLD_DATA.
-const CODE_MAP={f:{g:1},u:{o:1,y:1},s:{e:1,c:1},e:{y:1},q:{e:1}};
-const RESOURCE_LABEL={g:'зерно и сельское хозяйство',o:'нефть',y:'газ',c:'уголь',e:'руда и металлы'};
-const REGION_HINTS=[
-  [/нефт|газ|дельт|восточн|сахалин|хузестан|баср|атар|кувейт/i,['o','y']],
-  [/угол|шахт|донбасс|северн|сибир|урал|руд|горн|металл|кемеров/i,['c','e']],
-  [/зерн|равнин|долин|централ|южн|плодород|панджаб|пенджаб|канзас|айова/i,['g']],
-  [/промышлен|столиц|мегаполис|лондон|токио|сеул|шанхай|милан|лombард/i,['e','g']],
-  [/лес|тайг|амазон|папуа|калимантан/i,['c','e']]
-];
-function profileFor(country){
-  const rows=window.WORLD_DATA&&WORLD_DATA.countries||[];
-  const c=rows.find(x=>x.ru===country);
-  if(c&&c.r)return c.r;
-  const w=window.WORLD&&WORLD.map&&WORLD.map[country];
-  const out={};String(w&&w.res||'f').split('').forEach(code=>Object.assign(out,CODE_MAP[code]||{}));
-  return out.g||out.o||out.y||out.c||out.e?out:{g:1};
-}
-function codeResources(code,profile){
-  const out={};String(code||'').split('').forEach(k=>{const mapped=CODE_MAP[k]||{};Object.keys(mapped).forEach(t=>out[t]=Math.max(out[t]||0,profile[t]||mapped[t]))});
-  return out;
-}
-function regionResources(name,index,profile,code){
-  if(code){const fromCode=codeResources(code,profile);if(Object.keys(fromCode).length)return fromCode;}
-  const keys=Object.keys(profile||{}).filter(k=>NAME[k]&&Number(profile[k])>0).sort((a,b)=>(profile[b]||0)-(profile[a]||0));
-  if(!keys.length)return {g:1};
-  const low=String(name||'').toLowerCase();
-  let chosen=null;
-  for(const [re,types] of REGION_HINTS){if(re.test(low)){chosen=types.filter(t=>keys.includes(t));if(chosen.length)break}}
-  if(!chosen||!chosen.length){const first=keys[index%keys.length];const second=keys.length>1?keys[(index+2)%keys.length]:null;chosen=[first];if(second&&second!==first&&index%3!==1)chosen.push(second)}
-  const out={};chosen.forEach(t=>out[t]=Math.max(1,Math.min(5,Math.round(profile[t]||1))));
-  return out;
-}
+// Данные месторождений привязаны к выбранной стране, а не к вымышленной Новарии.
+const ITALY={
+ 'Ломбардия':{note:'Машиностроение, металлургия, сельское хозяйство',res:{e:3,g:2}},
+ 'Венето':{note:'Промышленность, виноградники, зерновые и гидроэнергетика',res:{g:3,e:1}},
+ 'Эмилия-Романья':{note:'Плодородные равнины По, сельское хозяйство и природный газ',res:{g:4,y:2}},
+ 'Лацио':{note:'Римская агломерация, услуги, сельское хозяйство и геотермальная энергия',res:{g:2,y:1}},
+ 'Сицилия':{note:'Нефть и газ, сельское хозяйство, сера и портовая экономика',res:{o:2,y:2,g:2}},
+ 'Пьемонт':{note:'Машиностроение, металлургия, гидроэнергетика и зерновые',res:{e:2,g:2}},
+ 'Кампания':{note:'Сельское хозяйство, пищевая промышленность и геотермальная энергия',res:{g:3,y:1}}
+};
 function countryRegions(s){
   const country=s.me||s.name||'Новария';
   if(country==='Новария'){
     const WD=window.WORLD_DATA||{novaria:[]};
     return (WD.novaria||[]).map(r=>({id:r.id,name:r.ru,note:r.note||'',res:r.res||{}}));
   }
-  const profile=profileFor(country);
-  const seeds=window.WORLD_SEEDS&&WORLD_SEEDS[country];
-  if(seeds&&seeds.length){
-    return seeds.map((r,i)=>({id:country+':seed:'+i,name:r.n,note:`Региональные ресурсы: ${Object.keys(regionResources(r.n,i,profile)).map(t=>RESOURCE_LABEL[t]).join(', ')}`,res:regionResources(r.n,i,profile)}));
-  }
+  if(country==='Италия') return Object.entries(ITALY).map(([name,v],i)=>({id:'ITA:'+i,name,note:v.note,res:v.res}));
   const rows=window.WORLD&&WORLD.REGS&&WORLD.REGS[country];
-  if(rows&&rows.length){
-    return rows.map((r,i)=>{const res=regionResources(r.n,i,profile,r.res);return{id:country+':'+i,name:r.n,note:`Региональные ресурсы: ${Object.keys(res).map(t=>RESOURCE_LABEL[t]).join(', ')}`,res}});
-  }
-  // Если в базе нет административного деления страны, показываем её национальный профиль,
-  // а не подставляем чужие области или вымышленные названия.
-  const res=regionResources(country,0,profile);
-  return [{id:country+':national',name:country,note:'Национальный ресурсный профиль; региональная разбивка для этой страны пока отсутствует',res}];
+  if(rows&&rows.length) return rows.map((r,i)=>{
+    const res={};
+    // Коды мировой базы: f — аграрный сектор, u — нефть/газ, s — металлы/уголь,
+    // e — энергетика, q — промышленность.
+    String(r.res||'').split('').forEach(code=>{
+      if(code==='f')res.g=Math.max(res.g||0,Math.max(1,Math.round((r.s||4)/4)));
+      if(code==='u'){res.o=Math.max(res.o||0,1);res.y=Math.max(res.y||0,1)}
+      if(code==='s'){res.e=Math.max(res.e||0,1);res.c=Math.max(res.c||0,1)}
+      if(code==='e')res.y=Math.max(res.y||0,1);
+      if(code==='q')res.e=Math.max(res.e||0,1);
+    });
+    return {id:country+':'+i,name:r.n,note:'Региональная промышленность и природные ресурсы',res};
+  });
+  const w=window.WORLD&&WORLD.map&&WORLD.map[country];
+  return [{id:country+':0',name:country,note:'Национальные ресурсы и производство',res:(()=>{const x={};String(w&&w.res||'f').split('').forEach(c=>{if(c==='f')x.g=2;if(c==='u'){x.o=1;x.y=1}if(c==='s'){x.e=1;x.c=1}if(c==='e')x.y=1;if(c==='q')x.e=1});return x})()}];
 }
 function ensure(){
   const s=S();if(!s)return null;

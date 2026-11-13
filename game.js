@@ -282,49 +282,39 @@ window.deleteDoc=i=>{S.documents.splice(i,1);save();render()};
 function monthTick(){if(S.campaignOver)return;S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}addonTick();log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
 window.exportSave=()=>{
  try{
-  // A portable, versioned backup. Keep the state under `state` so future
-  // versions can migrate it without confusing metadata with game fields.
-  const payload={format:'paint-studio-save',schemaVersion:2,app:'Paint Studio',exportedAt:new Date().toISOString(),gameDate:{year:S.year||1,month:(S.month||0)+1},state:S};
-  const json=JSON.stringify(payload,null,2);
-  const blob=new Blob([json],{type:'application/json;charset=utf-8'});
+  const payload={...S,exportVersion:1,exportedAt:new Date().toISOString()};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
   const url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download=`paint-studio-${String(S.name||'campaign').replace(/[^\p{L}\p{N}_-]+/gu,'-').slice(0,32)}-${S.year||1}-${String((S.month||0)+1).padStart(2,'0')}.json`;
+  a.href=url;a.download=`paint-studio-save-${S.year||1}-${String((S.month||0)+1).padStart(2,'0')}.json`;
   a.style.display='none';document.body.appendChild(a);a.click();a.remove();
-  // Some mobile webviews need a little longer before the object URL is revoked.
-  setTimeout(()=>URL.revokeObjectURL(url),10000);
-  toast('Экспорт подготовлен — проверь папку «Загрузки»');
+  // Delay revocation: revoking immediately can cancel downloads on mobile browsers.
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+  toast('Файл сохранения подготовлен');
  }catch(err){console.error('Export save failed',err);toast('Не удалось экспортировать сохранение')}
 };
-window.importSave=(file)=>{
- const quick=$('#quickImportFile'),legacy=$('#importfile');
- const input=file?(file===quick?.files?.[0]?quick:legacy?.files?.[0]===file?legacy:quick||legacy):(quick?.files?.length?quick:legacy?.files?.length?legacy:quick||legacy),f=file||input?.files?.[0];
- if(!f){toast('Выбери JSON-файл сохранения');return}
+window.importSave=()=>{
+ const input=$('#importfile'),f=input?.files?.[0];
+ if(!f){toast('Сначала выберите JSON-файл');return}
  const reader=new FileReader();
  reader.onerror=()=>toast('Не удалось прочитать файл');
  reader.onload=()=>{
   try{
-   const raw=JSON.parse(String(reader.result||''));
-   // Accept the new versioned envelope and older exports made by previous builds.
-   const x=raw&&raw.format==='paint-studio-save'?raw.state:raw;
-   if(!x||typeof x!=='object'||Array.isArray(x)||!Array.isArray(x.regions)||!Array.isArray(x.parties)||!Array.isArray(x.relations))throw new Error('Not a Paint Studio save');
-   if(!x.regions.length||!x.parties.length)throw new Error('Empty save');
-   for(const k of ['money','year','month','pop','gdp','army'])if(x[k]!==undefined&&!Number.isFinite(Number(x[k])))throw new Error('Invalid numeric field '+k);
-   if(x.regions.some(r=>!r||typeof r.name!=='string')||x.parties.some(q=>!q||typeof q.name!=='string'))throw new Error('Invalid entities');
-   const applyImported=()=>{
-    pause();S={...initial(),...x};
-    delete S.exportVersion;delete S.exportedAt;
-    ensure();selectedDifficulty=DIFFICULTIES[S.difficulty]?S.difficulty:'normal';
-    if(window.NationsAI)NationsAI.init(S);
-    save();render();toast('Кампания импортирована успешно');
-   };
-   // Do not overwrite the active campaign without a clear confirmation.
-   ask('Импорт заменит текущую кампанию. Перед этим рекомендуется экспортировать резервную копию. Продолжить?',applyImported);
-  }catch(err){console.error('Import save failed',err);toast('Файл не подходит или повреждён. Нужен JSON Paint Studio.')}
-  finally{if(quick)quick.value='';if(legacy)legacy.value=''}
+   const x=JSON.parse(String(reader.result||''));
+   if(!x||typeof x!=='object'||!Array.isArray(x.regions)||!Array.isArray(x.parties))throw new Error('Invalid save structure');
+   if(x.regions.length===0||x.parties.length===0)throw new Error('Empty save');
+   pause();
+   S={...initial(),...x};
+   delete S.exportVersion;delete S.exportedAt;
+   ensure();
+   selectedDifficulty=DIFFICULTIES[S.difficulty]?S.difficulty:'normal';
+   if(window.NationsAI)NationsAI.init(S);
+   save();render();
+   toast('Сохранение успешно импортировано');
+  }catch(err){console.error('Import save failed',err);toast('Файл повреждён или это не сохранение Paint Studio')}
+  finally{input.value=''}
  };
  reader.readAsText(f);
 };
-
 function doReset(){stop();S=initial();S.geoV=GEOV;ensure();if(window.NationsAI)NationsAI.init(S);S.difficulty=selectedDifficulty||'normal';if(S.difficulty==='story'){S.money=26000;S.approval=72;S.stability=78;S.parties[0].support=42;S.parties[1].support=22;S.parties[2].support=19;S.parties[3].support=17}else if(S.difficulty==='easy'){S.money=22000;S.approval=67;S.stability=73;S.parties[0].support=38;S.parties[1].support=23;S.parties[2].support=20;S.parties[3].support=19}else if(S.difficulty==='hard'){S.money=14500;S.approval=54;S.stability=59;S.parties[0].support=30;S.parties[1].support=28;S.parties[2].support=22;S.parties[3].support=20}else if(S.difficulty==='expert'){S.money=10500;S.approval=47;S.stability=50;S.parties[0].support=29;S.parties[1].support=27;S.parties[2].support=24;S.parties[3].support=20}applyCountry();if(window.NationsAI)NationsAI.init(S);S.history=[];let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());save();document.getElementById('gameover')?.remove();tab='overview';render();window.scrollTo(0,0);toast('Новая кампания: '+(S.me?S.name+' · ':'')+difficulty().label)}
 window.resetGame=()=>{ask('Начать новую кампанию? Текущий прогресс будет удалён.',()=>{NEWC=null;doReset()})};
 function play(){if(running||S.campaignOver){if(S.campaignOver)toast('Кампания завершена — начни новую игру');return}running=true;timer=setInterval(monthTick,+$('#speed').value);stats()}
@@ -332,10 +322,6 @@ function pause(){running=false;clearInterval(timer);timer=null;stats()}
 function stop(){pause();$('#speed').value='1800';toast('Время остановлено, скорость сброшена до 1×')}
 $('#play').onclick=play;$('#pause').onclick=pause;$('#stop').onclick=stop;$('#step').onclick=()=>{pause();monthTick()};$('#speed').onchange=()=>{if(running){pause();play()}};
 $('#tabs').onclick=e=>{let b=e.target.closest('[data-tab]');if(b){tab=b.dataset.tab;render()}};
-$('#quickSave')?.addEventListener('click',()=>{save();toast('Кампания сохранена на этом устройстве')});
-$('#quickExport')?.addEventListener('click',()=>window.exportSave());
-$('#quickImport')?.addEventListener('click',()=>$('#quickImportFile')?.click());
-$('#quickImportFile')?.addEventListener('change',e=>{if(e.target.files?.[0])window.importSave(e.target.files[0])});
 document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 /* ===== ДОПОЛНЕНИЯ v2 ===== */
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
@@ -1593,14 +1579,31 @@ function mkTick(){
   log(`📈 ${t}.`);say(t,up?'📈':'📉');
  }
 }
+function worldTensionValue(){
+ const rels=(S.relations||[]).filter(r=>!r.annexed&&!r.self);
+ const hostile=rels.filter(r=>r.value<-35).length;
+ const avgAggr=rels.length?rels.reduce((a,r)=>a+clamp((Number(r.aggr)||.25)*100,0,100),0)/rels.length:25;
+ const wars=(S.wars||[]).length;
+ const captured=(S.captured||[]).length;
+ return clamp(Math.round((Number(S.threat)||0)*.32+wars*20+hostile*2.2+avgAggr*.14+(S.martial?7:0)+captured*.55),0,100);
+}
+function worldTensionTab(){
+ const v=worldTensionValue();
+ const stage=v<20?['Низкая','Мирная обстановка','#4ba77a']:v<40?['Повышенная','Дипломатические кризисы','#b2a34e']:v<60?['Высокая','Региональные конфликты','#d18a3b']:v<80?['Критическая','Мир на грани большой войны','#d35b45']:['Предвоенная','Глобальный конфликт практически неизбежен','#c83f4b'];
+ const hostile=(S.relations||[]).filter(r=>!r.annexed&&!r.self&&r.value<-35).sort((a,b)=>a.value-b.value).slice(0,8);
+ const wars=(S.wars||[]).map(w=>`<div class="mini"><b>⚔️ ${w.n}</b><small>Поддержка фронта: ${Math.round(w.p||0)}% · ${w.def?'оборона':'наступление'}</small></div>`).join('')||'<p class="muted">Активных войн сейчас нет.</p>';
+ const enemies=hostile.map(r=>`<div class="mini"><b>${r.name}</b><small>Отношения: ${Math.round(r.value)} · агрессивность ИИ: ${Math.round((r.aggr||0)*100)}%</small></div>`).join('')||'<p class="muted">Нет государств с критически плохими отношениями.</p>';
+ const factors=[['Военная угроза',Math.round(S.threat||0)+'%'],['Активные войны',(S.wars||[]).length],['Враждебные государства',hostile.length],['Средняя агрессивность ИИ',Math.round((S.relations||[]).filter(r=>!r.annexed&&!r.self).reduce((a,r)=>a+(r.aggr||.25),0)/Math.max(1,(S.relations||[]).filter(r=>!r.annexed&&!r.self).length)*100)+'%']];
+ return `<div class="grid"><section class="panel wide"><h2>🌍 Мировая напряжённость</h2><p class="muted">Общий индикатор того, насколько международная обстановка близка к большой войне. Он рассчитывается по войнам, угрозам, агрессивности государств и дипломатическим отношениям.</p><div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:16px 0"><div style="font:700 54px/1 'Oswald',sans-serif;color:${stage[2]}">${v}%</div><div style="flex:1;min-width:180px"><b style="font-size:20px;color:${stage[2]}">${stage[0]}</b><div class="muted">${stage[1]}</div></div></div><div style="height:18px;background:#1b2730;border:1px solid #53616a;border-radius:3px;overflow:hidden"><div style="height:100%;width:${v}%;background:linear-gradient(90deg,#4ba77a 0%,#b2a34e 40%,#d18a3b 65%,#c83f4b 100%);transition:width .3s"></div></div><div class="row" style="justify-content:space-between;font-size:12px;color:#9caab2"><span>Мир</span><span>Кризис</span><span>Глобальная война</span></div></section>${card('📊 Факторы напряжённости',`<div class="cards">${factors.map(x=>`<div class="mini"><small>${x[0]}</small><b>${x[1]}</b></div>`).join('')}</div>`)}${card('⚔️ Активные конфликты',wars)}${card('🚨 Наиболее напряжённые отношения',enemies)}${card('Как меняется показатель',`<p class="muted">Напряжённость растёт при начале войн, усилении военной угрозы и ухудшении отношений. Снижается постепенно, когда угрозы уходят и дипломатия стабилизируется. Это игровой индикатор, а не реальная статистика.</p><div class="mini"><b>Состояние вашей страны</b>${bar('Военная угроза',S.threat)}${bar('Стабильность',S.stability)}<small>Активные войны: ${(S.wars||[]).length} · Военное положение: ${S.martial?'введено':'не введено'}</small></div>`)}</div>`;
+}
 function marketTab(){
  const cost=g=>mkBuy(g),tr=g=>{const d=S.mk.m[g]-(S.mk.prev[g]||S.mk.m[g]);return Math.abs(d)<.005?'▬':d>0?'<span class="fxb">▲</span>':'<span class="fxg">▼</span>'};
- return `<div class="grid">${card('🛒 Мировой рынок',`<p class="muted">Покупай нехватающие ресурсы (импорт) и продавай излишки (экспорт). Цены колеблются, растут в войну и при низком доверии рынков, дешевеют при хороших отношениях. Лимит — 30 единиц на товар в месяц. Баланс торговли: экспорт <b>${fmt(S.mk.exp)}</b> · импорт <b>${fmt(S.mk.imp)}</b> млн.</p><div class="cards">${Object.keys(MK).map(g=>`<div class="mini"><b>${MK[g][1]} ${MK[g][0]} ${tr(g)}</b>${bar('Запас',S[g])}<small>Купить: <b>${mkBuy(g)}</b> млн/ед. · Продать: <b>${mkSell(g)}</b> млн/ед.<br>Осталось лимита: ${S.mk.q[g]}</small><div class="actions"><button class="primary" onclick="H.mkBuy('${g}',5)">Купить 5</button><button class="primary" onclick="H.mkBuy('${g}',15)">Купить 15</button><button onclick="H.mkSell('${g}',5)">Продать 5</button><button onclick="H.mkSell('${g}',15)">Продать 15</button></div></div>`).join('')}</div>`)}</div>`;
+ return `<div class="grid">${card('💱 Экспорт и импорт ресурсов',`<p class="muted">Покупай нехватающие ресурсы (импорт) и продавай излишки (экспорт). Цены колеблются, растут в войну и при низком доверии рынков, дешевеют при хороших отношениях. Лимит — 30 единиц каждого ресурса за месяц. Кнопки «Купить» означают импорт, «Продать» — экспорт. Баланс торговли: экспорт <b>${fmt(S.mk.exp)}</b> · импорт <b>${fmt(S.mk.imp)}</b> млн.</p><div class="cards">${Object.keys(MK).map(g=>`<div class="mini"><b>${MK[g][1]} ${MK[g][0]} ${tr(g)}</b>${bar('Запас',S[g])}<small>Купить: <b>${mkBuy(g)}</b> млн/ед. · Продать: <b>${mkSell(g)}</b> млн/ед.<br>Осталось лимита: ${S.mk.q[g]}</small><div class="actions"><button class="primary" onclick="H.mkBuy('${g}',5)">Купить 5</button><button class="primary" onclick="H.mkBuy('${g}',15)">Купить 15</button><button onclick="H.mkSell('${g}',5)">Продать 5</button><button onclick="H.mkSell('${g}',15)">Продать 15</button></div></div>`).join('')}</div>`)}</div>`;
 }
 const SEA=`<text x="330" y="500" text-anchor="middle" class="maptxt2" style="opacity:.55">ЧЁРНОЕ МОРЕ</text><text x="640" y="430" text-anchor="middle" class="maptxt2" style="opacity:.55">Азовское</text>`;
 
 function hoiTab(){
- if(tab==='events')return evTab();if(tab==='market')return marketTab();if(tab==='bills')return billsTab();if(tab==='people')return peopleTab();if(tab==='focus')return focusTab();if(tab==='research')return researchTab();
+ if(tab==='events')return evTab();if(tab==='market')return marketTab();if(tab==='worldtension')return worldTensionTab();if(tab==='bills')return billsTab();if(tab==='people')return peopleTab();if(tab==='focus')return focusTab();if(tab==='research')return researchTab();
  if(tab==='industry')return indTab();if(tab==='staff')return staffTab();if(tab==='advisors')return advTab();
  return null;
 }

@@ -75,19 +75,3 @@ table{border-collapse:separate;border-spacing:0;overflow:hidden;border:1px solid
 }
 @media(min-width:761px){.timebar{top:0}.tabbar{top:65px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
-
-/* Campaign command strip and save tools: grand-strategy inspired, responsive */
-.timebar{gap:6px}
-.timebar .save-tools{display:flex;gap:5px;margin-left:auto;padding-left:8px;border-left:1px solid #3a4650}
-.timebar .save-tools button{min-height:36px;padding:7px 10px;font-size:12px;white-space:nowrap}
-.timebar #quickSave{color:#f2dfb0;border-color:#8b7441}
-.timebar #quickExport{background:#34452f;border-color:#6f9a5a;color:#e1f0d7}
-.timebar #quickImport{background:#263b4b;border-color:#5b89a8;color:#d9ebf7}
-#tabs{scroll-snap-type:x proximity}
-#tabs button{scroll-snap-align:start}
-@media(max-width:760px){
- .timebar{display:flex;flex-wrap:wrap}
- .timebar .time-now{flex:1 0 100%;width:auto}
- .timebar .save-tools{flex:1 0 100%;margin:3px 0 0;padding:7px 0 0;border-left:0;border-top:1px solid #3a4650}
- .timebar .save-tools button{flex:1;min-width:0}
-}
