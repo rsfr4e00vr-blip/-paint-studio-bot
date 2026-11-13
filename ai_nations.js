@@ -1,78 +1,84 @@
-/* Global AI for the single-player world: all countries in WORLD.list act every game month. */
+/* Advanced single-player grand strategy AI: economy, alliances, fronts, logistics and exports. */
 (function(){'use strict';
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const rnd=(a,b)=>a+Math.random()*(b-a);
-const pick=a=>a[Math.floor(Math.random()*a.length)];
+const C=(v,a,b)=>Math.max(a,Math.min(b,v)),R=(a,b)=>a+Math.random()*(b-a),P=a=>a[Math.floor(Math.random()*a.length)];
 function init(S){
  if(!window.WORLD||!Array.isArray(WORLD.list))return;
  const player=S.me||S.name||'Новария';
- if(!S.aiWorld||!Array.isArray(S.aiWorld.nations)||S.aiWorld.version!==1){
-  S.aiWorld={version:1,month:0,nations:WORLD.list.filter(c=>c.name!==player).slice(0,194).map(c=>({name:c.name,iso:c.iso||'',pop:Math.max(.02,+c.pop||1),gdp:Math.max(1,(+c.pop||1)*(+c.inc||1)*100),power:Math.max(5,+c.power||15),stability:rnd(42,78),treasury:rnd(300,2200),growth:rnd(.001,.008),relations:rnd(-18,35),allies:[],war:null,owner:null,annexed:false,trait:c.trait||''})),events:[],alliances:[],wars:[],owners:{},player};
+ if(!S.aiWorld||!Array.isArray(S.aiWorld.nations)){
+  S.aiWorld={version:3,month:0,nations:WORLD.list.filter(c=>c.name!==player).slice(0,194).map(c=>({name:c.name,iso:c.iso||'',pop:Math.max(.02,+c.pop||1),gdp:Math.max(1,(+c.pop||1)*(+c.inc||1)*100),power:Math.max(5,+c.power||15),stability:R(48,78),treasury:R(500,2400),growth:R(.002,.009),relations:R(-18,35),allies:[],war:null,owner:null,annexed:false,trait:c.trait||'',manpower:Math.max(5,(+c.pop||1)*.035),morale:R(65,90),exhaustion:0,industry:R(.7,1.3),infrastructure:R(.7,1.3),research:R(.5,1.2),exports:0,imports:0,cooldown:0,tradePartners:[]})),events:[],alliances:[],wars:[],owners:{},player};
  }
- S.aiWorld.player=player;
- // Keep the selected country under human control and never simulate it as an AI.
- S.aiWorld.nations.forEach(n=>{if(n.name===player)n.human=true;else n.human=false});
+ const W=S.aiWorld;W.version=3;W.player=player;W.events||=[];W.wars||=[];W.alliances||=[];W.owners||={};
+ W.nations.forEach(n=>{n.manpower??=n.pop*.035;n.morale??=75;n.exhaustion??=0;n.industry??=1;n.infrastructure??=1;n.research??=1;n.exports??=0;n.imports??=0;n.cooldown??=0;n.tradePartners||=[];n.allies||=[];n.human=n.name===player});
+}
+function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,100)}
+function economy(n){
+ const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-R(.001,.0018),-.018,.024);
+ n.gdp=Math.max(1,n.gdp*(1+growth));n.pop=Math.max(.01,n.pop*(1+C(.00015+(n.stability-55)*.000006-R(0,.00025),-.001,.0008)));
+ const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
+ n.treasury=C(n.treasury+income-upkeep,0,n.gdp*.2);
+ if(n.treasury>n.gdp*.025){
+  if(n.war&&n.power<150&&Math.random()<.48){let spend=Math.min(n.treasury*.035,n.gdp*.0018);n.treasury-=spend;n.power=C(n.power+spend*.16,2,150)}
+  else if(Math.random()<.22){let s=Math.min(n.treasury*.025,n.gdp*.0012);n.treasury-=s;n.industry=C(n.industry+s/Math.max(100,n.gdp)*.45,.5,3);n.growth=C(n.growth+.000025,.001,.014)}
+  else if(Math.random()<.18){let s=Math.min(n.treasury*.02,n.gdp*.001);n.treasury-=s;n.infrastructure=C(n.infrastructure+s/Math.max(100,n.gdp)*.5,.5,3)}
+  else if(Math.random()<.12){let s=Math.min(n.treasury*.015,n.gdp*.0008);n.treasury-=s;n.research=C(n.research+s/Math.max(100,n.gdp)*.5,.4,3)}
+ }
+ if(n.treasury>n.gdp*.008&&n.power<Math.min(150,25+n.gdp*.012)){let recruits=Math.min(n.manpower*.025,Math.max(.05,n.pop*.00012));n.power=C(n.power+recruits*(.35+n.industry*.12),2,150);n.manpower=Math.max(0,n.manpower-recruits*.12)}
+ n.manpower=C(n.manpower+n.pop*.00008,0,n.pop*.08);n.morale=C(n.morale+(n.treasury>n.gdp*.015?.35:-.45)-n.exhaustion*.008,15,100);
+ n.stability=C(n.stability+R(-.7,.55)+(n.treasury>n.gdp*.025?.2:0)-n.exhaustion*.012,10,96);
+ n.exports=n.gdp*(.0004+n.industry*.00015)+n.tradePartners.length*2;n.imports=n.gdp*(.00025+(n.power>60?.0002:0));
+}
+function diplomacy(W,A){
+ for(const a of A){a.cooldown=Math.max(0,a.cooldown-1);a.allies=a.allies.filter(x=>A.some(n=>n.name===x));
+  if(Math.random()<.008){let opts=A.filter(b=>b!==a&&!b.war&&!a.war&&!a.allies.includes(b.name)&&Math.abs(a.power-b.power)<55);if(opts.length){let b=P(opts);a.allies.push(b.name);b.allies.push(a.name);W.alliances.push({a:a.name,b:b.name,formed:W.month});ev(W,`🤝 ${a.name} и ${b.name} заключили оборонительный союз`)}}
+  if(Math.random()<.012){let opts=A.filter(b=>b!==a&&!b.war&&!a.war&&!a.tradePartners.includes(b.name)&&b.tradePartners.length<8);if(opts.length){let b=P(opts);a.tradePartners.push(b.name);b.tradePartners.push(a.name);ev(W,`🚢 ${a.name} и ${b.name} открыли торговый коридор`)}}
+ }
+}
+function declare(W,A){
+ for(const a of A){if(a.war||a.cooldown||Math.random()>.0045)continue;
+  let targets=A.filter(b=>b!==a&&!b.war&&!b.allies.includes(a.name)&&!a.allies.includes(b.name)&&!b.cooldown&&!W.wars.some(w=>(w.a===a.name&&w.b===b.name)||(w.a===b.name&&w.b===a.name)));
+  targets.sort((x,y)=>(a.power/Math.max(1,x.power))*(1+Math.max(0,-x.relations)/180)+x.gdp/Math.max(1,a.gdp)*.12-((a.power/Math.max(1,y.power))*(1+Math.max(0,-y.relations)/180)+y.gdp/Math.max(1,a.gdp)*.12));
+  if(!targets.length)continue;let b=targets[targets.length-1],ally=a.allies.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.28,0),def=b.allies.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.32,0);
+  if(a.treasury<a.gdp*.012||a.power+ally<b.power*.88+def*.65)continue;
+  let id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal:b.gdp>a.gdp?'cripple':'territory',joinedA:[],joinedB:[]});
+  ev(W,`⚔️ ${a.name} начала войну против ${b.name}. Военная цель: ${b.gdp>a.gdp?'сломить экономику':'захватить территории'}`);
+ }
+}
+function fight(W,w,a,b,A){
+ w.months++;for(const [side,allyNames] of [['A',a.allies],['B',b.allies]])if(w.months>=2){let joined=w['joined'+side];for(const name of allyNames){let x=A.find(n=>n.name===name);if(x&&!x.war&&!joined.includes(name)&&Math.random()<(side==='A'?.22:.3)){joined.push(name);x.war=w.id;ev(W,`🛡 ${name} вступила в войну на стороне ${side==='A'?a.name:b.name}`)}}}
+ const aid=w.joinedA.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.3,0),bid=w.joinedB.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.35,0);
+ const sa=C(100-a.exhaustion*.55-(a.treasury<a.gdp*.004?25:0)+a.infrastructure*4,20,110),sb=C(100-b.exhaustion*.55-(b.treasury<b.gdp*.004?25:0)+b.infrastructure*4,20,110);
+ const atk=a.power*(.65+a.morale/180)*sa/100+aid,def=b.power*(.72+b.morale/170)*sb/100+bid+R(0,b.infrastructure*3);
+ let delta=C((atk-def)/Math.max(30,atk+def)*24+R(-2.5,2.5),-9,9);w.score=C(w.score+delta,-100,100);w.front=C(50+w.score/2,0,100);
+ let la=Math.max(.05,def/Math.max(1,atk)*.32)*R(.7,1.3),lb=Math.max(.05,atk/Math.max(1,def)*.32)*R(.7,1.3);a.power=Math.max(1,a.power-la);b.power=Math.max(1,b.power-lb);w.lossA+=la;w.lossB+=lb;
+ a.treasury=Math.max(0,a.treasury-a.gdp*.0028-la*.3);b.treasury=Math.max(0,b.treasury-b.gdp*.0022-lb*.3);a.exhaustion=C(a.exhaustion+1.15,0,100);b.exhaustion=C(b.exhaustion+.95,0,100);
+ if(w.months%4===0)ev(W,`🪖 Фронт ${a.name}—${b.name}: контроль ${Math.round(w.front)}%, снабжение ${Math.round(sa)}/${Math.round(sb)}%`);
+}
+function peace(W,w,a,b,A){
+ let win=w.score>=0?a:b,lose=win===a?b:a,margin=Math.abs(w.score),share=C(.06+margin/500+R(0,.04),.05,.28);
+ if(margin>18){let g=lose.gdp*share;win.gdp+=g*.72;lose.gdp-=g;win.treasury+=Math.min(lose.treasury*.18,win.gdp*.025);lose.treasury*=.82;lose.pop*=1-share*.12;lose.stability=C(lose.stability-8-margin*.08,5,95);lose.relations-=12;win.relations+=5;
+  if(margin>65&&win.power>lose.power*1.45&&Math.random()<.28){lose.annexed=true;lose.owner=win.name;W.owners[lose.name]=win.name;win.pop+=lose.pop;win.gdp+=lose.gdp;ev(W,`🏴 ${win.name} полностью аннексировала ${lose.name}`)}
+  else{W.owners[lose.name+':occupied']=win.name;ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки`)}
+ }else ev(W,`🕊 ${a.name} и ${b.name} подписали мир без решающей победы`);
+ [a,b,...w.joinedA.map(x=>A.find(n=>n.name===x)),...w.joinedB.map(x=>A.find(n=>n.name===x))].filter(Boolean).forEach(n=>{n.war=null;n.cooldown=10;n.exhaustion=C(n.exhaustion-18,0,100);n.morale=C(n.morale+(n===win?8:-8),15,100)});
+ ev(W,`📜 Итог войны: ${win.name} добилась преимущества. Потери армии: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}`);
 }
 function tick(S){
- init(S);const W=S.aiWorld;if(!W)return;W.month++;
- const alive=W.nations.filter(n=>!n.annexed&&!n.human);
- // Domestic economy and military investment for every AI state.
- alive.forEach(n=>{
-  const g=n.growth+(n.stability-55)*.000012+rnd(-.0015,.0015);
-  n.gdp=Math.max(1,n.gdp*(1+clamp(g,-.012,.018)));
-  n.pop=Math.max(.01,n.pop*(1+rnd(-.0001,.0008)));
-  n.treasury=clamp(n.treasury+n.gdp*.0012-rnd(1,Math.max(2,n.gdp*.0008)),0,n.gdp*.12);
-  n.stability=clamp(n.stability+rnd(-1.2,.9)+(n.treasury>n.gdp*.04?.25:0),15,95);
-  if(n.treasury>n.gdp*.035&&Math.random()<.22)n.power=clamp(n.power+rnd(.1,1.2),3,100);
- });
- // Diplomatic activity: agreements are durable, reciprocal and limited.
- for(let i=0;i<alive.length;i++){
-  const a=alive[i];
-  if(a.allies.length>0&&Math.random()<.025)a.allies=a.allies.filter(x=>W.nations.some(n=>n.name===x&&!n.annexed));
-  if(Math.random()<.018){const candidates=alive.filter(b=>b!==a&&!a.allies.includes(b.name)&&!b.allies.includes(a.name)&&!a.war&&!b.war&&Math.abs(a.power-b.power)<42);
-   if(candidates.length){const b=pick(candidates);a.allies.push(b.name);b.allies.push(a.name);W.alliances.push({a:a.name,b:b.name,formed:W.month});W.events.unshift(`🤝 ${a.name} и ${b.name} заключили союз`)} }
- }
- // Wars: expansion is restrained by cooldowns, power balance and alliance support.
- alive.forEach(a=>{
-  if(a.war){const w=W.wars.find(x=>x.id===a.war);if(!w){a.war=null;return}return}
-  if(Math.random()>.009)return;
-  const targets=alive.filter(b=>b!==a&&!b.war&&!b.allies.includes(a.name)&&!a.allies.includes(b.name)&&!W.wars.some(w=>w.a===a.name&&w.b===b.name||w.a===b.name&&w.b===a.name));
-  if(!targets.length)return;
-  const b=pick(targets),support=(a.allies.length*.12),def=(b.allies.length*.14);
-  if(a.power*(1+support)<b.power*(.72+def)||a.treasury<a.gdp*.008)return;
-  const id=`${W.month}:${a.name}:${b.name}`;a.war=id;b.war=id;
-  W.wars.push({id,a:a.name,b:b.name,started:W.month,score:0});
-  W.events.unshift(`⚔️ ${a.name} объявила войну государству ${b.name}`);
- });
- W.wars=W.wars.filter(w=>{
-  const a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);
-  if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
-  const as=a.power*(1+a.allies.length*.1),bs=b.power*(1+b.allies.length*.1);
-  w.score+=clamp((as-bs)/Math.max(20,as+bs)*18,-8,8);
-  a.treasury=Math.max(0,a.treasury-a.gdp*.0018);b.treasury=Math.max(0,b.treasury-b.gdp*.0018);
-  a.power=Math.max(2,a.power-rnd(.1,.8));b.power=Math.max(2,b.power-rnd(.1,.8));
-  if(W.month-w.started<3)return true;
-  if(Math.abs(w.score)<13&&W.month-w.started<9)return true;
-  const winner=w.score>=0?a:b,loser=winner===a?b:a;
-  if(winner.power>loser.power*.78&&Math.random()<.72){
-   const share=clamp(.08+rnd(0,.12),.08,.2);winner.pop+=loser.pop*share;winner.gdp+=loser.gdp*share*.8;winner.treasury+=loser.treasury*.12;
-   loser.pop*=1-share;loser.gdp*=1-share*.8;loser.stability=clamp(loser.stability-12,10,95);
-   W.owners[loser.name]=winner.name;
-   if(share>.16&&winner.power>loser.power*1.25&&Math.random()<.18){loser.annexed=true;loser.owner=winner.name;winner.pop+=loser.pop;winner.gdp+=loser.gdp;W.events.unshift(`🏴 ${winner.name} полностью аннексировала ${loser.name}`)}
-   else W.events.unshift(`🗺 ${winner.name} захватила часть территории ${loser.name}`);
-  }else W.events.unshift(`🕊 ${a.name} и ${b.name} заключили мир без изменения границ`);
-  a.war=null;b.war=null;return false;
- });
- W.events=W.events.slice(0,80);
- // Player-facing diplomatic reactions and news.
- const p=W.nations.find(n=>n.name===W.player);
- if(p){const nearby=alive.filter(n=>n!==p&&!n.annexed).sort((a,b)=>Math.abs(b.power-p.power)-Math.abs(a.power-p.power));
-  if(nearby.length&&W.month%6===0){const n=pick(nearby.slice(0,Math.min(25,nearby.length)));if(n.allies.includes(p.name))W.events.unshift(`🤝 Союзник ${n.name} предлагает совместную торговлю`);else if(n.power>p.power*1.35&&n.relations<-10)W.events.unshift(`⚠️ ${n.name} усиливает давление на ${p.name}`)}
- }
- W.events=W.events.slice(0,80);
+ init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);A.forEach(economy);diplomacy(W,A);declare(W,A);
+ W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
+ fight(W,w,a,b,A);if(w.months<4||(w.months<8&&Math.abs(w.score)<18)||(w.months<18&&Math.abs(w.score)<32&&a.treasury>a.gdp*.002&&b.treasury>b.gdp*.002))return true;
+ peace(W,w,a,b,A);return false});
+ if(W.month%12===0)ev(W,'📊 Годовой обзор: экономики, промышленность, резервы и торговля продолжают развиваться.');
+ W.events.length=Math.min(W.events.length,100);
 }
-function panel(S){init(S);const W=S.aiWorld;if(!W)return'';const active=W.nations.filter(n=>!n.annexed).length,aiCount=W.nations.filter(n=>!n.human).length,alliances=W.alliances.length,wars=W.wars.length,top=[...W.nations].filter(n=>!n.annexed).sort((a,b)=>b.gdp-a.gdp).slice(0,8);
- return `<section class="panel wide"><h2>🌐 Мировая система ИИ</h2><p class="muted">Стран под управлением ИИ: ${aiCount} · ваша страна: ${W.player} · независимых: ${active} · союзов: ${alliances} · войн: ${wars} · месяц симуляции: ${W.month}</p><div class="cards">${top.map(n=>`<div class="mini"><b>${n.name}</b><br>ВВП: ${Math.round(n.gdp).toLocaleString('ru-RU')} · армия: ${Math.round(n.power)}<br>Стабильность: ${Math.round(n.stability)}% · казна: ${Math.round(n.treasury)}</div>`).join('')}</div><h3>Последние мировые события</h3><div class="feed">${W.events.slice(0,12).map(e=>`<div>${e}</div>`).join('')||'<span class="muted">Мирная обстановка. ИИ начнёт действовать с течением времени.</span>'}</div></section>`;
+function exportData(format){
+ let W=window.__activeGameState?.aiWorld;if(!W)return alert('Откройте вкладку дипломатии перед экспортом.');
+ let data,name,type;if(format==='csv'){let cols=['name','iso','pop','gdp','power','stability','treasury','manpower','morale','exhaustion','industry','infrastructure','research','exports','imports','owner','annexed'];data=[cols.join(';'),...W.nations.map(n=>cols.map(k=>String(n[k]??'').replace(/;/g,',')).join(';'))].join('\n');name='world-nations.csv';type='text/csv;charset=utf-8'}else{data=JSON.stringify(W,null,2);name='world-ai-export.json';type='application/json'}
+ let blob=new Blob(['\ufeff',data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-window.NationsAI={init,tick,panel};
+function panel(S){
+ init(S);let W=S.aiWorld;window.__activeGameState=S;let top=[...W.nations].filter(n=>!n.annexed).sort((a,b)=>b.gdp-a.gdp).slice(0,8);
+ let wars=W.wars.map(w=>`<div class="mini"><b>⚔️ ${w.a} — ${w.b}</b><br>Контроль фронта: ${Math.round(w.front)}% · месяц войны: ${w.months}<br>Потери: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}</div>`).join('');
+ return `<section class="panel wide"><h2>🌐 Умный мировой ИИ</h2><p class="muted">Государств ИИ: ${W.nations.filter(n=>!n.human).length} · независимых: ${W.nations.filter(n=>!n.annexed).length} · союзов: ${W.alliances.length} · войн: ${W.wars.length} · месяц: ${W.month}</p><div class="row"><button onclick="NationsAI.export('json')">⬇ Экспорт мира JSON</button><button onclick="NationsAI.export('csv')">⬇ Экспорт стран CSV</button></div><h3>🏭 Сильнейшие экономики и армии</h3><div class="cards">${top.map(n=>`<div class="mini"><b>${n.name}</b><br>ВВП: ${Math.round(n.gdp).toLocaleString('ru-RU')} · армия: ${Math.round(n.power)}<br>Казна: ${Math.round(n.treasury)} · резервы: ${Math.round(n.manpower)}<br>Мораль: ${Math.round(n.morale)}% · промышленность: ${n.industry.toFixed(1)}</div>`).join('')}</div><h3>⚔️ Военные кампании</h3><div class="cards">${wars||'<p class="muted">Активных войн нет.</p>'}</div><h3>📰 Мировые события</h3><div class="feed">${W.events.slice(0,14).map(e=>`<div>${e}</div>`).join('')||'<span class="muted">Мирная обстановка.</span>'}</div></section>`;
+}
+window.NationsAI={init,tick,panel,export:exportData};
 })();
