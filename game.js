@@ -459,12 +459,12 @@ function enemyStrikes(w,c){
  const WP=AIARS.WEAPONS,aggr=c.aggr||.5,myAA=(S.aa||0)+bcount('aabat')*1.5;
  /* ИИ планирует залп: несколько единиц оружия за ход, приманки против ПВО, затем ракеты */
  const acts=AIARS.plan(S,c,{vs:'p',front:100-w.p,defAA:myAA,defStab:S.stability,aggr,war:true,allowBomb:c.power>=60&&w.p>72&&aggr>.6,allowCiv:aggr>.5||w.p>65});
- let pool=2+(S.aa||0)*1.5+bcount('aabat')*2,shows=[],hits=0,stopped=0;   // pool — сколько перехватов ПВО успевает сделать за месяц
+ let pool=2+(S.aa||0)*2+bcount('aabat')*3,shows=[],hits=0,stopped=0;   // pool — сколько перехватов ПВО успевает сделать за месяц
  acts.forEach(act=>{
   const f=WP[act.w].f,air=WP[act.w].air,t=act.t;
   const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60*((S.dark&&S.dark[r.name])?.55:1):r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
   const reg=regs[0]||{name:'страна',pop:0,industry:0,infra:0,unrest:0};
-  const pI=air?Math.min(.75,(S.aa||0)*.07+bcount('aabat')*.05):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
+  const pI=air?Math.min(.88,(S.aa||0)*.09+bcount('aabat')*.12):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
   let caught=false;
   if(air){if(pool>0){pool-=act.decoy?1.2:1;caught=Math.random()<pI}}else caught=Math.random()<pI;
   if(caught){stopped++;log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
@@ -549,7 +549,22 @@ if(t&&TG[k]&&atWar()){
  let wt=reg?Math.max(.6,Math.min(1.6,reg.s/avg)):1;
  if(reg){const rs=reg.res;if(t==='mil'&&/q/.test(rs))wt*=1.25;if(t==='infra'&&/[qeus]/.test(rs))wt*=1.25}
  const D0=dmgOf(w,rn),worn=1-Math.min(.6,D0[t]/150);wt*=worn;D0[t]=Math.min(100,D0[t]+10*f);
- const hit=(p,pw)=>{w.p=Math.max(0,Math.min(100,w.p+p*wt));if(en){en.power=Math.max(1,en.power-pw*wt);en.value=clamp(en.value-(t==='civ'?10:5),-100,100)}};
+ // Накопительный ущерб экономике противника от успешных ударов.
+ // Это условная игровая модель, а не реальные денежные оценки.
+ const econ=w.enemyEcon||(w.enemyEcon={gdp:100,fx:100,damage:0,months:0,hitGdp:0,hitFx:0,hitMoney:0,hits:0});
+ const hit=(p,pw)=>{
+  w.p=Math.max(0,Math.min(100,w.p+p*wt));
+  if(en){en.power=Math.max(1,en.power-pw*wt);en.value=clamp(en.value-(t==='civ'?10:5),-100,100)}
+  const impact={mil:.10,infra:.42,civ:.03}[t]||.05;
+  const severity=Math.max(.15,Math.min(2,f*wt/2));
+  econ.hitGdp=Math.min(80,(econ.hitGdp||0)+impact*severity);
+  econ.hitFx=Math.min(150,(econ.hitFx||0)+impact*severity*.8);
+  econ.hitMoney=(econ.hitMoney||0)+impact*severity*25;
+  econ.hits=(econ.hits||0)+1;
+  econ.gdp=Math.max(20,100-(econ.damage||0)-(econ.hitGdp||0));
+  econ.damage=100-econ.gdp;
+  econ.fx=Math.min(500,100+(econ.hitFx||0));
+ };
  const where=` · область «${rn}»${rnd0?' (случайная)':''}`;armsFxMap(k,w.n,reg,rn);
  const rally=({mil:5,infra:4,civ:2}[t])*Math.max(.7,Math.min(1.4,f/1.5+.35))*Math.max(.15,Math.min(1,(100-S.approval)/50));
  S.approval=clamp(S.approval+rally);
@@ -1515,7 +1530,7 @@ const BUILD={
  depot:{g:'mil',n:'Военный склад',c:350,m:4,t:'Вооружение +12, боеприпасы +12',ic:'📦'},
  // военные объекты только во время войны
  bunker:{g:'war',n:'Бункерная линия',c:500,m:5,t:'Угроза −8, боевой дух +1',ic:'🛡'},
- aabat:{g:'war',n:'Позиции ПВО',c:450,m:4,t:'Угроза −4 и ещё −0.3/мес на войне',ic:'📡'},
+ aabat:{g:'war',n:'Позиции ПВО',c:450,m:4,t:'Перехватывает часть воздушных ударов; повышает шанс сбить дроны и ракеты',ic:'📡'},
  milhosp:{g:'war',n:'Военный госпиталь',c:400,m:4,t:'Боевой дух +3 и +0.2/мес на войне',ic:'🏥'},
  airfield:{g:'war',n:'Военный аэродром',c:800,m:6,t:'Авиация +3 (нужна 1 эскадрилья)',ic:'🛫'},
  base:{g:'war',n:'Военная база',c:900,m:8,t:'Армия +15 000 чел., подготовка +3',ic:'🏰'},
@@ -2505,7 +2520,13 @@ function chWarExtra(){
  <h3>🎯 Воздействие на экономику противника</h3>
  <p class="chnote">Модельная оценка симуляции: индекс до войны = 100. Это игровой расчёт, а не официальная статистика ВВП.</p>
  <div style="overflow:auto"><table class="fxt"><tr><th>Противник</th><th class="r">ВВП, индекс</th><th class="r">Потеря ВВП</th><th class="r">Рост курса</th></tr>
- ${(S.wars||[]).map(x=>{const q=x.enemyEcon||{gdp:100,fx:100,damage:0};return `<tr><td>${x.n}</td><td class="r">${q.gdp.toFixed(1)}</td><td class="r dn">−${q.damage.toFixed(1)}%</td><td class="r dn">+${(q.fx-100).toFixed(1)}%</td></tr>`}).join('')||'<tr><td colspan="4">Нет активных войн</td></tr>'}</table></div>`);
+ ${(S.wars||[]).map(x=>{const q=x.enemyEcon||{gdp:100,fx:100,damage:0,hitGdp:0,hitFx:0,hitMoney:0,hits:0};return `<tr><td>${x.n}</td><td class="r">${q.gdp.toFixed(1)}</td><td class="r dn">−${q.damage.toFixed(1)}%</td><td class="r dn">+${(q.fx-100).toFixed(1)}%</td></tr>`}).join('')||'<tr><td colspan="4">Нет активных войн</td></tr>'}</table></div>
+ <h3>📊 Накопленный эффект наших попаданий</h3>
+ <div style="overflow:auto"><table class="fxt"><tr><th>Противник</th><th class="r">Успешных ударов</th><th class="r">Оценка ущерба ВВП</th><th class="r">Давление на валюту</th><th class="r">Ущерб, млрд усл. валюты</th></tr>
+ ${(S.wars||[]).map(x=>{const q=x.enemyEcon||{};return `<tr><td>${x.n}</td><td class="r">${q.hits||0}</td><td class="r dn">−${(q.hitGdp||0).toFixed(2)} п.п.</td><td class="r dn">+${(q.hitFx||0).toFixed(2)} п.п.</td><td class="r">${(q.hitMoney||0).toFixed(1)}</td></tr>`}).join('')||'<tr><td colspan="5">Нет активных войн</td></tr>'}</table></div>
+ <h3>🛡 Противовоздушная оборона</h3>
+ <p>Построено позиций ПВО: <b>${bcount('aabat')}</b> · комплексов ПВО в арсенале: <b>${S.aa||0}</b> · укреплённость обороны: <b>${Math.min(88,Math.round((S.aa||0)*9+bcount('aabat')*12))}%</b> (модельная оценка перехвата воздушного удара).</p>
+ <p class="chnote">Ущерб от попаданий — условные игровые индексы. Он не является реальной оценкой экономики страны.</p>`);
 }
 function chartsHtml(){
  fxEnsure();CHU.reg={};CHU.hov={};
