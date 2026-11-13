@@ -502,6 +502,10 @@ async def draw_scores_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"{i}. {names.get(pid, 'Игрок')} — {points}" for i, (pid, points) in enumerate(rows, 1)), parse_mode="Markdown")
 
 
+# Backward-compatible alias for older deployments / handler registrations.
+drawscores_command = draw_scores_command
+
+
 async def drawhelp_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
         "🎨 *Команды групповой рисовалки*\n/drawgroup — начать раунд\n/drawscores — таблица очков\n/drawhelp — помощь\n\nВо время раунда: художник рисует на холсте, остальные пишут догадки в чат. Таймера раунда нет: игра идёт, пока художник рисует. Бот следит за художником и пишет под рисунком, рисует он, задумался или вышел. Кнопка «💡 Подсказка» открывается через минуту после первого штриха: она показывает чёрточки, нажатие на чёрточку открывает букву (раз в 15 сек., не больше половины слова). Если художник долго не рисует, раунд заканчивается сам. Кнопка «Открыть / вернуться к рисованию» возвращает в текущий холст.",
