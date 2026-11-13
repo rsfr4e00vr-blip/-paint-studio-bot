@@ -65,3 +65,37 @@
 .vface{font-size:28px}.vaid{margin-left:auto;padding:3px 9px;border-radius:99px;background:#16402f;border:1px solid #2c7a5a;color:#9fe3c0;font-size:12px;font-weight:700}
 .vcard .actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}.vcard .actions button{min-height:42px;font-size:12px;padding:6px 4px}
 .aibox{padding:10px 12px;border-radius:12px;margin:8px 0;border:1px solid #3b5064;background:#0e1b29}.aibox.bad{border-color:#c23b4b;background:#2a1219}.aibox.ok{border-color:#2c7a5a}.aibox b{display:block}.aibox small{color:#9fb4c9}
+
+/* ===== Окно события и анимации арсенала ===== */
+#evmodal{position:fixed;inset:0;z-index:9000;display:flex;padding:12px;background:rgba(4,9,16,.74);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);overflow-y:auto;animation:evfade .25s ease both}
+#evmodal.out{animation:evfadeout .22s ease both;pointer-events:none}
+.evbox{width:min(560px,100%);margin:auto;background:linear-gradient(180deg,#16293c,#0d1a28);border:1px solid #d6b25e;border-radius:16px;padding:16px;box-shadow:0 20px 60px #000b,0 0 24px #d6b25e33;animation:evpop .42s cubic-bezier(.2,1.3,.4,1) both}
+.evtag{display:inline-block;font-size:12px;font-weight:700;color:#d6b25e;background:#d6b25e1f;border:1px solid #d6b25e55;border-radius:99px;padding:3px 10px;margin-bottom:8px;animation:evpulse 1.8s ease-in-out infinite}
+.evbox h3{margin:4px 0 6px}
+.evbox .choice{margin-top:10px;animation:evslide .45s ease both}
+.evbox .choice:nth-of-type(1){animation-delay:.12s}.evbox .choice:nth-of-type(2){animation-delay:.22s}.evbox .choice:nth-of-type(3){animation-delay:.32s}.evbox .choice:nth-of-type(4){animation-delay:.42s}
+.evbox .choice button{width:100%;min-height:46px;transition:transform .12s}
+.evbox .choice button:active{transform:scale(.97)}
+.evbox .choice button.poor{opacity:.45}
+@keyframes evfade{from{opacity:0}to{opacity:1}}
+@keyframes evfadeout{from{opacity:1}to{opacity:0}}
+@keyframes evpop{0%{opacity:0;transform:translateY(40px) scale(.9)}100%{opacity:1;transform:none}}
+@keyframes evslide{from{opacity:0;transform:translateX(-18px)}to{opacity:1;transform:none}}
+@keyframes evpulse{0%,100%{box-shadow:0 0 0 0 #d6b25e55}50%{box-shadow:0 0 0 6px #d6b25e00}}
+.armfx{position:fixed;inset:0;z-index:9500;pointer-events:none;overflow:hidden}
+.armfx .proj{position:absolute;left:8%;bottom:12%;font-size:44px;animation:armfly .75s ease-in forwards}
+.armfx .boom{position:absolute;left:78%;top:26%;font-size:22px;opacity:0;animation:armboom .65s ease-out .72s forwards}
+.armfx .flash{position:absolute;inset:0;opacity:0;background:radial-gradient(circle at 78% 30%,#ffd37aaa,transparent 45%);animation:armflash .55s ease-out .72s forwards}
+.armfx.buy .proj,.armfx.make .proj{left:calc(50% - 22px);bottom:auto;top:42%;animation:armpop .9s ease-out forwards}
+.armfx .sparks{position:absolute;left:calc(50% - 20px);top:38%;font-size:36px;opacity:0;animation:armsparks .9s ease-out forwards}
+@keyframes armfly{0%{transform:translate(0,0) rotate(-20deg) scale(.8)}100%{transform:translate(66vw,-58vh) rotate(25deg) scale(1.15)}}
+@keyframes armboom{0%{transform:scale(.3);opacity:1}100%{transform:scale(6);opacity:0}}
+@keyframes armflash{0%{opacity:1}100%{opacity:0}}
+@keyframes armpop{0%{transform:scale(.2) rotate(-15deg);opacity:0}35%{transform:scale(1.5) rotate(8deg);opacity:1}100%{transform:translateY(-70px) scale(1);opacity:0}}
+@keyframes armsparks{0%{transform:scale(.4);opacity:0}40%{opacity:1}100%{transform:scale(2.2) translateY(-30px);opacity:0}}
+.mfgbox small{display:block;margin:4px 0 8px}
+.mfgrow{margin-top:6px}
+.mfgrow .bar i{transition:width .6s ease}
+@media (prefers-reduced-motion:reduce){#evmodal,.evbox,.evbox .choice,.evtag,.armfx *{animation-duration:.01s!important;animation-delay:0s!important}}
+
+.evbox{position:relative}.evclose{position:absolute;top:8px;right:8px;width:34px;height:34px;min-height:0;padding:0;border-radius:50%;background:#ffffff14;border:1px solid #ffffff2e;color:#cfe0f0;font-size:15px}

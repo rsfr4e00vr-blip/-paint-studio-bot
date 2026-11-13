@@ -2,7 +2,7 @@
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Новария — стратегия государства</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Roboto+Condensed:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/nations.css"><link rel="stylesheet" href="/interface-v4.css"><link rel="stylesheet" href="/hoi4-clean-interface.css"><link rel="stylesheet" href="/nav-fix.css?v=7">
+<link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/nations.css"><link rel="stylesheet" href="/interface-v4.css"><link rel="stylesheet" href="/hoi4-clean-interface.css"><link rel="stylesheet" href="/nav-fix.css?v=9">
 </head><body>
 <header><div class="emblem" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#d6b25e" stroke-width="1.8"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M12 8v8M8 12h8"/></svg></div><div><h1>Республика Новария</h1><p id="subtitle">Стройте державу · развивайте экономику · меняйте ход истории</p></div></header>
 <main>
@@ -11,7 +11,7 @@
 <nav class="tabbar" id="tabs" aria-label="Главное меню">
 <div class="cats"><button data-cat="main" class="on">Главное</button><button data-cat="state">Государство</button><button data-cat="eco">Хозяйство</button><button data-cat="dip">Дипломатия</button><button data-cat="dev">Развитие</button><button data-cat="sys">Система</button></div>
 <div class="subs">
-<div class="sub" data-cat="main"><button data-tab="overview">⌂ Обзор</button><button data-tab="map">🗺 Карта</button><button data-tab="economy">▤ Экономика</button><button data-tab="military">⚔ Армия</button><button data-tab="events">▣ События</button></div>
+<div class="sub" data-cat="main"><button data-tab="overview">⌂ Обзор</button><button data-tab="map">🗺 Карта</button><button data-tab="economy">▤ Экономика</button><button data-tab="military">⚔ Армия</button></div>
 <div class="sub" data-cat="state" hidden><button data-tab="politics">Политика и партии</button><button data-tab="power">Власть и управление</button><button data-tab="bills">Законы и реформы</button><button data-tab="staff">Военный штаб</button><button data-tab="advisors">Советники</button><button data-tab="people">Население</button><button data-tab="deputies">Парламент и депутаты</button></div>
 <div class="sub" data-cat="eco" hidden><button data-tab="finance">Финансы и бюджет</button><button data-tab="market">Торговля и рынок</button><button data-tab="industry">Заводы и строительство</button><button data-tab="regions">Регионы</button><button data-tab="resources">Полезные ископаемые</button></div>
 <div class="sub" data-cat="dip" hidden><button data-tab="diplomacy">Страны и вассалы</button><button data-tab="worldtension">Мировая напряжённость</button></div>
@@ -19,7 +19,7 @@
 <div class="sub" data-cat="sys" hidden><button data-tab="settings">Настройки и сохранения</button></div>
 </div></nav>
 <div id="content"></div></main><div class="notice" id="notice"></div>
-<script src="/world.js"></script><script src="/regions.js"></script><script src="/world_data.js"></script><script src="/resources.js"></script><script src="/ai_arsenal.js"></script><script src="/ai_nations.js"></script><script src="/game.js"></script><script src="/nations.js"></script><script>(function(){var t=document.getElementById('tabs');if(!t)return;
+<script src="/world.js"></script><script src="/regions.js"></script><script src="/world_data.js"></script><script src="/resources.js"></script><script src="/ai_arsenal.js"></script><script src="/ai_nations.js"></script><script src="/game.js?v=9"></script><script src="/nations.js?v=9"></script><script>(function(){var t=document.getElementById('tabs');if(!t)return;
 function show(c){t.querySelectorAll('.cats button').forEach(function(b){b.classList.toggle('on',b.dataset.cat===c)});t.querySelectorAll('.sub').forEach(function(s){s.hidden=s.dataset.cat!==c})}
 t.addEventListener('click',function(e){var c=e.target.closest('[data-cat]');if(c&&c.closest('.cats')){show(c.dataset.cat);return}
 var b=e.target.closest('[data-tab]');if(b){var s=b.closest('.sub');if(s)show(s.dataset.cat)}});})();</script></body></html>
