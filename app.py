@@ -678,6 +678,14 @@ def world_js():
 def world_data_js():
     return FileResponse(BASE / "world_data.js", media_type="application/javascript")
 
+@app.get("/ai_arsenal.js")
+def ai_arsenal_js():
+    return FileResponse(BASE / "ai_arsenal.js", media_type="application/javascript")
+
+@app.get("/ai_nations.js")
+def ai_nations_js():
+    return FileResponse(BASE / "ai_nations.js", media_type="application/javascript")
+
 @app.get("/resources.js")
 def resources_js():
     return FileResponse(BASE / "resources.js", media_type="application/javascript")

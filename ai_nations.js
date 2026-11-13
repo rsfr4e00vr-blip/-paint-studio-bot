@@ -10,6 +10,26 @@ function init(S){
  const W=S.aiWorld;W.version=3;W.player=player;W.events||=[];W.wars||=[];W.alliances||=[];W.owners||={};
  W.nations.forEach(n=>{n.manpower??=n.pop*.035;n.morale??=75;n.exhaustion??=0;n.industry??=1;n.infrastructure??=1;n.research??=1;n.exports??=0;n.imports??=0;n.cooldown??=0;n.tradePartners||=[];n.allies||=[];n.rivals||={};n.intrigue??=0;n.intent??='Развитие экономики';n.warPlan??=0;n.human=n.name===player});
 }
+let curS=null;
+/* Удар страны att по стране def: оружие и цель выбирает общий обучаемый тактик (AIARS). */
+function strike(W,w,att,def,isA){
+ if(!window.AIARS||!curS)return;
+ const WP=AIARS.WEAPONS;AIARS.stock(att);
+ if(def.aa==null)def.aa=Math.round(def.power/25);
+ const front=isA?w.front:100-w.front;
+ const act=AIARS.pick(curS,att,{vs:'n',front,defAA:def.aa,defStab:def.stability,aggr:C(.45+att.intrigue/200,.2,.9),allowBomb:att.power>=70&&front>70&&def.power<att.power*.6,allowCiv:true});
+ if(!act)return;att.ars[act.w]-=1;
+ const f=WP[act.w].f,air=WP[act.w].air,sg=isA?1:-1;
+ if(air)def.aa=Math.min(14,def.aa+.4*f);                      // противник учится и наращивает ПВО
+ if(air&&Math.random()<Math.min(.7,def.aa*.06)){AIARS.learn(curS,act,-.2*f);return}
+ let shift=0,r=0;
+ if(act.t==='mil'){shift=2.5*f*.5;def.power=Math.max(1,def.power-.25*f);def.manpower=Math.max(0,def.manpower-.02*f);r=shift/3+.2*f}
+ else if(act.t==='infra'){shift=1.5*f*.5;def.infrastructure=C(def.infrastructure-.04*f,.4,3);def.industry=C(def.industry-.03*f,.4,3);def.treasury=Math.max(0,def.treasury*(1-.004*f));r=shift/3+.15*f}
+ else{shift=.5*f*.5;def.pop=Math.max(.01,def.pop*(1-.0008*f));def.stability=C(def.stability-.5*f,5,96);def.morale=C(def.morale-.5*f,15,100);att.relations-=.8*f;r=shift/3+.12*f+(def.stability<42?.15*f:0)-.5}
+ w.score=C(w.score+sg*shift,-100,100);w.front=C(50+w.score/2,0,100);
+ AIARS.learn(curS,act,r-.12*f);
+ if(Math.random()<.12)ev(W,`${act.t==='civ'?'🏘':act.t==='infra'?'🏗':'🎯'} ${att.name}: ${AIARS.WN[act.w]} по цели «${AIARS.TN[act.t]}» (${def.name})`);
+}
 function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80)}
 function economy(n){
  const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-R(.001,.0018),-.018,.024);
@@ -54,6 +74,7 @@ function fight(W,w,a,b,A){
  const sa=C(100-a.exhaustion*.55-(a.treasury<a.gdp*.004?25:0)+a.infrastructure*4+a.industry*3+(a.manpower< a.pop*.008?-18:0),12,115),sb=C(100-b.exhaustion*.55-(b.treasury<b.gdp*.004?25:0)+b.infrastructure*4+b.industry*3+(b.manpower< b.pop*.008?-18:0),12,115);
  const atk=a.power*(.65+a.morale/180)*sa/100+aid,def=b.power*(.72+b.morale/170)*sb/100+bid+R(0,b.infrastructure*3);
  let delta=C((atk-def)/Math.max(30,atk+def)*24+R(-2.5,2.5),-9,9);w.score=C(w.score+delta,-100,100);w.front=C(50+w.score/2,0,100);
+ strike(W,w,a,b,true);strike(W,w,b,a,false);
  let la=Math.max(.05,def/Math.max(1,atk)*.32)*R(.7,1.3),lb=Math.max(.05,atk/Math.max(1,def)*.32)*R(.7,1.3);a.power=Math.max(1,a.power-la);b.power=Math.max(1,b.power-lb);w.lossA+=la;w.lossB+=lb;
  a.treasury=Math.max(0,a.treasury-a.gdp*.0028-la*.3);b.treasury=Math.max(0,b.treasury-b.gdp*.0022-lb*.3);a.exhaustion=C(a.exhaustion+1.15,0,100);b.exhaustion=C(b.exhaustion+.95,0,100);
  w.supplyA=sa;w.supplyB=sb;w.encirclementA=w.encirclementA||0;w.encirclementB=w.encirclementB||0;if(w.front>72&&sa>60&&Math.random()<.16)w.encirclementB=C(w.encirclementB+1,0,5);else if(w.front<55)w.encirclementB=Math.max(0,w.encirclementB-1);if(w.front<28&&sb>60&&Math.random()<.16)w.encirclementA=C(w.encirclementA+1,0,5);else if(w.front>45)w.encirclementA=Math.max(0,w.encirclementA-1);if(w.encirclementA>=4)w.score=C(w.score-9,-100,100);if(w.encirclementB>=4)w.score=C(w.score+9,-100,100);if(w.months%4===0)ev(W,`🪖 Фронт ${a.name}—${b.name}: контроль ${Math.round(w.front)}%, снабжение ${Math.round(sa)}/${Math.round(sb)}%, окружение ${w.encirclementA}/${w.encirclementB}`);
@@ -68,7 +89,7 @@ function peace(W,w,a,b,A){
  ev(W,`📜 Мирный договор: ${win.name} получила преимущество, ${lose.name} принимает условия капитуляции/уступок. Потери армий: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}`);
 }
 function tick(S){
- init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);A.forEach(economy);diplomacy(W,A);declare(W,A);
+ curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);A.forEach(economy);diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
  fight(W,w,a,b,A);if(w.months<4||(w.months<8&&Math.abs(w.score)<18)||(w.months<18&&Math.abs(w.score)<32&&a.treasury>a.gdp*.002&&b.treasury>b.gdp*.002)&&w.encirclementA<4&&w.encirclementB<4)return true;
  peace(W,w,a,b,A);return false});
