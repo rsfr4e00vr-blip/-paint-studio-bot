@@ -665,7 +665,7 @@ function runScene(o){
  let O=LP.pts[0]||null;
  if(!O){let best=1e9;srcEls.forEach(e=>{const c=bb(e);if(!c||!(c.w*c.h))return;const d=Math.hypot(c.x-T.x,c.y-T.y);if(d<best){best=d;O=c}});if(!O&&outl)O=bb(outl)}
  if(!O||Math.hypot(O.x-T.x,O.y-T.y)<4)O={x:T.x-80,y:T.y+45};
- const cfg={...(SCN[o.k]||{n:3,dur:1.6,R:16}),...(o.count?{n:Math.min(20,Math.max(1,o.count))}:{})};
+ const cfg=SCN[o.k]||{n:3,dur:1.6,R:16};
  const St={x:O.x,y:O.y};
  const LPt=i=>LP.pts.length?LP.pts[(i*5+Math.floor(Math.random()*4))%LP.pts.length]:O;
  const LPw=()=>LP.wide.length?LP.wide[Math.floor(Math.random()*LP.wide.length)]:O;
@@ -749,28 +749,10 @@ window.armyAttack=n=>{
  const regs=enemyRegs(w.n),want=(S.tgt&&S.tgt.r)||'';let reg=regs.find(x=>x.n===want);if(!reg&&regs.length)reg=regs[Math.floor(Math.random()*regs.length)];
  strikeScene({kind:'inf',k:'inf',enemy:w.n,regId:reg&&reg.id,title:`🪖 Наступление на ${w.n}`,sub:reg?`Область «${reg.n}»`:'Вся страна'});
 };
-let batchFx=null;
 function armsFxMap(k,wname,reg,rn,down){
  const A=ARMS[k];if(!SCN[k])return;
- const scene={kind:'strike',k,down:!!down,enemy:wname,regId:reg&&reg.id,title:`${A.ic} ${A.n} → ${wname}`,sub:down?`Сбит ПВО · область «${rn}»`:`Область «${rn}»`};
- if(batchFx){batchFx.scene=scene;return;}
- strikeScene(scene);
+ strikeScene({kind:'strike',k,down:!!down,enemy:wname,regId:reg&&reg.id,title:`${A.ic} ${A.n} → ${wname}`,sub:down?`Сбит ПВО · область «${rn}»`:`Область «${rn}»`});
 }
-window.fireBatch=(k,t,count)=>{
- if(blocked())return;
- if(!atWar())return toast('Массовый залп доступен во время войны');
- if(!['drone','rocket'].includes(k))return;
- count=Math.max(1,Math.min(20,Math.floor(+count||10)));
- const available=Math.min(count,Math.max(0,Math.floor(S[k]||0)));
- if(!available)return toast('На складе нет боеприпасов');
- batchFx={scene:null};let sent=0;
- try{for(let i=0;i<available;i++){if(!(S[k]>0))break;window.fire(k,t||'mil');sent++;}}
- finally{
-  const scene=batchFx&&batchFx.scene;batchFx=null;
-  if(scene&&sent){scene.count=sent;scene.sub=`Залп ×${sent} · область «${scene.sub.split('«').pop().split('»')[0]||'цель'}»`;strikeScene(scene);}
- }
- toast(`Выполнен залп: ${sent} ${k==='drone'?'дронов':'ракет'}`);
-};
 /* ------------------------ АНИМАЦИЯ И ПРОИЗВОДСТВО АРСЕНАЛА ------------------------ */
 function armFx(k,mode){
  try{
@@ -809,7 +791,7 @@ function mfgPanel(){
  const rows=q.length?q.map((it,i)=>{const A=ARMS[it.k],pr=Math.round((1-it.left/it.total)*100);return`<div class="mini mfgrow"><b>${A.ic} ${A.n}</b><small class="muted">Осталось ${Math.max(0,it.left)} мес.</small><div class="bar"><i style="width:${pr}%"></i></div><div class="actions"><button class="danger" onclick="makeCancel(${i})">Отменить</button></div></div>`}).join(''):'<p class="muted">Конвейер пуст. Нажмите «🏭 Произвести» у нужного оружия.</p>';
  return`<div class="mini mfgbox" style="margin-bottom:8px"><b>🏭 Производство · линий занято ${q.length} / ${sl}</b><small class="muted">Линий = воен. заводы ÷ 3. Производство стоит 60% цены, плюс сталь и часть вооружения, зато дешевле покупки. При 12+ заводах работает вдвое быстрее.</small>${rows}</div>`;
 }
-function armsCard(){return card('💣 Арсенал',tgtPanel()+mfgPanel()+`<div class="cards">${ARMK.map(k=>{const A=ARMS[k],lock=A.mil&&S.mil<A.mil;return`<div class="mini"><b>${A.ic} ${A.n}: ${S[k]||0} шт.</b><small class="muted">${A.t}${A.eq?` · −${A.eq} вооружения`:''}</small><div class="actions"><button onclick="buy('${k}')">${lock?'🔒 ':''}Купить · ${A.c} млн</button>${k==='petard'?'':`<button class="good" onclick="make('${k}')">🏭 Произвести · ${mCost(k).m} млн · ${A.mt} мес.</button>`}${atWar()&&TG0[k]?`<button class="danger" onclick="fire('${k}','mil')">🎯 Военные</button><button class="danger" onclick="fire('${k}','infra')">🏗 Инфраструктура</button><button class="danger" onclick="fire('${k}','civ')">🏘 Гражданские</button>${['drone','rocket'].includes(k)?`<button class="danger" onclick="fireBatch('${k}','mil',10)">⚡ Залп ×10</button><button class="danger" onclick="fireBatch('${k}','mil',20)">⚡ Залп ×20</button>`:''}`:`<button class="danger" onclick="fire('${k}')">Применить</button>`}</div></div>`}).join('')}</div><p class="muted">На войне пушки, дроны, танки, ракеты и ПВО сбивают угрозу и поднимают дух, в мирное время — скандал (кроме парадов и учений). На войне выбираете цель: военные объекты (лучший эффект на фронте), инфраструктура (бьёт по силе и экономике врага) или гражданские (почти ничего не даёт на фронте, зато мировое осуждение и падение легитимности; рейтинг на войне всё равно растёт, но меньше всего от ударов по гражданским). Врага и область выбираете в блоке «Куда бить». Бомба пугает всех соседей. Петарда — для парада 🎆. Тяжёлое оружие требует военных заводов и вооружения со склада.</p>`)}
+function armsCard(){return card('💣 Арсенал',tgtPanel()+mfgPanel()+`<div class="cards">${ARMK.map(k=>{const A=ARMS[k],lock=A.mil&&S.mil<A.mil;return`<div class="mini"><b>${A.ic} ${A.n}: ${S[k]||0} шт.</b><small class="muted">${A.t}${A.eq?` · −${A.eq} вооружения`:''}</small><div class="actions"><button onclick="buy('${k}')">${lock?'🔒 ':''}Купить · ${A.c} млн</button>${k==='petard'?'':`<button class="good" onclick="make('${k}')">🏭 Произвести · ${mCost(k).m} млн · ${A.mt} мес.</button>`}${atWar()&&TG0[k]?`<button class="danger" onclick="fire('${k}','mil')">🎯 Военные</button><button class="danger" onclick="fire('${k}','infra')">🏗 Инфраструктура</button><button class="danger" onclick="fire('${k}','civ')">🏘 Гражданские</button>`:`<button class="danger" onclick="fire('${k}')">Применить</button>`}</div></div>`}).join('')}</div><p class="muted">На войне пушки, дроны, танки, ракеты и ПВО сбивают угрозу и поднимают дух, в мирное время — скандал (кроме парадов и учений). На войне выбираете цель: военные объекты (лучший эффект на фронте), инфраструктура (бьёт по силе и экономике врага) или гражданские (почти ничего не даёт на фронте, зато мировое осуждение и падение легитимности; рейтинг на войне всё равно растёт, но меньше всего от ударов по гражданским). Врага и область выбираете в блоке «Куда бить». Бомба пугает всех соседей. Петарда — для парада 🎆. Тяжёлое оружие требует военных заводов и вооружения со склада.</p>`)}
 function addonTab(){ensure();let b=outBanner();if(tab==='resources'&&window.NGRES)return b+NGRES.panel();let hx=hoiTab();if(hx!=null)return b+hx;
 if(tab=='charts')return b+chartsHtml();if(tab=='finance')return b+finTab0()+fxCard()+card('🏭 Экономические программы',xcards(ECO2,'e'));if(tab=='power')return b+card('🗳 Власть и политика',`<p class="muted">Режим: <b>${S.gov}</b> · легитимность ${Math.round(S.legitimacy)}% · риск переворота ${Math.round(S.coupRisk)}%</p>`+xcards(POL,'p'));
 if(tab=='people')return b+`<div class="grid">${card('👥 Что говорят люди',feedHtml())}${card('Настроение страны',bar('Одобрение',S.approval)+bar('Стабильность',S.stability)+`<p class="muted">Недовольство регионов: ${S.regions.map(r=>`${r.name} ${Math.round(r.unrest)}%`).join(' · ')}</p>`)}</div>`;
@@ -1601,7 +1583,7 @@ const incFlat=()=>(S.civ-18)*10+S.puppets.length*70+taxRev()+(S.mpFlat||0);
 const expFlat=()=>(S.mil-6)*6+(S.dock-2)*4+budCost();
 
 /* ------------------------ НАЦИОНАЛЬНЫЕ ЦЕЛИ ------------------------ */
-const FB={ind:'🏭 Промышленность',mil:'🎖 Армия',pol:'🏛 Политика'};
+const FB={ind:'🏭 Промышленность',agr:'🌾 Сельское хозяйство',fin:'💰 Финансы и налоги',trade:'🚢 Торговля и экспорт',infra:'🛣 Инфраструктура',energy:'⚡ Энергетика и инновации',mil:'🎖 Армия',pol:'🏛 Политика'};
 const FOC={
  ind1:{b:'ind',n:'Промышленная программа',m:3,req:[],x:[],t:'+2 гражданских завода, ВВП +300',fx:{civ:2,gdp:300}},
  ind2:{b:'ind',n:'Расширение производства',m:4,req:['ind1'],x:[],t:'+2 военных завода, +1 слот стройки',fx:{mil:2},fl:'bs'},
@@ -1610,6 +1592,21 @@ const FOC={
  ind5:{b:'ind',n:'Научный центр',m:4,req:['ind2'],x:[],t:'+1 слот исследований, технологии +3',fx:{rslots:1,tech:3}},
  ind6:{b:'ind',n:'Автаркия',m:4,req:['ind4'],x:['ind7'],t:'Еда +8, сталь +8, топливо +6; отношения −4, доверие −3',fx:{food:8,steel:8,fuel:6,rel:-4,trust:-3}},
  ind7:{b:'ind',n:'Открытая торговля',m:4,req:['ind4'],x:['ind6'],t:'Доверие +8, отношения +4, казна +900, инфляция −1',fx:{trust:8,rel:4,money:900,inflation:-1}},
+ agr1:{b:'agr',n:'Аграрная модернизация',m:3,req:[],x:[],t:'Продовольствие +12, занятость +2, ВВП +1,5%',fx:{food:12,employment:2,'gdp%':1.5}},
+ agr2:{b:'agr',n:'Поддержка фермеров',m:3,req:['agr1'],x:[],t:'Казна +500 млн, доверие +3, продовольствие +8',fx:{money:500,trust:3,food:8}},
+ agr3:{b:'agr',n:'Агроэкспортный кластер',m:4,req:['agr2'],x:[],t:'ВВП +2%, казна +900 млн, отношения +4',fx:{'gdp%':2,money:900,rel:4}},
+ fin1:{b:'fin',n:'Независимость центрального банка',m:4,req:[],x:[],t:'Инфляция −1,5 п.п., доверие +5',fx:{inflation:-1.5,trust:5}},
+ fin2:{b:'fin',n:'Налоговая реформа',m:4,req:['fin1'],x:[],t:'ВВП +1,5%, занятость +1, казна +400 млн',fx:{'gdp%':1.5,employment:1,money:400}},
+ fin3:{b:'fin',n:'Стабилизационный фонд',m:5,req:['fin2'],x:[],t:'Долг −1200 млн, инфляция −1 п.п., доверие +4',fx:{debt:-1200,inflation:-1,trust:4}},
+ trade1:{b:'trade',n:'Снижение торговых барьеров',m:3,req:[],x:[],t:'Отношения +5, доверие +3, казна +300 млн',fx:{rel:5,trust:3,money:300}},
+ trade2:{b:'trade',n:'Экспортная стратегия',m:4,req:['trade1'],x:[],t:'ВВП +2%, занятость +2, казна +700 млн',fx:{'gdp%':2,employment:2,money:700}},
+ trade3:{b:'trade',n:'Свободная экономическая зона',m:5,req:['trade2'],x:[],t:'ВВП +2,5%, +1 гражданский завод, доверие +4',fx:{'gdp%':2.5,civ:1,trust:4}},
+ infra1:{b:'infra',n:'Ремонт национальных дорог',m:3,req:[],x:[],t:'Инфраструктура +8, ВВП +1%',fx:{infra:8,'gdp%':1}},
+ infra2:{b:'infra',n:'Модернизация железных дорог',m:4,req:['infra1'],x:[],t:'Инфраструктура +10, топливо +5, ВВП +1,5%',fx:{infra:10,fuel:5,'gdp%':1.5}},
+ infra3:{b:'infra',n:'Цифровое государство',m:5,req:['infra2'],x:[],t:'Технологии +5, доверие +5, занятость +1',fx:{tech:5,trust:5,employment:1}},
+ energy1:{b:'energy',n:'Модернизация электросетей',m:4,req:[],x:[],t:'Энергия +12, ВВП +1%',fx:{energy:12,'gdp%':1}},
+ energy2:{b:'energy',n:'Возобновляемая энергетика',m:5,req:['energy1'],x:[],t:'Энергия +16, инфляция −0,5 п.п., доверие +3',fx:{energy:16,inflation:-.5,trust:3}},
+ energy3:{b:'energy',n:'Высокотехнологичная промышленность',m:6,req:['energy2'],x:[],t:'Технологии +8, +1 гражданский завод, ВВП +2,5%',fx:{tech:8,civ:1,'gdp%':2.5}},
  mil1:{b:'mil',n:'Реформа армии',m:3,req:[],x:[],t:'Подготовка +8, дух +4, риск переворота −3',fx:{training:8,morale:4,coupRisk:-3}},
  mil2:{b:'mil',n:'Военная доктрина',m:4,req:['mil1'],x:[],t:'Выбор доктрины бесплатно (вкладка «Наука»)',fx:{training:3},fl:'docfree'},
  mil3:{b:'mil',n:'Военная промышленность',m:3,req:['mil1'],x:[],t:'+2 военных завода, вооружение +5',fx:{mil:2,equipment:5}},
@@ -2347,6 +2344,19 @@ const avgReg=k=>(S.regions||[]).reduce((a,r)=>a+(+r[k]||0),0)/Math.max(1,(S.regi
 /* --- потери экономики во время войны --- */
 function econWarTick(){
  const E=S.econ,t=S.year*12+S.month,ws=S.wars||[],atWar=ws.length>0;
+ // Экономика противника: игровая оценка, привязанная к ходу войны.
+ // Индексы начинаются со 100; это не реальные статистические данные стран.
+ ws.forEach(w=>{
+  if(!w.enemyEcon) w.enemyEcon={gdp:100,fx:100,damage:0,months:0};
+  const q=w.enemyEcon,progress=clamp((+w.p||0)/100,0,1);
+  const enc=clamp(+w.encirclement||0,0,5);
+  const gdpDrop=Math.min(.018,.0025+.006*progress+.001*enc);
+  const fxRise=Math.min(.035,.003+.009*progress+.002*enc);
+  q.gdp=Math.max(20,q.gdp*(1-gdpDrop));
+  q.fx=Math.min(500,q.fx*(1+fxRise));
+  q.damage=100-q.gdp;
+  q.months=(q.months||0)+1;
+ });
  if(atWar&&(!E.war0||E.war0.over)){
   E.war0={t,gdp:S.gdp,infra:avgReg('infra'),ind:avgReg('industry'),emp:S.employment,infl:S.inflation,rate:S.fx.rate,pop:S.pop,army:S.army,tax:S.tax,sold:S.warSold||0,civ:S.warCiv||0};
   E.loss0=E.loss;E.tax0=E.tax;E.peak=0;
@@ -2491,7 +2501,11 @@ function chWarExtra(){
  return card('📊 Итоги экономики войны',`<p class="chnote">${w.over?'Война окончена':'⚔ Война идёт'} · длительность ${dur} мес.</p><div style="overflow:auto"><table class="fxt"><tr><th></th><th style="text-align:right">До войны</th><th style="text-align:right">Сейчас</th><th style="text-align:right">Δ</th></tr>
  ${row('ВВП, млрд',w.gdp,S.gdp)}${row(`Курс 1 ${F.ref}, ${F.cur}`,w.rate,F.rate,1,v=>nf(v,v<10?2:v<100?1:0))}${row('Инфляция, %',w.infl,S.inflation,1,f1)}${row('Занятость, %',w.emp,S.employment,0,f1)}
  ${row('Инфраструктура (ср.)',w.infra,avgReg('infra'),0,f1)}${row('Промышленность (ср.)',w.ind,avgReg('industry'),0,f1)}${row('Армия',w.army,S.army)}${row('Население',w.pop,S.pop)}</table></div>
- <p>Потеря выпуска за войну: <b>${fmt((E.loss||0)-(E.loss0||0))} млрд</b> · недополученные налоги: <b>${fmt((E.tax||0)-(E.tax0||0))} млн</b> · погибло: <b>${fmt((S.warSold||0)-(w.sold||0))}</b> солдат и <b>${fmt((S.warCiv||0)-(w.civ||0))}</b> мирных.</p>`);
+ <p>Потеря выпуска за войну: <b>${fmt((E.loss||0)-(E.loss0||0))} млрд</b> · недополученные налоги: <b>${fmt((E.tax||0)-(E.tax0||0))} млн</b> · погибло: <b>${fmt((S.warSold||0)-(w.sold||0))}</b> солдат и <b>${fmt((S.warCiv||0)-(w.civ||0))}</b> мирных.</p>
+ <h3>🎯 Воздействие на экономику противника</h3>
+ <p class="chnote">Модельная оценка симуляции: индекс до войны = 100. Это игровой расчёт, а не официальная статистика ВВП.</p>
+ <div style="overflow:auto"><table class="fxt"><tr><th>Противник</th><th class="r">ВВП, индекс</th><th class="r">Потеря ВВП</th><th class="r">Рост курса</th></tr>
+ ${(S.wars||[]).map(x=>{const q=x.enemyEcon||{gdp:100,fx:100,damage:0};return `<tr><td>${x.n}</td><td class="r">${q.gdp.toFixed(1)}</td><td class="r dn">−${q.damage.toFixed(1)}%</td><td class="r dn">+${(q.fx-100).toFixed(1)}%</td></tr>`}).join('')||'<tr><td colspan="4">Нет активных войн</td></tr>'}</table></div>`);
 }
 function chartsHtml(){
  fxEnsure();CHU.reg={};CHU.hov={};
