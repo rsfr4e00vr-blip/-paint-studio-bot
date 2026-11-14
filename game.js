@@ -66,10 +66,24 @@ const OBL=[['Волынь','Волынская',25.3,51.2,'Западный ок
 let NEWC=null;const CHS={q:'',c:'all',n:30};
 function applyCountry(){const n=NEWC;NEWC=null;if(!n||n==='Новария')return;const w=WM[n];if(!w)return;
  const p=Math.max(.1,Math.min(1.15,w.power/100)),inc=[0,.35,.6,1,1.5,2.4][w.inc]||1,e=Math.max(.5,Math.min(2.5,Math.pow(Math.max(.05,w.pop*1e6/8.2e6*inc),.4)));
- S.name=n;S.me=n;S.deposits=null;S.pop=Math.round(w.pop*1e6);const k=S.pop/8.2e6;S.regions.forEach(r=>r.pop=Math.round(r.pop*k));
+ S.name=n;S.me=n;S.deposits=null;S.pop=Math.round(w.pop*1e6);
  S.gdp=Math.round(42000*e);S.money=Math.round(S.money*e);S.army=Math.max(500,Math.round(42000*p));S.air=Math.max(2,Math.round(45*p));S.navy=Math.max(1,Math.round(8*p));
  const rl=S.relations.find(r=>r.name===n);if(rl)rl.self=true;
- const C=GEO.c[w.iso];if(C&&C.regs.length>1){const top=[...C.regs].filter(r=>r.n).sort((a,b)=>b.s-a.s).slice(0,S.regions.length);top.forEach((r,i)=>{S.regions[i].name=r.n.replace(/ \(.*\)/,'');S.regions[i].geo=r.id;S.regions[i].resource=RLAB[(r.res||'f')[0]]||S.regions[i].resource;const meta=(window.WORLD_REGION_META&&WORLD_REGION_META[n]&&WORLD_REGION_META[n][S.regions[i].name])||r.meta;if(meta){S.regions[i].regionType=meta.type;S.regions[i].urbanDev=meta.urban_dev;S.regions[i].specialResources=meta.resources||[]}})}}
+ // Полная административная сетка страны становится игровой моделью регионов, а не только пятью условными зонами.
+ const C=GEO.c[w.iso];
+ if(C&&Array.isArray(C.regs)&&C.regs.length>1){
+  const seeds=C.regs.filter(r=>r.n);const total=seeds.reduce((a,r)=>a+Math.max(0,+r.s||0),0)||seeds.length;
+  S.regions=seeds.map((r,i)=>{
+   const meta=(window.WORLD_REGION_META&&WORLD_REGION_META[n]&&WORLD_REGION_META[n][r.n.replace(/ \(.*\)/,'')])||r.meta||{};
+   const share=Math.max(0,+r.s||0)/(total||1),urban=Number.isFinite(meta.urban_dev)?meta.urban_dev:.42;
+   const res=String(r.res||'f'),resource=RLAB[res[0]]||'Смешанная экономика';
+   const pop=Math.round(S.pop*share);
+   return {name:r.n.replace(/ \(.*\)/,''),pop,wealth:clamp(38+inc*7+urban*12,20,92),loyalty:clamp(59+(i%5-2)*1.5,35,85),unrest:clamp(17+(i%4)*2,5,55),industry:clamp(35+urban*25+(res.includes('q')?18:0)+(res.includes('s')?8:0),15,95),infra:clamp(32+urban*48,12,96),resource,geo:r.id,regionType:meta.type||'administrative',urbanDev:urban,specialResources:Array.isArray(meta.resources)?meta.resources:[]};
+  });
+  // Убираем погрешность округления, сохраняя точную численность населения страны.
+  if(S.regions.length)S.regions[S.regions.length-1].pop+=S.pop-S.regions.reduce((a,r)=>a+r.pop,0);
+ }
+}
 function chList(){const q=CHS.q.trim().toLowerCase();let a=WORLD.list.slice();if(q)a=a.filter(c=>c.name.toLowerCase().includes(q));if(CHS.c!=='all')a=a.filter(c=>c.cont===CHS.c);return a.sort((x,y)=>y.power-x.power||y.pop-x.pop)}
 function chRows(){const l=chList(),sh=l.slice(0,CHS.n);return (sh.map(c=>{const lv=c.power>=60?'🟢 сильная армия':c.power>=30?'🟡 средняя':'🔴 слабая армия';return `<div class="mini"><b>${c.name}</b> <span class="muted">${CONTN[c.cont]||''}</span><br>Население: ${c.pop>=1?c.pop.toFixed(c.pop>=10?0:1)+' млн':Math.round(c.pop*1000)+' тыс.'} · ${lv}<br>${resIcons(c.res)} <small class="muted">${c.trait}</small><div class="actions"><button class="primary" onclick="H.startAs('${c.name.replace(/'/g,"\\'")}')">Играть за ${c.name}</button></div></div>`}).join('')||'<p class="muted">Никого не найдено</p>')+(l.length>sh.length?`<div class="mini" style="display:flex;align-items:center;justify-content:center"><button onclick="H.chf('n',${CHS.n+30})">Показать ещё (${l.length-sh.length})</button></div>`:'')}
 function hchooser(){let m=document.getElementById('chm');if(!m){m=document.createElement('div');m.id='chm';m.className='ccm';document.body.appendChild(m)}
