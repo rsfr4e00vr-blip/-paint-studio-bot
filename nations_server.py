@@ -735,12 +735,17 @@ async def on_sanction(room: Room, p: Player, msg: dict):
     end = room.month + SANCTION_MONTHS
     p.sanctions_out[q.id] = end
     q.sanctions_in.append({"from": p.id, "end": end})
-    p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 18, -100, 100, 0))
-    q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 18, -100, 100, 0))
-    await room.notice(f"⛔ {p.country} ввёл санкции против {q.country} на {SANCTION_MONTHS} мес.", "dip")
-    if p.relations.get(q.id, 0) <= -100 and not p.war and not q.war:
-        await room.notice(f"🚨 Отношения {p.country} и {q.country} достигли −100: начинается война.", "war")
-        await on_war(room, p, {"to": q.id})
+    # Sanctions have a limited diplomatic impact: they can push neutral relations
+    # down to -30, but cannot by themselves drag an already worse relationship
+    # upward or trigger a war. Other events (e.g. declaring war) have their own
+    # independent relation effects.
+    current_p = int(num(p.relations.get(q.id, 0), -100, 100, 0))
+    current_q = int(num(q.relations.get(p.id, 0), -100, 100, 0))
+    if current_p > -30:
+        p.relations[q.id] = max(-30, current_p - 18)
+    if current_q > -30:
+        q.relations[p.id] = max(-30, current_q - 18)
+    await room.notice(f"⛔ {p.country} ввёл санкции против {q.country} на {SANCTION_MONTHS} мес. Отношения из-за санкций не опустятся ниже −30.", "dip")
 
 
 async def on_war(room: Room, p: Player, msg: dict):
@@ -768,8 +773,14 @@ async def on_war(room: Room, p: Player, msg: dict):
     wid = "w" + "".join(random.choices(string.digits, k=5))
     room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {}}
     p.war = q.war = wid
-    p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 35, -100, 100, 0))
-    q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 35, -100, 100, 0))
+    # An attack can worsen bilateral relations only as far as -30.
+    # The attack itself never starts any additional/automatic wars.
+    current_p = int(num(p.relations.get(q.id, 0), -100, 100, 0))
+    current_q = int(num(q.relations.get(p.id, 0), -100, 100, 0))
+    if current_p > -30:
+        p.relations[q.id] = max(-30, current_p - 30)
+    if current_q > -30:
+        q.relations[p.id] = max(-30, current_q - 30)
     await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True})
     await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False})
     await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}!", "war")
