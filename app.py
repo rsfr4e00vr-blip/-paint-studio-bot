@@ -646,6 +646,11 @@ def game_css():
     return FileResponse(BASE / "style.css", media_type="text/css")
 
 
+@app.get("/strategy-ux.css")
+def strategy_ux_css():
+    return FileResponse(BASE / "strategy-ux.css", media_type="text/css")
+
+
 @app.get("/multiplayer.css")
 def multiplayer_css():
     return FileResponse(BASE / "multiplayer.css", media_type="text/css")

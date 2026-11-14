@@ -1,0 +1,62 @@
+/* Novaria UX refresh: shared presentation for solo and multiplayer */
+:root{--ux-bg:#091522;--ux-panel:#102238;--ux-line:#294762;--ux-text:#edf5ff;--ux-muted:#a8bdd2;--ux-gold:#e9bd68;--ux-cyan:#48c7d2}
+*{scroll-margin-top:150px}
+body{background:radial-gradient(ellipse at 12% 0%,#1b4660 0,transparent 36%),linear-gradient(155deg,#07111d,#0b1b2b 65%,#091522)!important}
+header{position:relative;z-index:15}
+header .emblem{flex:0 0 48px}
+main{width:min(100%,1440px);padding-left:clamp(9px,2vw,24px);padding-right:clamp(9px,2vw,24px)}
+.timebar{flex-wrap:wrap;gap:7px}
+.timebar .time-now{min-width:155px}
+.tabbar{display:block;padding:7px;overflow:visible}
+.tabbar .cats{display:flex;gap:5px;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:thin;padding-bottom:2px}
+.tabbar .cats button{white-space:nowrap;min-height:42px}
+.tabbar .subs{padding-top:5px}
+.tabbar .sub{display:flex;gap:5px;overflow-x:auto;scrollbar-width:none;padding:3px 1px}
+.tabbar .sub[hidden]{display:none}
+.tabbar .sub button{white-space:nowrap;min-height:36px;padding:7px 11px;background:#10243a;border:1px solid #294762}
+.tabbar button.active,.tabbar button.on{background:linear-gradient(135deg,#1a6579,#16435c);border-color:#48c7d2;color:#fff}
+#content{min-width:0}
+#content>.grid{align-items:start}
+.panel{min-width:0;overflow:hidden}
+.panel h2{line-height:1.25}
+.cards{grid-template-columns:repeat(auto-fit,minmax(min(100%,175px),1fr))}
+.mini{min-width:0;overflow-wrap:anywhere}
+.actions,.row{align-items:center;flex-wrap:wrap}
+.actions button,.row button{max-width:100%;white-space:normal}
+input,select,textarea{max-width:100%;min-width:0}
+input[type=range]{min-width:100px;flex:1}
+#content table{display:block;max-width:100%;overflow-x:auto;white-space:nowrap}
+.log,.mpfeed,.mpchat{overflow:auto;overscroll-behavior:contain}
+.notice{z-index:35;max-width:min(600px,94vw)}
+/* Multiplayer gets the same information hierarchy and tap targets. */
+.mpwrap{display:grid;gap:12px}
+.mpwrap>.panel{margin:0}
+.mpquick{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}
+.mpquick button{min-height:44px;text-align:left}
+.mpplayer,.mpdip,.mpfeed>div{overflow-wrap:anywhere}
+/* Phone-first: no tiny controls, no stacked sticky bars eating the screen. */
+@media(max-width:760px){
+ main{padding-top:9px}
+ header{padding:11px 12px}
+ .timebar{top:0;position:relative;margin-bottom:9px;border-radius:12px}
+ .timebar .time-now{width:100%;min-width:0;font-size:16px}
+ .timebar button{flex:1 1 calc(25% - 8px);min-width:0;padding:8px 6px}
+ .timebar label{display:none}
+ .timebar select{flex:1 1 70px}
+ #runstate{margin-left:auto}
+ .tabbar{top:0;position:sticky;z-index:20;margin-bottom:10px;border-radius:12px}
+ .tabbar .cats button{font-size:12px;padding:9px 11px;min-height:42px}
+ .tabbar .sub button{font-size:11px}
+ .topline{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .panel{padding:11px}
+ .panel h2{font-size:16px}
+ .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .cards .mini{padding:9px}
+ .actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .actions button{width:100%;min-height:44px;font-size:12px}
+ .row{gap:7px}
+ .row>label{width:100%}
+ .mpquick{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .mpquick button{font-size:12px;padding:8px}
+}
+@media(max-width:380px){.cards{grid-template-columns:1fr}.mpquick{grid-template-columns:1fr 1fr}.timebar button{font-size:11px}}
