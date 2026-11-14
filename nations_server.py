@@ -344,8 +344,8 @@ class Room:
             for side, front in ((a, w["p"]), (d, 100.0 - w["p"])):
                 q = econ.setdefault(side.id, {"gdp": 100.0, "fx": 100.0})
                 pressure = max(0.0, min(1.0, front / 100.0))
-                q["gdp"] = max(25.0, q["gdp"] * (1.0 - (0.0015 + 0.0035 * pressure)))
-                q["fx"] = min(500.0, q["fx"] * (1.0 + (0.002 + 0.0045 * pressure)))
+                q["gdp"] = max(25.0, q["gdp"] * (1.0 - (0.0025 + 0.006 * pressure)))
+                q["fx"] = min(500.0, q["fx"] * (1.0 + (0.004 + 0.009 * pressure)))
             # издержки обеим сторонам каждый месяц
             for side, enemy_ratio in ((a, pd / (pa + pd)), (d, pa / (pa + pd))):
                 await self.send(side, {"type": "war_cost", "war": wid,

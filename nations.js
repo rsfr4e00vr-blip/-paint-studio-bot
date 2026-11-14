@@ -55,7 +55,7 @@ function on(m){
     if(room.state==='lobby'&&modal.classList.contains('open'))paintModal();setBar();paintAll();break;
   case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
-  case'war_orders':wars=m.wars||wars;paintAll();break;
+  case'war_orders':wars=m.wars||wars;syncMpWars();paintAll();break;
   case'tick':onTick(m);break;
   case'paused':room.state=m.value?'paused':'running';note(m.value?'⏸ Хозяин комнаты поставил игру на паузу':'▶ Игра продолжается','info');setBar();break;
   case'notice':note(m.text,m.kind,true);break;
@@ -65,7 +65,7 @@ function on(m){
   case'aid_in':addMoney(m.amount);NG.log(`Помощь от ${m.from}: +${fmt(m.amount)} млн`);NG.say(`${m.from} прислал нам помощь!`,'🤝');note(`💰 Получено ${fmt(m.amount)} млн от ${m.from}`,'dip');afterEffect();break;
   case'war_start':NG.log(`⚔️ Война с ${m.enemy}${m.aggressor?'':' (на нас напали)'}`);NG.say(m.aggressor?`Мы объявили войну: ${m.enemy}`:`${m.enemy} напал на нас!`,m.aggressor?'⚔️':'😱');if(!m.aggressor){const S=NG.S;S.approval=NG.clamp(S.approval+2)}afterEffect();break;
   case'war_cost':{const S=NG.S;S.army=Math.max(5000,S.army-m.army_loss);addMoney(-m.money);S.approval=NG.clamp(S.approval-m.approval);S.morale=NG.clamp(S.morale-.4);S.threat=NG.clamp(S.threat+1);break}
-  case'war_end':endWar(m);break;
+  case'war_end':if(NG.S)NG.S.mpWars=[];endWar(m);break;
   case'dictate_open':NG.toast(`💪 Перевес на фронте против ${m.enemy}! Выберите условия во вкладке «Мультиплеер»`);note(`💪 Можно диктовать условия: ${m.enemy}`,'war');paintAll();break;
   case'cede_request':cedeRegion(m);break;
   case'region_gain':gainLand(m);break;
@@ -112,6 +112,11 @@ function leaveMP(){
   standings=[];mods={};wars=[];feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
   NG.end();setBar();closeModal();prop.classList.remove('open');
 }
+/* Мои войны из данных сервера → экономика клиента: ВВП падает, курс валюты слабеет (логика в game.js: S.mpWars) */
+function syncMpWars(){
+  const S=NG.S;if(!S)return;
+  S.mpWars=(wars||[]).filter(w=>w&&(w.a===me.id||w.d===me.id)).map(w=>({mp:true,id:w.id,p:w.a===me.id?+w.p||0:100-(+w.p||0),months:w.m||0,encirclement:0}));
+}
 function applyMods(){
   const md=mods[me.id];const S=NG.S;if(!md){S.mpFlat=S.mpFlat||0;return}
   const base=NG.income()-(S.mpFlat||0);S.mpFlat=Math.round(base*md.total);
@@ -119,14 +124,14 @@ function applyMods(){
 function onTick(m){
   if(!active)return;
   const S=NG.S;room.month=m.month;room.length=m.length;standings=m.standings;mods=m.mods||mods;wars=m.wars||[];lastTick=Date.now();
-  const miss=Math.max(1,Math.min(24,m.month-(S.mpMonth||0)));
+  const miss=Math.max(1,Math.min(24,m.month-(S.mpMonth||0)));syncMpWars();
   for(let i=0;i<miss;i++){applyMods();NG.tick();S.mpMonth=(S.mpMonth||0)+1;if(S.campaignOver)break}
   S.mpMonth=m.month;
   if(S.campaignOver&&!sentElim){sentElim=true;send({type:'eliminated'});note('💀 Ваша кампания окончена. Вы наблюдаете за игрой.','warn')}
   report();saveLocal();setBar();paintAll();
 }
 function catchUp(){
-  if(!active)return;const S=NG.S;const miss=Math.min(24,room.month-(S.mpMonth||0));
+  if(!active)return;const S=NG.S;const miss=Math.min(24,room.month-(S.mpMonth||0));syncMpWars();
   for(let i=0;i<miss;i++){applyMods();NG.tick();S.mpMonth=(S.mpMonth||0)+1;if(S.campaignOver)break}
   S.mpMonth=Math.max(S.mpMonth||0,room.month);
   if(miss>0)NG.toast(`Пока вас не было, прошло ${miss} мес.`);

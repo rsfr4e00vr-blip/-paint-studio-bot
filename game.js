@@ -378,7 +378,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 /* ===== ДОПОЛНЕНИЯ v2 ===== */
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
 const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
-function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust,t:S.year*12+S.month,war:(S.wars&&S.wars.length)?1:0,fxA:S.fx?S.fx.rate:null,fxB:S.fx?S.fx.rate*fxReal(S.fx.ref)/fxReal(S.fx.refB):null,fxMom:S.fx?S.fx.mom:null,pg:S.econ?S.econ.pg:null,lossPct:S.econ?S.econ.lossPct:0,lossCum:S.econ?S.econ.loss-(S.econ.loss0||0):0,income:S.lastInc==null?null:S.lastInc,expense:S.lastExp==null?null:S.lastExp,civDead:S.warCiv||0,soldDead:S.warSold||0,legit:S.legitimacy,coup:S.coupRisk,eGdp:(S.wars&&S.wars.length&&S.econ&&S.econ.eLast)?S.econ.eLast.g/S.econ.eLast.g0*100:null,eFx:(S.wars&&S.wars.length&&S.econ&&S.econ.eLast)?S.econ.eLast.r:null,energy:S.energy,morale:S.morale,ammo:S.ammo,equip:S.equipment}}
+function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust,t:S.year*12+S.month,war:warsAll().length?1:0,fxA:S.fx?S.fx.rate:null,fxB:S.fx?S.fx.rate*fxReal(S.fx.ref)/fxReal(S.fx.refB):null,fxMom:S.fx?S.fx.mom:null,pg:S.econ?S.econ.pg:null,lossPct:S.econ?S.econ.lossPct:0,lossCum:S.econ?S.econ.loss-(S.econ.loss0||0):0,income:S.lastInc==null?null:S.lastInc,expense:S.lastExp==null?null:S.lastExp,civDead:S.warCiv||0,soldDead:S.warSold||0,legit:S.legitimacy,coup:S.coupRisk,eGdp:(S.wars&&S.wars.length&&S.econ&&S.econ.eLast)?S.econ.eLast.g/S.econ.eLast.g0*100:null,eFx:(S.wars&&S.wars.length&&S.econ&&S.econ.eLast)?S.econ.eLast.r:null,energy:S.energy,morale:S.morale,ammo:S.ammo,equip:S.equipment}}
 const C0_OLD=[['Аркания',15,65,.4,'Торговая держава'],['Белория',48,42,.2,'Дружелюбный сосед'],['Тарвия',-20,80,.8,'Милитаристы'],['Дорвин',5,55,.5,'Союз торговцев'],['Силезия',-5,38,.3,'Горная республика'],['Мерейя',25,48,.2,'Морская федерация'],['Остмарк',-35,70,.7,'Имперские амбиции']];
 const C0=window.WORLD?WORLD.list.map(c=>[c.name,c.value,c.power,c.aggr,c.trait]):C0_OLD;
 const WM=(window.WORLD&&WORLD.map)||{},RLAB=(window.WORLD&&WORLD.RL)||{},CONTN=(window.WORLD&&WORLD.CONT)||{};
@@ -2769,11 +2769,14 @@ function fxRebase(){
 }
 const avgReg=k=>(S.regions||[]).reduce((a,r)=>a+(+r[k]||0),0)/Math.max(1,(S.regions||[]).length);
 /* --- потери экономики во время войны --- */
+/* все войны, влияющие на экономику: одиночные (S.wars) и мультиплеерные (S.mpWars, их выставляет nations.js по данным сервера) */
+function warsAll(){return [...(S.wars||[]),...(S.mpWars||[])]}
 function econWarTick(){
- const E=S.econ,t=S.year*12+S.month,ws=S.wars||[],atWar=ws.length>0;
+ const E=S.econ,t=S.year*12+S.month,ws=warsAll(),atWar=ws.length>0;
  // Экономика противника: игровая оценка, привязанная к ходу войны.
  // Индексы начинаются со 100; это не реальные статистические данные стран.
  ws.forEach(w=>{
+  if(w.mp)return;
   if(!w.enemyEcon) w.enemyEcon={gdp:100,fx:100,damage:0,months:0};
   const q=w.enemyEcon,progress=clamp((+w.p||0)/100,0,1);
   const enc=clamp(+w.encirclement||0,0,5);
@@ -2812,15 +2815,18 @@ function econWarTick(){
 }
 /* --- курс национальной валюты --- */
 function fxStress(){
- const g=Math.max(1,S.gdp),E=S.econ,ws=S.wars||[];let x=0;
+ const g=Math.max(1,S.gdp),E=S.econ,ws=warsAll();let x=0;
  x+=.020*Math.max(0,S.inflation-6);
  x+=.008*Math.max(0,60-(S.trust==null?70:S.trust));
  x+=.5*Math.max(0,S.debt/g-.15);
  if(S.money<500)x+=.08;
  x+=.006*Math.max(0,50-S.stability);
  x+=.002*Math.max(0,S.threat-40);
- ws.forEach(w=>{x+=.10+.12*(1-clamp(w.p,0,100)/100)+.02*(w.encirclement||0)});
- x+=.010*Math.max(0,E.lossPct||0);
+ /* война: сразу сильный нажим на курс, даже когда мы побеждаем; чем дольше война и чем хуже на фронте — тем сильнее */
+ ws.forEach(w=>{x+=.16+.16*(1-clamp(w.p,0,100)/100)+.025*(w.encirclement||0)});
+ if(ws.length)x+=.003*Math.min(30,E.wm||0);
+ x+=.030*Math.max(0,E.lossPct||0);   // потеря ВВП против довоенной траектории
+ x+=3*Math.max(0,E.drag||0);          // ВВП падает прямо сейчас → валюта слабеет
  x+=Math.min(.05,Object.keys(S.restr||{}).length*.01);
  x-=.003*Math.max(0,S.stability-70)+.002*Math.max(0,(S.trust==null?70:S.trust)-75);
  return clamp(x,-.12,1.6,1.6);
@@ -2828,8 +2834,12 @@ function fxStress(){
 function fxTick(){
  fxEnsure();econWarTick();
  const F=S.fx,prev=F.rate,t=S.year*12+S.month;
- let r=prev+(F.base*Math.exp(fxStress())-prev)*.16;
- r*=Math.exp(rnd(-.006,.006)*(1+((S.wars||[]).length?1.2:0)));
+ const nw=warsAll().length;
+ if(F.nw==null)F.nw=nw;
+ if(nw>F.nw){F.rate*=1.05;F.base*=1.03;log(`💱 Начало войны: рынки в панике, курс ${F.cur} резко ослаб.`)}
+ F.nw=nw;
+ let r=F.rate+(F.base*Math.exp(fxStress())-F.rate)*(nw?.30:.16);
+ r*=Math.exp(rnd(-.006,.006)*(1+(nw?1.2:0)));
  r=Math.max(F.base0*.5,r);
  F.rate=r;F.mom=(r/prev-1)*100;if(Math.abs(r/F.base0-1)>.02)F.moved=1;
  if(F.mom>2)S.inflation=clamp(S.inflation+Math.min(.8,(F.mom-2)*.08),0,100);
@@ -2922,8 +2932,10 @@ function chFxExtra(){
  const rows=codes.map(c=>{const g=FXD.get(c);if(!g)return'';
   let v0=F.start[c],v1=g.v;
   if(c===F.cur&&F.ref==='USD'&&F.cur!=='NVT'&&okn(F.base0)&&F.base0>0){v0=F.base0;v1=F.rate} /* своя валюта — по игровому курсу */
+  const ix=(window.NationsAI&&c!==F.cur&&c!=='USD'&&c!=='NVT')?NationsAI.fxIndex(S,c):null,ux=window.NationsAI?NationsAI.fxIndex(S,'USD'):null;
+  if(ix){const k=ix/(ux||100);v0=g.v;v1=g.v*k} /* валюты других стран: игровой курс по их войнам и экономике */
   let ch=okn(v0)&&v0>0?(v1/v0-1)*100:null;if(ch!=null&&Math.abs(ch)<.005)ch=0;const cls=ch==null||Math.abs(ch)<.005?'':ch>0?'dn':'up';
-  return `<tr class="${c===F.cur?'me':''}"><td><b>${c}</b> <span class="muted">${FXD.name(c)}</span></td><td class="r">${fxRate(g.v)}${g.src==='approx'?' ≈':''}</td><td class="r ${cls}">${ch==null?'—':pct(ch,2)}</td></tr>`}).join('');
+  return `<tr class="${c===F.cur?'me':''}"><td><b>${c}</b> <span class="muted">${FXD.name(c)}</span></td><td class="r">${fxRate(v1)}${g.src==='approx'&&!ix?' ≈':''}</td><td class="r ${cls}">${ch==null?'—':pct(ch,2)}</td></tr>`}).join('');
  const m=fxMarket();
  return card('🌍 Реальные курсы валют мира',`<p class="chnote">${st.txt}</p>${m?`<p>Ваша валюта <b>${F.cur}</b>: рынок — 1 ${F.ref} = <b>${fxRate(m)}</b>, в игре сейчас — <b>${fxRate(F.rate)}</b> (${pct((F.rate/m-1)*100)}).</p>`:'<p class="muted">Новария — вымышленное государство, её валюта (талер) в реальном мире не торгуется; реальные курсы ниже даны для сравнения.</p>'}<div style="overflow:auto"><table class="fxt"><tr><th>Валюта</th><th style="text-align:right">за 1 USD</th><th style="text-align:right">с начала партии</th></tr>${rows}</table></div><p class="chnote">Рост числа = валюта подешевела к USD (красным), падение = подорожала (зелёным). Для вашей валюты изменение считается по игровому курсу. ≈ — приблизительное значение (нет в снимке рынка); при подключении к интернету курсы обновляются автоматически.</p><button onclick="fxRefresh()">🔄 Обновить курсы</button>`)+(window.NationsAI?NationsAI.econPanel(S):'');
 }

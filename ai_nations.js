@@ -45,7 +45,7 @@ function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80
 let worldDrag=0,byNameCur={};
 function economy(n){
  const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>byNameCur[x]&&byNameCur[x].war).length/tp.length:0;
- const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-R(.001,.0018),-.018,.024);
+ const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-(n.war?.004+n.exhaustion*.00005+(n.dmg||0)*.0003:0)-R(.001,.0018),-.018,.024);
  n.gdp=Math.max(1,n.gdp*(1+growth));n.pop=Math.max(.01,n.pop*(1+C(.00015+(n.stability-55)*.000006-R(0,.00025),-.001,.0008)));
  const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
  n.treasury=C(n.treasury+income-upkeep,0,n.gdp*.2);
@@ -59,6 +59,26 @@ function economy(n){
  n.manpower=C(n.manpower+n.pop*.00008,0,n.pop*.08);n.morale=C(n.morale+(n.treasury>n.gdp*.015?.35:-.45)-n.exhaustion*.008,15,100);
  n.stability=C(n.stability+R(-.7,.55)+(n.treasury>n.gdp*.025?.2:0)-n.exhaustion*.012,10,96);
  n.exports=n.gdp*(.0004+n.industry*.00015)+n.tradePartners.length*2;n.imports=n.gdp*(.00025+(n.power>60?.0002:0));
+}
+/* Курс валюты страны (индекс: 100 = на старте, выше = валюта слабее). Реагирует на войну, потерю ВВП, разрушения и нестабильность. */
+function fxStep(n){
+ n.fx??=100;
+ const h=n.gh||[],g=h.length>3?Math.log(Math.max(1,n.gdp)/Math.max(1,h[h.length-4])):0;
+ let x=0;
+ if(n.war)x+=.16+.002*n.exhaustion;
+ x+=.004*(n.dmg||0);
+ x+=3*Math.max(0,-g);
+ x+=.006*Math.max(0,50-n.stability);
+ if(n.treasury<n.gdp*.004)x+=.05;
+ x-=.002*Math.max(0,n.stability-70)+.6*Math.max(0,g);
+ const target=100*Math.exp(C(x,-.12,1.4));
+ n.fx=C(n.fx+(target-n.fx)*(n.war?.3:.15)+R(-.4,.4),45,700);
+}
+function fxIndex(S,code){
+ const W=S&&S.aiWorld;if(!W||!window.FXD)return null;
+ const ns=W.nations.filter(n=>!n.annexed&&n.fx!=null&&FXD.cur(n.iso)===code);
+ if(!ns.length)return null;
+ const w=ns.reduce((s,n)=>s+n.gdp,0);return ns.reduce((s,n)=>s+n.fx*n.gdp,0)/w;
 }
 function diplomacy(W,A){
  for(const a of A){a.cooldown=Math.max(0,a.cooldown-1);a.allies=a.allies.filter(x=>A.some(n=>n.name===x));
@@ -181,7 +201,7 @@ function brainStats(W){
  return{steps:B.steps,eps:epsS(B),avg:B.avg,rows:rows.sort((a,b)=>b.n-a.n),tot,coverage:Math.round(100*rows.length/ACTS.length)};
 }
 function tick(S){
- curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
+ curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);A.forEach(fxStep);if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
  W.nations.forEach(n=>{if(n.annexed)return;(n.gh||(n.gh=[])).push(Math.round(n.gdp*100)/100);if(n.gh.length>13)n.gh.shift();if(n.gdp>(n.gpeak||0))n.gpeak=n.gdp});
  {const m=med(A),wv=worldView(A);W.view={atWar:+wv.atWar.toFixed(3),growth:+wv.growth.toFixed(4)};A.forEach(n=>think(W,n,A,m,wv))}diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
@@ -255,5 +275,5 @@ function econSetSort(k){
  const tb=document.getElementById('econTb');if(tb)tb.innerHTML=econBody(econRows(S));
  const p=document.getElementById('econPanel');if(p)p.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.getAttribute('onclick')==="NationsAI.econSort('"+k+"')"));
 }
-window.NationsAI={init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort};
+window.NationsAI={fxIndex,init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort};
 })();
