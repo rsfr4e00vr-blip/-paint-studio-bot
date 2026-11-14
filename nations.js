@@ -55,6 +55,7 @@ function on(m){
     if(room.state==='lobby'&&modal.classList.contains('open'))paintModal();setBar();paintAll();break;
   case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
+  case'war_orders':wars=m.wars||wars;paintAll();break;
   case'tick':onTick(m);break;
   case'paused':room.state=m.value?'paused':'running';note(m.value?'⏸ Хозяин комнаты поставил игру на паузу':'▶ Игра продолжается','info');setBar();break;
   case'notice':note(m.text,m.kind,true);break;
@@ -236,6 +237,7 @@ function table(list){
 }
 function chips(c){if(!c)return'';const n={eco:'Эко',welfare:'Нар.',gov:'Упр.',fin:'Фин.',mil:'Арм.'};return Object.keys(n).map(k=>`<span class="chip">${n[k]} ${c[k]}</span>`).join('')}
 window.NGMP={
+  setWarCommand(region,troops,air,navy){send({type:'war_command',region:String(region||'').slice(0,60),troops:Number(troops)||0,air,navy})},
   setVassalTax(id,rate){send({type:'vassal_tax',vassal:id,rate:Number(rate)})},
   tab(){
     if(!room.code)return `<section class="panel"><h2>🌍 Мультиплеер</h2><p>Вы не в комнате.</p><button class="primary" onclick="NGMP.open()">Создать или войти</button></section>`;
@@ -259,14 +261,17 @@ function pct(v){return(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v*1000)/10)+'%'
 function paintMods(){
   const e=$('#mpMods');if(!e)return;const md=mods[me.id]||{pact:0,sanction:0,rubber:0,total:0},S=NG.S;
   const w=wars.find(x=>x.a===me.id||x.d===me.id);let wh='';
-  if(w){const enemy=(standings.find(p=>p.id===(w.a===me.id?w.d:w.a))||{}).country||'противник',mine=w.a===me.id?w.p:100-w.p;const iWon=w.won===me.id,theyWon=w.won&&w.won!==me.id,can=mine>=60||iWon,reg=mine>=70||iWon;
+  if(w){const enemyId=(w.a===me.id?w.d:w.a),enemy=(standings.find(p=>p.id===enemyId)||{}).country||'противник',mine=w.a===me.id?w.p:100-w.p;const iWon=w.won===me.id,theyWon=w.won&&w.won!==me.id,can=mine>=60||iWon,reg=mine>=70||iWon;
     wh=`<h3>⚔️ Война с ${esc(enemy)}</h3><div class="warbar"><i style="width:${mine}%"></i></div><div class="muted2">Ваш перевес на фронте: <b>${mine}%</b> · месяц войны ${w.m}/24 · каждый месяц: −казна, −армия, −одобрение</div>`+
+    `<div class="chips"><span class="chip">📉 Индекс ВВП врага: ${w.econ&&w.econ[enemyId]?Math.round(w.econ[enemyId].gdp):100}% от довоенного</span><span class="chip">💱 Индекс курса врага: ${w.econ&&w.econ[enemyId]?Math.round(w.econ[enemyId].fx):100}% от довоенного</span></div>`+
+    `<div class="mini"><b>📋 Совместный план армии</b><div class="row"><input id="mpWarRegion" maxlength="60" placeholder="Область назначения" value="${esc((w.orders&&w.orders[me.id]&&w.orders[me.id].region)||'')}" /><input id="mpWarTroops" type="number" min="0" max="1000000" step="1000" placeholder="Солдаты" value="${(w.orders&&w.orders[me.id]&&w.orders[me.id].troops)||0}" /></div><div class="row"><select id="mpWarAir"><option value="support">Авиация: поддержка</option><option value="patrol">Авиация: патруль</option><option value="reserve">Авиация: резерв</option></select><select id="mpWarNavy"><option value="escort">Флот: снабжение</option><option value="blockade">Флот: блокада</option><option value="reserve">Флот: резерв</option></select><button class="primary" id="mpWarPlan">📌 Передать приказ</button></div><small class="muted2">Приказ проверяется сервером и виден обеим сторонам. Эффекты условные и игровые.</small></div>`+
     (theyWon?`<p><b>🏳 Вы разгромлены.</b> Противник выбирает условия (${3-(w.wm||0)} мес.), иначе — контрибуция.</p>`:
     `<p class="muted2">${iWon?`🏆 Полная победа! Вы решаете, чем закончить войну (${3-(w.wm||0)} мес., иначе контрибуция):`:can?'💪 Перевес! Вы решаете, чем закончить войну:':'Условия можно диктовать при перевесе от 60%, область — от 70%, захват страны — при полной победе.'}</p>
     <div class="row"><button class="good" data-term="tribute" ${can?'':'disabled'}>💰 Контрибуция</button><button class="primary" data-term="vassal" ${can?'':'disabled'}>👑 Вассал (24 мес.)</button><button class="danger" data-term="region" ${reg?'':'disabled'}>🗺 Отнять область</button><button class="danger" data-term="annex" ${iWon?'':'disabled'}>🏴 Захватить страну</button></div>`)}
   const myVassals=standings.filter(q=>q.vassal_of===me.id);
   const vassalUI=myVassals.length?`<h3>👑 Управление вассалами</h3>${myVassals.map(q=>`<div class="mini"><b>${esc(q.country)}</b><p class="muted2">Текущая дань: ${q.vassal_tax??10}% · высокая дань повышает риск восстания</p><label>Доля дохода: <b id="vt-${q.id}">${q.vassal_tax??10}%</b></label><input type="range" min="0" max="40" step="1" value="${q.vassal_tax??10}" oninput="document.getElementById('vt-${q.id}').textContent=this.value+'%'" onchange="window.NGMP.setVassalTax('${q.id}',this.value)"><small class="muted2">0% — вассал почти не платит; 40% — больше доход, но риск отделения значительно выше.</small></div>`).join('')}`:'';
   e.innerHTML=`<h2>📊 Моя экономика в мультиплеере</h2><div>${[['📜 Торговые пакты',md.pact],['⛔ Санкции',md.sanction],['👑 Вассалитет',md.vassal||0],['⚖️ Баланс (догоняющий бонус / бремя лидера)',md.rubber]].map(x=>`<span class="chip ${x[1]>0?'good':x[1]<0?'bad':''}">${x[0]} ${pct(x[1])}</span>`).join('')}</div><p class="muted2">Итоговая поправка к доходу: <b>${pct(md.total)}</b> (${S.mpFlat>0?'+':''}${fmt(S.mpFlat||0)} млн/мес). Последний в таблице получает до +5%, лидер платит до −3%.</p>${vassalUI}${wh}${S.campaignOver?'<p><b>💀 Ваша кампания окончена — вы наблюдатель.</b></p>':S.out?'<p><b>🪧 Вы в оппозиции: очки ×0,6, пока не вернётесь к власти.</b></p>':''}`;
+  const plan=$('#mpWarPlan');if(plan)plan.onclick=()=>window.NGMP.setWarCommand(val('#mpWarRegion'),val('#mpWarTroops'),val('#mpWarAir'),val('#mpWarNavy'));
 }
 function paintDip(){
   const e=$('#mpDip');if(!e)return;const S=NG.S,list=(standings.length?standings:room.players).filter(p=>p.id!==me.id);

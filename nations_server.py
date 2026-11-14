@@ -316,7 +316,7 @@ class Room:
     # ---- войны
     def war_pub(self, w: dict) -> dict:
         return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"],
-                "won": w.get("won"), "wm": w.get("wm", 0)}
+                "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {})}
 
     async def process_wars(self):
         for wid, w in list(self.wars.items()):
@@ -327,8 +327,25 @@ class Room:
             w["m"] += 1
             pa = max(1.0, a.rep["power"]) * (0.8 + a.rep["appr"] / 250)
             pd = max(1.0, d.rep["power"]) * 1.15 * (0.8 + d.rep["appr"] / 250)   # преимущество обороны
+            orders = w.get("orders", {})
+            oa, od = orders.get(a.id, {}), orders.get(d.id, {})
+            def op_bonus(o):
+                troops = num(o.get("troops"), 0, 1_000_000, 0)
+                air = {"support": 0.035, "patrol": 0.018, "reserve": 0.0}.get(o.get("air"), 0.0)
+                navy = {"escort": 0.025, "blockade": 0.018, "reserve": 0.0}.get(o.get("navy"), 0.0)
+                return min(0.10, troops / 1_000_000 * 0.04 + air + navy)
+            pa *= 1 + op_bonus(oa)
+            pd *= 1 + op_bonus(od)
             delta = (pa - pd) / (pa + pd) * 11 + random.uniform(-2.5, 2.5)
             w["p"] = max(0.0, min(100.0, w["p"] + max(-7.0, min(7.0, delta))))
+            # Игровые индексы ущерба экономике: 100 = довоенный уровень, не реальные котировки.
+            econ = w.setdefault("econ", {a.id: {"gdp": 100.0, "fx": 100.0},
+                                         d.id: {"gdp": 100.0, "fx": 100.0}})
+            for side, front in ((a, w["p"]), (d, 100.0 - w["p"])):
+                q = econ.setdefault(side.id, {"gdp": 100.0, "fx": 100.0})
+                pressure = max(0.0, min(1.0, front / 100.0))
+                q["gdp"] = max(25.0, q["gdp"] * (1.0 - (0.0015 + 0.0035 * pressure)))
+                q["fx"] = min(500.0, q["fx"] * (1.0 + (0.002 + 0.0045 * pressure)))
             # издержки обеим сторонам каждый месяц
             for side, enemy_ratio in ((a, pd / (pa + pd)), (d, pa / (pa + pd))):
                 await self.send(side, {"type": "war_cost", "war": wid,
@@ -518,6 +535,8 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_sanction(room, p, msg)
     elif kind == "war":
         await on_war(room, p, msg)
+    elif kind == "war_command":
+        await on_war_command(room, p, msg)
     elif kind == "peace":
         await on_peace(room, p, msg)
     elif kind == "dictate":
@@ -664,11 +683,26 @@ async def on_war(room: Room, p: Player, msg: dict):
         await room.notice("Сначала нужно разорвать торговый пакт (дождаться конца).", "warn", p)
         return
     wid = "w" + "".join(random.choices(string.digits, k=5))
-    room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0}
+    room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {}}
     p.war = q.war = wid
     await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True})
     await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False})
     await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}!", "war")
+
+
+async def on_war_command(room: Room, p: Player, msg: dict):
+    """Серверная проверка и синхронизация стратегических приказов обеих сторон."""
+    w = room.wars.get(p.war or "")
+    if not w:
+        await room.notice("Приказы доступны только во время войны.", "warn", p)
+        return
+    region = "".join(ch for ch in str(msg.get("region", "")) if ch.isprintable()).strip()[:60]
+    troops = int(num(msg.get("troops"), 0, 1_000_000, 0))
+    air = msg.get("air") if msg.get("air") in ("support", "patrol", "reserve") else "reserve"
+    navy = msg.get("navy") if msg.get("navy") in ("escort", "blockade", "reserve") else "reserve"
+    w.setdefault("orders", {})[p.id] = {"region": region, "troops": troops, "air": air, "navy": navy}
+    await room.broadcast({"type": "war_orders", "wars": [room.war_pub(x) for x in room.wars.values()]})
+    await room.notice(f"📋 {p.country} обновил план армии: {region or 'общий фронт'}, авиация — {air}, флот — {navy}.", "war")
 
 
 async def on_peace(room: Room, p: Player, msg: dict):
