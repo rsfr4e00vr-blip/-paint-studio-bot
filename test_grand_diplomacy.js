@@ -12,13 +12,18 @@ a.ideologyDisputes={Бета:{severity:55,expires:30,detail:'Идеологич�
 assert.ok(GrandDiplomacy.causes(a,b,12).some(x=>x.id==='ideology'));
 a.claims={Бета:{severity:70,expires:50,detail:'Территориальная претензия'}};
 assert.ok(GrandDiplomacy.causes(a,b,12).some(x=>x.id==='territorial'));
+a.securityCases={Бета:{severity:70,expires:40,detail:'Консульский кризис'}};
+assert.ok(GrandDiplomacy.causes(a,b,12).some(x=>x.id==='security'));
+
 const S={name:'Альфа',year:1,month:0,ideology:'либеральный курс',grandDiplomacy:{claims:{},borderCases:{}}};
 const r=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'border');
 assert.equal(r.ok,true);assert.ok(GrandDiplomacy.playerCauses(S,{name:'Бета',value:-40,ideology:'традиционализм'}).includes('border'));
+const security=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'security');
+assert.equal(security.ok,true);assert.ok(GrandDiplomacy.playerCauses(S,{name:'Бета',value:-40,ideology:'традиционализм'}).includes('security'));
 const n={...a,claims:{Альфа:{severity:78,expires:60,detail:'Claim'}},rivals:{Альфа:45}};
 const d=GrandDiplomacy.aiPlayerDecision({brain:{},nations:[n]},{name:'Бета',value:-45},n,30);
 assert.ok(['negotiate','protest','ultimatum','prepare','war'].includes(d.action));
-console.log('OK: territorial, border and ideological causes; AI diplomatic decision uses neural network');
+console.log('OK: territorial, border, ideological and consular-security causes; AI diplomatic decision uses neural network');
 // A high-severity crisis and a clear strategic advantage let the neural diplomat choose war.
 const forcedBrain={};const forcedNet=NN.get(forcedBrain,'dipNN',10,14,5,[.15,.05,-.05,-.1,-.55]);
 forcedNet.W1.fill(0);forcedNet.W2.fill(0);forcedNet.b1.fill(0);
@@ -27,4 +32,14 @@ const weak={name:'Слабая',relations:-60,power:25,gdp:40,stability:45,treas
 const oldRandom=Math.random;Math.random=()=>.99;
 const action=GrandDiplomacy.neuralAction({brain:forcedBrain},strong,weak,{id:'border',severity:90,detail:'Серьёзный пограничный инцидент'},{stage:3,warScore:98});
 Math.random=oldRandom;assert.equal(action,'war');
+const aiNation={...a,securityCases:{Бета:{severity:90,expires:60,detail:'Дипломатическая миссия подверглась нападению'}},embassyExpelledFrom:[]};
+const player={name:'Бета',value:-70,ideology:'традиционализм'};
+const aiDecision=GrandDiplomacy.aiPlayerDecision({brain:{},nations:[aiNation]},{...player},aiNation,30);
+assert.ok(['negotiate','protest','ultimatum','prepare','war'].includes(aiDecision.action));
+const embassyAI={name:'Альфа',iso:'AA',relations:-60,power:90,gdp:120,stability:75,treasury:20,ideology:'традиционализм',allies:[],rivals:{},securityCases:{}};
+const embassyState={name:'Бета',year:2,month:0,ideology:'либеральный курс',embassies:{Альфа:{monthsLeft:12}},aiWorld:{brain:{},nations:[embassyAI]}};
+GrandDiplomacy.aiPlayerDecision(embassyState,{name:'Альфа',value:-60,ideology:'традиционализм'},embassyAI,35);
+assert.ok(embassyAI.securityCases.Бета,'AI should create a consular case when a hostile state still hosts the player embassy');
+console.log('OK: AI can initiate the security crisis in response to a diplomatic mission dispute');
+console.log('OK: neural diplomat can evaluate the new security crisis cause');
 console.log('OK: neural diplomat can select a legally available high-severity war');

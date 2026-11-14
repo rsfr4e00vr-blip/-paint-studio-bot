@@ -6,7 +6,8 @@
   territorial:{label:'Территориальные претензии',icon:'🗺',weight:1.0},
   border:{label:'Пограничный конфликт',icon:'🚧',weight:1.15},
   ideology:{label:'Религиозный / идеологический конфликт',icon:'⚖️',weight:.75},
-  economic:{label:'Экономический конфликт',icon:'📉',weight:.85}
+  economic:{label:'Экономический конфликт',icon:'📉',weight:.85},
+  security:{label:'Кризис защиты граждан и дипломатической миссии',icon:'🛂',weight:1.0}
  };
  const ORIENTATIONS=['прагматизм','либеральный курс','государственный курс','национальный курс','традиционализм','религиозный курс'];
  const hash=s=>{let h=2166136261;for(const ch of String(s||'')){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
@@ -14,7 +15,7 @@
  function ensureWorld(W){
   W.diplomacy=W.diplomacy||{version:1,crises:[],history:[],lastIncident:0};
   const D=W.diplomacy;D.version=1;D.crises=Array.isArray(D.crises)?D.crises:[];D.history=Array.isArray(D.history)?D.history:[];
-  (W.nations||[]).forEach(n=>{n.ideology=orientation(n);n.claims=n.claims||{};n.borderCases=n.borderCases||{};n.economicGrievances=n.economicGrievances||{};n.ideologyDisputes=n.ideologyDisputes||{};n.dipCooldown=Math.max(0,+n.dipCooldown||0)});
+  (W.nations||[]).forEach(n=>{n.ideology=orientation(n);n.claims=n.claims||{};n.borderCases=n.borderCases||{};n.economicGrievances=n.economicGrievances||{};n.ideologyDisputes=n.ideologyDisputes||{};n.securityCases=n.securityCases||{};n.dipCooldown=Math.max(0,+n.dipCooldown||0)});
   return D;
  }
  function pairKey(a,b){return [a.name,b.name].sort().join('::')}
@@ -36,6 +37,7 @@
   const ideol=att.ideology&&def.ideology&&att.ideology!==def.ideology;
   if(ideol&&active(att.ideologyDisputes&&att.ideologyDisputes[def.name],month))out.push({id:'ideology',severity:C(att.ideologyDisputes[def.name].severity||48,25,90),detail:`Противостояние: ${att.ideology} — ${def.ideology}`});
   if(active(att.economicGrievances&&att.economicGrievances[def.name],month))out.push({id:'economic',severity:C(att.economicGrievances[def.name].severity||55,25,95),detail:att.economicGrievances[def.name].detail||'Экономическое давление и торговый спор'});
+  if(active(att.securityCases&&att.securityCases[def.name],month))out.push({id:'security',severity:C(att.securityCases[def.name].severity||68,40,100),detail:att.securityCases[def.name].detail||'Задержание граждан или нападение на дипломатическую миссию'});
   return out.sort((a,b)=>b.severity-a.severity);
  }
  function ensureCrisis(D,a,b,cause,month){
@@ -105,10 +107,11 @@
   const myIdeology=S.ideology||'прагматизм',other=c.ideology||orientation(c);
   if(myIdeology!==other&&(+c.value||0)<=-15)out.push('ideology');
   if(S.sanc&&S.sanc[c.name]&&S.sanc[c.name].left>0)out.push('economic');
+  if(G.securityCases&&active(G.securityCases[c.name],month))out.push('security');
   return out;
  }
  function preparePlayerCase(S,c,cause){
-  const month=(S.year||0)*12+(S.month||0),G=S.grandDiplomacy||(S.grandDiplomacy={version:1,claims:{},borderCases:{}});G.claims=G.claims||{};G.borderCases=G.borderCases||{};
+  const month=(S.year||0)*12+(S.month||0),G=S.grandDiplomacy||(S.grandDiplomacy={version:1,claims:{},borderCases:{}});G.claims=G.claims||{};G.borderCases=G.borderCases||{};G.securityCases=G.securityCases||{};
   if(!CAUSES[cause])return{ok:false,error:'Неизвестное основание.'};
   if(cause==='territorial')G.claims[c.name]={severity:65,expires:month+36,created:month,detail:'Официальная территориальная претензия'};
   else if(cause==='border'){
@@ -121,13 +124,16 @@
   }else if(cause==='economic'){
    if(!(S.sanc&&S.sanc[c.name]&&S.sanc[c.name].left>0))return{ok:false,error:'Нужны действующие санкции этой страны против вас.'};
    G.economicGrievances=G.economicGrievances||{};G.economicGrievances[c.name]={severity:(S.sanc[c.name].left||0)>=6?86:72,expires:month+24,created:month,detail:'Санкции и экономическое давление'};
+  }else if(cause==='security'){
+   if((+c.value||0)>-10)return{ok:false,error:'Для консульского кризиса нужны напряжённые отношения (не выше −10).'};
+   G.securityCases[c.name]={severity:(+c.value||0)<=-65?88:68,expires:month+24,created:month,detail:'Консульский кризис: задержание граждан, ограничение доступа консулов и угроза дипломатической миссии'};
   }
   return{ok:true};
  }
 
  function aiPlayerDecision(S,c,n,me){
   if(!n||!S)return{canWar:false};const month=(S.year||0)*12+(S.month||0),W=S.aiWorld||{},D=ensureWorld(W);
-  n.claims=n.claims||{};n.borderCases=n.borderCases||{};n.economicGrievances=n.economicGrievances||{};n.ideologyDisputes=n.ideologyDisputes||{};
+  n.claims=n.claims||{};n.borderCases=n.borderCases||{};n.economicGrievances=n.economicGrievances||{};n.ideologyDisputes=n.ideologyDisputes||{};n.securityCases=n.securityCases||{};
   const player={name:S.name||S.me||'Игрок',power:me,gdp:+S.gdp||1,stability:+S.stability||50,treasury:+S.money||0,debt:+S.debt||0,relations:+c.value||0,ideology:S.ideology||'прагматизм'};
   n.rivals=n.rivals||{};n.rivals[player.name]=Math.max(0,-(+c.value||0));
   // A border incident is only possible for nearby states already in a serious dispute.
@@ -137,6 +143,8 @@
   }
   if(n.ideology!==player.ideology&&(+c.value||0)<-35)n.ideologyDisputes[player.name]=n.ideologyDisputes[player.name]||{severity:52,expires:month+24,detail:`Идеологическое противостояние: ${n.ideology} — ${player.ideology}`};
   if((c.embargo||0)>month||(S.sanc&&S.sanc[c.name]&&S.sanc[c.name].left>0))n.economicGrievances[player.name]=n.economicGrievances[player.name]||{severity:72,expires:month+24,detail:'Экономические ограничения и санкции'};
+  if((+c.value||0)<=-50&&S.embassies&&S.embassies[c.name]&&S.embassies[c.name].monthsLeft>0)n.securityCases[player.name]=n.securityCases[player.name]||{severity:(+c.value||0)<=-70?88:70,expires:month+24,detail:'Консульский конфликт: власти ограничили работу иностранной миссии и доступ к задержанным гражданам'};
+  if((+c.value||0)<=-55&&n.embassyExpelledFrom&&n.embassyExpelledFrom.includes(player.name))n.securityCases[player.name]=n.securityCases[player.name]||{severity:88,expires:month+24,detail:'Высылка дипломатического персонала и ограничение консульского доступа'};
   const list=causes(n,player,month);if(!list.length)return{canWar:false};
   let cr=n.playerCrisis;
   const cause=list[0];

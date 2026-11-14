@@ -245,6 +245,7 @@ const warCauseOptions=r=>{
  const mine=S.ideology||'прагматизм',theirs=r.ideology||(window.GrandDiplomacy?GrandDiplomacy.orientation(r):'прагматизм');
  if(mine!==theirs&&(+r.value||0)<=-15)out.push(['ideology','⚖️ Идеологический конфликт']);
  if(S.sanc&&S.sanc[r.name]&&S.sanc[r.name].left>0)out.push(['economic','📉 Экономический конфликт']);
+ if((+r.value||0)<=-10)out.push(['security','🛂 Кризис защиты граждан и дипломатической миссии']);
  return out;
 };
 function warCauseControl(i,r,atWar,j){
@@ -2790,7 +2791,7 @@ H.dip=(i,k)=>{
  else if(k==='embargo'){if(!pw(15))return;c.embargo=nowM()+12;c.value=clamp(c.value-12,-100,100);cdSet(key,6);log(`🚫 Эмбарго на поставки оружия в ${c.name} на год: заводы работают медленнее, закупки за границей закрыты.`)}
  toast('Готово');save();render()};
 H.allyBreak=i=>{const c=S.relations[i];if(!c)return;S.allies=allies().filter(n=>n!==c.name);c.value=clamp(c.value-10,-100,100);log(`💔 Союз с ${c.name} расторгнут.`);save();render()};
-function justTick(){for(const k in S.just){const before=S.just[k];if(S.just[k]>0)S.just[k]--;const stage=S.just[k]===0?3:3-S.just[k];if(stage>(S.justStage[k]||0)){S.justStage[k]=stage;const text=stage===1?'дипломатический протест и запрос объяснений':stage===2?'официальные требования и предупреждение об ультиматуме':'срок ультиматума истёк — теперь возможно объявление войны';log(`🌐 Кризис с ${k}: ${text}.`)}if(S.just[k]===0&&S.justCause&&S.justCause[k]&&!((S.grandDiplomacy&&S.grandDiplomacy.claims&&S.grandDiplomacy.claims[k]&&S.grandDiplomacy.claims[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.borderCases&&S.grandDiplomacy.borderCases[k]&&S.grandDiplomacy.borderCases[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.ideologyDisputes&&S.grandDiplomacy.ideologyDisputes[k]&&S.grandDiplomacy.ideologyDisputes[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.economicGrievances&&S.grandDiplomacy.economicGrievances[k]&&S.grandDiplomacy.economicGrievances[k].expires>nowM()))){delete S.just[k];delete S.justCause[k];delete S.justStage[k]}}}
+function justTick(){for(const k in S.just){const before=S.just[k];if(S.just[k]>0)S.just[k]--;const stage=S.just[k]===0?3:3-S.just[k];if(stage>(S.justStage[k]||0)){S.justStage[k]=stage;const text=stage===1?'дипломатический протест и запрос объяснений':stage===2?'официальные требования и предупреждение об ультиматуме':'срок ультиматума истёк — теперь возможно объявление войны';log(`🌐 Кризис с ${k}: ${text}.`)}if(S.just[k]===0&&S.justCause&&S.justCause[k]&&!((S.grandDiplomacy&&S.grandDiplomacy.claims&&S.grandDiplomacy.claims[k]&&S.grandDiplomacy.claims[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.borderCases&&S.grandDiplomacy.borderCases[k]&&S.grandDiplomacy.borderCases[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.ideologyDisputes&&S.grandDiplomacy.ideologyDisputes[k]&&S.grandDiplomacy.ideologyDisputes[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.economicGrievances&&S.grandDiplomacy.economicGrievances[k]&&S.grandDiplomacy.economicGrievances[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.securityCases&&S.grandDiplomacy.securityCases[k]&&S.grandDiplomacy.securityCases[k].expires>nowM()))){delete S.just[k];delete S.justCause[k];delete S.justStage[k]}}}
 function relationProgramTick(){
  const programs=S.relPrograms||(S.relPrograms={});
  Object.keys(programs).forEach(name=>{const c=rel(name),p=programs[name];if(!c||c.annexed){delete programs[name];return}
@@ -2814,13 +2815,13 @@ H.justify=(i,cause)=>{
  if(blocked())return;const c=S.relations[i];if(!c||c.self||c.annexed)return;
  if(S.just[c.name]!=null&&S.justCause&&S.justCause[c.name])return toast('Кризис с этой страной уже развивается');if(S.just[c.name]!=null)delete S.just[c.name];
  if(!window.GrandDiplomacy||!GrandDiplomacy.CAUSES[cause])return toast('Выберите конкретное основание войны');
- const cost={territorial:20,border:15,ideology:10,economic:12}[cause]||15;
+ const cost={territorial:20,border:15,ideology:10,economic:12,security:10}[cause]||15;
  if(S.pp<cost)return toast(`Нужно ${cost} политической власти`);
  if(cause==='border'&&!nearTo(c.name))return toast('Пограничный кризис возможен только с близкой страной');
  const prep=GrandDiplomacy.preparePlayerCase(S,c,cause);if(!prep.ok)return toast(prep.error);
- S.pp-=cost;const GDState=S.grandDiplomacy||{};const severe=(cause==='border'&&GDState.borderCases&&GDState.borderCases[c.name]?.severity>=85)||(cause==='ideology'&&GDState.ideologyDisputes&&GDState.ideologyDisputes[c.name]?.severity>=85)||(cause==='economic'&&GDState.economicGrievances&&GDState.economicGrievances[c.name]?.severity>=85);S.just[c.name]=severe?0:3;S.justCause=S.justCause||{};S.justCause[c.name]=cause;S.justStage=S.justStage||{};S.justStage[c.name]=severe?3:0;
+ S.pp-=cost;const GDState=S.grandDiplomacy||{};const severe=(cause==='border'&&GDState.borderCases&&GDState.borderCases[c.name]?.severity>=85)||(cause==='ideology'&&GDState.ideologyDisputes&&GDState.ideologyDisputes[c.name]?.severity>=85)||(cause==='economic'&&GDState.economicGrievances&&GDState.economicGrievances[c.name]?.severity>=85)||(cause==='security'&&GDState.securityCases&&GDState.securityCases[c.name]?.severity>=85);S.just[c.name]=severe?0:3;S.justCause=S.justCause||{};S.justCause[c.name]=cause;S.justStage=S.justStage||{};S.justStage[c.name]=severe?3:0;
  c.ideology=c.ideology||GrandDiplomacy.orientation(c);
- c.value=clamp(c.value-(cause==='territorial'?5:cause==='border'?7:cause==='ideology'?4:6),-100,100);
+ c.value=clamp(c.value-(cause==='territorial'?5:cause==='border'?7:cause==='ideology'?4:cause==='security'?5:6),-100,100);
  log(severe?`🚨 Серьёзная провокация против ${c.name}: основание «${GrandDiplomacy.CAUSES[cause].label}» позволяет внезапную войну.`:`🌐 Начат международный кризис с ${c.name}. Основание: ${GrandDiplomacy.CAUSES[cause].label}. Протест, требования и ультиматум займут 3 месяца.`);save();render();
 };
 H.declare=i=>{
@@ -2829,7 +2830,7 @@ H.declare=i=>{
  if(S.wars.length>=2)return toast('Нельзя вести больше двух войн');
  const cause=S.justCause&&S.justCause[c.name],valid=cause&&GrandDiplomacy.playerCauses(S,c).includes(cause);
  if(!valid)return toast('Нет действующего основания. Сначала создайте дипломатический кризис.');
- const crisisData=S.grandDiplomacy||{},severe=(cause==='border'&&crisisData.borderCases&&crisisData.borderCases[c.name]?.severity>=85)||(cause==='ideology'&&crisisData.ideologyDisputes&&crisisData.ideologyDisputes[c.name]?.severity>=85)||(cause==='economic'&&crisisData.economicGrievances&&crisisData.economicGrievances[c.name]?.severity>=85);if(S.just[c.name]>0&&!severe)return toast(`Кризис ещё развивается: осталось ${S.just[c.name]} мес.`);
+ const crisisData=S.grandDiplomacy||{},severe=(cause==='border'&&crisisData.borderCases&&crisisData.borderCases[c.name]?.severity>=85)||(cause==='ideology'&&crisisData.ideologyDisputes&&crisisData.ideologyDisputes[c.name]?.severity>=85)||(cause==='economic'&&crisisData.economicGrievances&&crisisData.economicGrievances[c.name]?.severity>=85)||(cause==='security'&&crisisData.securityCases&&crisisData.securityCases[c.name]?.severity>=85);if(S.just[c.name]>0&&!severe)return toast(`Кризис ещё развивается: осталось ${S.just[c.name]} мес.`);
  if(pactOn(c.name)){delete S.pacts[c.name];ch({legitimacy:-8,approval:-4},false);c.value=clamp(c.value-25,-100,100);log(`📜 Вы нарушили пакт о ненападении с ${c.name}: легитимность −8, отношения −25.`)}
  if(S.pp<20)return toast('Нужно 20 политической власти');S.pp-=20;
  delete S.just[c.name];delete S.justCause[c.name];delete S.justStage[c.name];

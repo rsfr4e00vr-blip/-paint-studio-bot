@@ -57,7 +57,23 @@ async def run_checks():
     room2.month += 2
     assert "ideology" in room2.diplomacy_grounds(c, d)
 
-    print("OK: multiplayer cause validation, claim maturation, ultimatum window and ideological crisis")
+    # Consular/security crisis is a new server-validated casus belli.
+    e = ns.Player(FakeSocket(), "e", "Игрок Е", "Эпсилон", "либеральный курс")
+    f = ns.Player(FakeSocket(), "f", "Игрок Ж", "Дзета", "традиционализм")
+    room3 = ns.Room("CONSULAR")
+    room3.month = 40
+    room3.players = {e.id: e, f.id: f}
+    e.rep["pp"] = 30
+    e.relations[f.id] = f.relations[e.id] = -40
+    await ns.on_security_case(room3, e, {"to": f.id})
+    assert f.id in e.security_cases
+    assert "security" not in room3.diplomacy_grounds(e, f)
+    room3.month += 2
+    assert "security" in room3.diplomacy_grounds(e, f)
+    await ns.on_ultimatum(room3, e, {"to": f.id, "cause": "security"})
+    assert e.ultimatums[f.id]["cause"] == "security"
+
+    print("OK: multiplayer validation, claims, ultimatum, ideology and consular-security crisis")
 
 
 if __name__ == "__main__":
