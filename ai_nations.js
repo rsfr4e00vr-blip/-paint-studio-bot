@@ -43,20 +43,27 @@ function strike1(W,w,att,def,isA){
 function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80)}
 /* Мировая обстановка влияет на рост: война у торговых партнёров и общая «горячность» мира тормозят экономику. */
 let worldDrag=0,byNameCur={},curW=null;
-/* Госдолг ИИ-страны: лимит заимствований зависит от стабильности (доверие кредиторов). Проценты растут вместе с долгом, войной и нестабильностью. */
-const debtLimit=n=>n.gdp*(.2+n.stability/250);
+/* Госдолг ИИ-страны: на тяжёлой войне лимит долга выше (военные займы и облигации), казна может уходить в минус (дефицит). */
+const debtLimit=n=>n.gdp*((n.war?.65:.25)+n.stability/220);
 function defaultNow(n){
  const W=curW,cut=n.debt*.6;n.debt-=cut;n.treasury=0;n.arrears=0;n.defaults=(n.defaults||0)+1;n.defMonth=W?W.month:0;n.noCredit=(W?W.month:0)+24;
  n.stability=C(n.stability-15,5,96);n.gdp*=.96;n.fx=C((n.fx||100)*1.4,45,700);n.relations-=15;
  if(W)ev(W,`💥 ${n.name} объявила дефолт: ${Math.round(cut)} долга списано, рынки закрыты на 2 года`);
 }
 function debtService(n){
+ if(n.treasury<0){
+  const gap=-n.treasury;
+  n.debt=(n.debt||0)+gap;
+  n.arrears=(n.arrears||0)+1;
+  n.stability=C(n.stability-.25,5,96);
+ }else{
+  n.arrears=Math.max(0,(n.arrears||0)-1);
+ }
  if(!(n.debt>0))return;
- const dr=n.debt/Math.max(1,n.gdp),rate=.0015+.004*Math.max(0,dr-.25)+(n.war?.001:0)+Math.max(0,50-n.stability)*.00004,it=n.debt*rate;
+ const dr=n.debt/Math.max(1,n.gdp),rate=.0015+.004*Math.max(0,dr-.3)+(n.war?.001:0)+Math.max(0,50-n.stability)*.00004,it=n.debt*rate;
  n.treasury-=it;
- if(n.treasury<0){n.debt+=-n.treasury;n.treasury=0;n.arrears=(n.arrears||0)+1;n.stability=C(n.stability-.4,5,96)}else n.arrears=Math.max(0,(n.arrears||0)-1);
- if(!n.war&&n.treasury>n.gdp*.05){const p=Math.min(n.debt,n.debt*.005+n.treasury*.02);n.debt-=p;n.treasury-=p}   // обычная амортизация в мирное время
- if(n.arrears>=6||n.debt>debtLimit(n)*1.35)defaultNow(n);
+ if(!n.war&&n.treasury>n.gdp*.04){const p=Math.min(n.debt,n.debt*.006+n.treasury*.02);n.debt-=p;n.treasury-=p}
+ if(n.arrears>=8||n.debt>debtLimit(n)*1.35)defaultNow(n);
 }
 /* Послевоенное восстановление ИИ-стран: разрыв с прежним пиком ВВП не исчезает сам.
    Пока страна не воюет, она медленно отстраивает инфраструктуру/промышленность и догоняет пик, но не быстрее, чем чинится инфраструктура. */
@@ -73,18 +80,27 @@ function recov(n){
 }
 function economy(n){
  const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>byNameCur[x]&&byNameCur[x].war).length/tp.length:0;
- const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-(n.war?.004+n.exhaustion*.00005+(n.dmg||0)*.0003:0)+recov(n)-R(.001,.0018),-.018,.024);
+ const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-(n.war?.0022+n.exhaustion*.00003+(n.dmg||0)*.00015:0)+recov(n)-R(.001,.0016),-.012,.024);
  n.gdp=Math.max(1,n.gdp*(1+growth));n.pop=Math.max(.01,n.pop*(1+C(.00015+(n.stability-55)*.000006-R(0,.00025),-.001,.0008)));
  const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
- n.treasury=C(n.treasury+income-upkeep,0,n.gdp*.2);debtService(n);
+ /* Разрешаем уходить в минус (бюджетный дефицит до -5% ВВП) при тяжёлых расходах */
+ n.treasury=C(n.treasury+income-upkeep,-n.gdp*.05,n.gdp*.25);debtService(n);
+ /* Автоматический экстренный военный заём при тяжёлой войне (истощение > 35 или дефицит бюджета) */
+ if(n.war&&(n.treasury<n.gdp*.005||n.exhaustion>35)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<debtLimit(n)){
+  const emer=Math.min(debtLimit(n)-n.debt,n.gdp*.04);
+  if(emer>n.gdp*.002){
+   n.debt+=emer;n.treasury+=emer;n.power=C(n.power+emer*.12,2,150);n.morale=C(n.morale+.8,15,100);
+   if(curW&&Math.random()<.15)ev(curW,`💳 ${n.name} взяла военный кредит ${Math.round(emer)} из-за тяжёлой войны (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`);
+  }
+ }
  if(!window.NN&&n.treasury>n.gdp*.025){
   if(n.war&&n.power<150&&Math.random()<.48){let spend=Math.min(n.treasury*.035,n.gdp*.0018);n.treasury-=spend;n.power=C(n.power+spend*.16,2,150)}
   else if(Math.random()<.22){let s=Math.min(n.treasury*.025,n.gdp*.0012);n.treasury-=s;n.industry=C(n.industry+s/Math.max(100,n.gdp)*.45,.5,3);n.growth=C(n.growth+.000025,.001,.014)}
   else if(Math.random()<.18){let s=Math.min(n.treasury*.02,n.gdp*.001);n.treasury-=s;n.infrastructure=C(n.infrastructure+s/Math.max(100,n.gdp)*.5,.5,3)}
   else if(Math.random()<.12){let s=Math.min(n.treasury*.015,n.gdp*.0008);n.treasury-=s;n.research=C(n.research+s/Math.max(100,n.gdp)*.5,.4,3)}
  }
- if(n.treasury>n.gdp*.008&&n.power<Math.min(150,25+n.gdp*.012)){let recruits=Math.min(n.manpower*.025,Math.max(.05,n.pop*.00012));n.power=C(n.power+recruits*(.35+n.industry*.12),2,150);n.manpower=Math.max(0,n.manpower-recruits*.12)}
- n.manpower=C(n.manpower+n.pop*.00008,0,n.pop*.08);n.morale=C(n.morale+(n.treasury>n.gdp*.015?.35:-.45)-n.exhaustion*.008,15,100);
+ if(n.treasury>0&&n.power<Math.min(150,25+n.gdp*.012)){let recruits=Math.min(n.manpower*.025,Math.max(.05,n.pop*.00012));n.power=C(n.power+recruits*(.35+n.industry*.12),2,150);n.manpower=Math.max(0,n.manpower-recruits*.12)}
+ n.manpower=C(n.manpower+n.pop*.00008,0,n.pop*.08);n.morale=C(n.morale+(n.treasury>0?.35:-.45)-n.exhaustion*.008,15,100);
  n.stability=C(n.stability+R(-.7,.55)+(n.treasury>n.gdp*.025?.2:0)-n.exhaustion*.012,10,96);
  n.exports=n.gdp*(.0004+n.industry*.00015)+n.tradePartners.length*2;n.imports=n.gdp*(.00025+(n.power>60?.0002:0));
 }
@@ -273,7 +289,7 @@ function econRows(S){
  W.nations.forEach(n=>{
   const g0=n.gdp0>0?n.gdp0:n.gdp,h=n.gh||[],ago=h.length>=13?h[0]:h.length>1?h[0]:null;
   rows.push({name:n.name,iso:n.iso,me:false,pct:(n.gdp/g0-1)*100,pct12:ago?(n.gdp/ago-1)*100:null,
-   state:n.annexed?'аннексирована':n.war?'война':n.exhaustion>60?'истощена':'',debt:n.annexed?0:100*(n.debt||0)/Math.max(1,n.gdp),def:(n.defMonth!=null&&W.month-n.defMonth<24),intent:n.annexed?'':(n.intent||''),gdp:n.gdp,peak:n.gpeak>0?(n.gdp/n.gpeak-1)*100:0,cur:window.FXD?FXD.cur(n.iso):''});
+   state:n.annexed?'аннексирована':n.war?'война':n.exhaustion>60?'истощена':'',debt:n.annexed?0:100*(n.debt||0)/Math.max(1,n.gdp),treasury:n.treasury||0,def:(n.defMonth!=null&&W.month-n.defMonth<24),intent:n.annexed?'':(n.intent||''),gdp:n.gdp,peak:n.gpeak>0?(n.gdp/n.gpeak-1)*100:0,cur:window.FXD?FXD.cur(n.iso):''});
  });
  const h0=(S.history||[])[0],g0=h0&&h0.gdp>0?h0.gdp:null;
  if(g0&&S.gdp>0){const hp=(S.history||[]),back=hp.length>12?hp[hp.length-13]:null;
@@ -290,7 +306,7 @@ function econSorted(rows){
 }
 function econBody(rows){
  return econSorted(rows).map((r,i)=>{const c=Math.abs(r.pct)<.005?'':r.pct>0?'up':'dn',c12=r.pct12==null||Math.abs(r.pct12)<.005?'':r.pct12>0?'up':'dn';
-  return `<tr class="${r.me?'me':''}"><td class="r muted">${i+1}</td><td><b>${esc(r.name)}</b>${r.cur?` <span class="muted">${r.cur}</span>`:''}${r.state?` <small class="dn">${r.state}</small>`:''}${r.def?' <small class="dn">дефолт</small>':r.debt>=5?` <small class="muted">долг ${Math.round(r.debt)}%</small>`:''}</td><td class="r ${c}">${pc(r.pct)}</td><td class="r ${c12}">${pc(r.pct12)}</td></tr>`}).join('');
+  return `<tr class="${r.me?'me':''}"><td class="r muted">${i+1}</td><td><b>${esc(r.name)}</b>${r.cur?` <span class="muted">${r.cur}</span>`:''}${r.state?` <small class="dn">${r.state}</small>`:''}${r.def?' <small class="dn">дефолт</small>':r.debt>=5?` <small class="muted">долг ${Math.round(r.debt)}%</small>`:''}${r.treasury<0?` <small class="dn">дефицит ${Math.round(r.treasury)}</small>`:''}</td><td class="r ${c}">${pc(r.pct)}</td><td class="r ${c12}">${pc(r.pct12)}</td></tr>`}).join('');
 }
 function econPanel(S){
  window.__activeGameState=S;const rows=econRows(S);if(!rows.length)return '';
