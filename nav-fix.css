@@ -168,3 +168,20 @@ details.fold.hint>p{padding:0 14px 10px}
 .rpk .rp-m{font-size:13px;color:#b6c6d8;white-space:nowrap}
 .rpk .rp-st{font-size:13px;text-align:right}
 .rpsel{display:flex;flex-direction:column;gap:5px}
+
+
+/* Доступная навигация: закреплённые вкладки и заметные подпункты */
+#tabs{position:sticky!important;top:0!important;z-index:120!important;background:#0b1723!important;padding:6px!important;border-bottom:1px solid #53677b!important;box-shadow:0 5px 18px #0007!important}
+#tabs .cats{display:flex!important;flex-wrap:nowrap!important;overflow-x:auto!important;gap:6px!important;scrollbar-width:thin!important}
+#tabs .cats button{flex:0 0 auto!important;min-width:max-content!important;min-height:42px!important}
+#tabs .subs{display:flex!important;flex-wrap:wrap!important;gap:6px!important;padding-top:6px!important}
+#tabs .sub:not([hidden]){display:flex!important;flex-wrap:wrap!important;gap:6px!important}
+#tabs .sub button{min-height:38px!important;padding:7px 11px!important;border:1px solid #60758a!important;background:#172b3d!important;border-radius:9px!important}
+#tabs .sub button[data-tab="autobuy"]{border-color:#d6b25e!important;color:#ffe1a0!important;font-weight:800!important}
+.autoline{display:flex!important;align-items:center!important;gap:9px!important;margin:9px 0!important;padding:8px 10px!important;border:1px solid #52677c!important;border-radius:9px!important;background:#102235!important}
+.autoline input{width:20px!important;height:20px!important;flex:0 0 auto!important}
+.autoglobal{border-color:#d6b25e!important;background:#2a2518!important}
+.autogrid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:8px!important}
+.autogrid label{font-size:12px!important;color:#aebed0!important}
+.autogrid input{display:block!important;width:100%!important;min-height:38px!important;margin-top:4px!important;padding:6px!important;background:#091522!important;color:#fff!important;border:1px solid #52677c!important;border-radius:7px!important}
+@media(max-width:600px){#tabs .cats button{font-size:12px!important;padding:7px 9px!important}.autogrid{grid-template-columns:1fr 1fr!important}}

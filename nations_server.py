@@ -99,7 +99,7 @@ class Player:
         # публичные показатели (ограничены сервером)
         self.rep = {"gdp": START_GDP, "money": 18000.0, "debt": 0.0, "stab": 68.0,
                     "appr": 61.0, "legit": 70.0, "power": START_POWER, "pop": 8200000.0,
-                    "trust": 70.0, "income": 800.0, "res": 70.0}
+                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0}
         self.score_gdp = START_GDP    # «зачётный» ВВП: растёт не быстрее лимита
         self.score = 0.0
         self.comp = {}
@@ -117,6 +117,9 @@ class Player:
         self.vassal_tax = 10          # процент дохода, который вассал платит сюзерену
         self.vassals: dict = {}       # id вассала -> конец срока
         self.regions_lost = 0
+        # Двусторонние отношения между игроками: 0 = нейтралитет.
+        self.relations: dict = {}
+        self.diplomacy_cd: dict = {}
 
     def pub(self) -> dict:
         return {"id": self.id, "name": self.name, "country": self.country,
@@ -171,6 +174,9 @@ class Room:
 
     def alive(self):
         return [p for p in self.players.values() if not p.eliminated]
+
+    def relations_for(self, p: Player) -> dict:
+        return {q.id: int(p.relations.get(q.id, 0)) for q in self.players.values() if q.id != p.id}
 
     def lobby_info(self) -> dict:
         return {"code": self.code, "state": self.state, "host": self.host,
@@ -274,6 +280,7 @@ class Room:
             "type": "tick", "month": self.month, "length": self.length,
             "standings": [p.pub() for p in order], "mods": mods,
             "wars": [self.war_pub(w) for w in self.wars.values()],
+            "relations": {q.id: self.relations_for(q) for q in self.players.values()},
         })
 
     async def check_vassal_rebellions(self):
@@ -334,16 +341,25 @@ class Room:
                 continue
             w["m"] += 1
             pa = max(1.0, a.rep["power"]) * (0.8 + a.rep["appr"] / 250)
-            pd = max(1.0, d.rep["power"]) * 1.15 * (0.8 + d.rep["appr"] / 250)   # преимущество обороны
+            pd = max(1.0, d.rep["power"]) * 1.15 * (0.8 + d.rep["appr"] / 250)
+            # Построенное ПВО усиливает защиту в сетевой войне; значение приходит из игрового отчёта.
+            pd *= 1.0 + min(0.12, max(0.0, d.rep.get("pvo", 0.0)) * 0.0012)
+            if w.get("orders", {}).get(d.id, {}).get("air") == "defense":
+                pd *= 1.045  # отдельный приказ ПВО обороняющейся стороне
             orders = w.get("orders", {})
             oa, od = orders.get(a.id, {}), orders.get(d.id, {})
             def op_bonus(o):
                 troops = num(o.get("troops"), 0, 1_000_000, 0)
-                air = {"support": 0.035, "patrol": 0.018, "reserve": 0.0}.get(o.get("air"), 0.0)
+                air = {"support": 0.035, "patrol": 0.018, "defense": 0.0, "reserve": 0.0}.get(o.get("air"), 0.0)
                 navy = {"escort": 0.025, "blockade": 0.018, "reserve": 0.0}.get(o.get("navy"), 0.0)
                 return min(0.10, troops / 1_000_000 * 0.04 + air + navy)
             pa *= 1 + op_bonus(oa)
             pd *= 1 + op_bonus(od)
+            # ПВО даёт дополнительный бонус именно обороняющейся стороне.
+            if od.get("air") == "defense":
+                pd *= 1.035
+            if oa.get("air") == "defense":
+                pa *= 1.035
             delta = (pa - pd) / (pa + pd) * 11 + random.uniform(-2.5, 2.5)
             w["p"] = max(0.0, min(100.0, w["p"] + max(-7.0, min(7.0, delta))))
             # Игровые индексы ущерба экономике: 100 = довоенный уровень, не реальные котировки.
@@ -437,6 +453,8 @@ class Room:
                 p.war = None
         if not a or not d:
             return
+        a.relations[d.id] = int(num(a.relations.get(d.id, 0) + (8 if result == "peace" else 3), -100, 100, 0))
+        d.relations[a.id] = int(num(d.relations.get(a.id, 0) + (8 if result == "peace" else 3), -100, 100, 0))
         a.war_cd = self.month + WAR_COOLDOWN
         d.shield_until = max(d.shield_until, self.month + PEACE_SHIELD)
         a.shield_until = max(a.shield_until, self.month + 6)
@@ -520,7 +538,8 @@ async def handle(room: Room, p: Player, msg: dict):
 
     if kind == "sync":
         await room.send(p, {"type": "state", **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
-                            "mods": {q.id: room.income_mod(q) for q in room.players.values()}})
+                            "mods": {q.id: room.income_mod(q) for q in room.players.values()},
+                            "relations": room.relations_for(p)})
         return
 
     if room.state not in ("running", "paused"):
@@ -549,6 +568,8 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_answer(room, p, msg)
     elif kind == "sanction":
         await on_sanction(room, p, msg)
+    elif kind == "diplomacy":
+        await on_diplomacy(room, p, msg)
     elif kind == "war":
         await on_war(room, p, msg)
     elif kind == "war_command":
@@ -579,6 +600,7 @@ async def on_report(room: Room, p: Player, msg: dict):
         "pop": num(r.get("pop"), 100000, 2_000_000_000, old["pop"]),
         "income": num(r.get("income"), 0, 100000, old["income"]),
         "res": num(r.get("res"), 0, 100, old.get("res", 70.0)),
+        "pvo": num(r.get("pvo"), 0, 1000, old.get("pvo", 0.0)),
     }
     months = max(1, room.month - p.last_report)
     p.last_report = room.month
@@ -616,6 +638,8 @@ async def on_aid(room: Room, p: Player, msg: dict):
         return
     p.aid_cd[q.id] = room.month
     p.rep["money"] -= amount
+    p.relations[q.id] = int(num(p.relations.get(q.id, 0) + 4, -100, 100, 0))
+    q.relations[p.id] = int(num(q.relations.get(p.id, 0) + 4, -100, 100, 0))
     got = int(amount * (1 - AID_FEE))
     await room.send(p, {"type": "aid_out", "amount": amount, "to": q.country})
     await room.send(q, {"type": "aid_in", "amount": got, "from": p.country})
@@ -658,7 +682,44 @@ async def on_answer(room: Room, p: Player, msg: dict):
     end = room.month + PACT_MONTHS
     a.pacts[p.id] = end
     p.pacts[a.id] = end
+    a.relations[p.id] = int(num(a.relations.get(p.id, 0) + 12, -100, 100, 0))
+    p.relations[a.id] = int(num(p.relations.get(a.id, 0) + 12, -100, 100, 0))
     await room.notice(f"📜 Торговый пакт: {a.country} ↔ {p.country} на {PACT_MONTHS} мес.", "dip")
+
+
+async def on_diplomacy(room: Room, p: Player, msg: dict):
+    """Мирная дипломатия между игроками. Никакая третья страна не втягивается автоматически."""
+    q = partner(room, p, msg)
+    if not q:
+        return
+    action = msg.get("action")
+    if action == "meeting":
+        if p.war or q.war:
+            await room.notice("Дипломатическая встреча недоступна во время войны.", "warn", p)
+            return
+        if p.diplomacy_cd.get(q.id, -99) + 3 > room.month:
+            await room.notice("Повторная встреча с этой страной будет доступна через несколько месяцев.", "warn", p)
+            return
+        cost = 200
+        if p.rep["money"] < cost:
+            await room.notice("Для дипломатической встречи нужно 200 млн.", "warn", p)
+            return
+        p.rep["money"] -= cost
+        p.diplomacy_cd[q.id] = room.month
+        for side, other in ((p, q), (q, p)):
+            side.relations[other.id] = int(num(side.relations.get(other.id, 0) + 12, -100, 100, 0))
+        await room.notice(f"🤝 {p.country} и {q.country} провели дипломатическую встречу: отношения улучшены.", "dip")
+    elif action == "neutral":
+        if p.war or q.war:
+            await room.notice("Нельзя восстановить нейтралитет во время войны — сначала заключите мир.", "warn", p)
+            return
+        if p.sanctions_out.get(q.id, 0) > room.month or any(x.get("from") == p.id and x.get("end", 0) > room.month for x in q.sanctions_in):
+            await room.notice("Сначала дождитесь окончания взаимных санкций.", "warn", p)
+            return
+        p.relations[q.id] = 0
+        q.relations[p.id] = 0
+        await room.notice(f"⚖️ {p.country} и {q.country} восстановили нейтралитет.", "dip")
+    await room.broadcast({"type": "relations", "relations": {x.id: room.relations_for(x) for x in room.players.values()}})
 
 
 async def on_sanction(room: Room, p: Player, msg: dict):
@@ -674,7 +735,12 @@ async def on_sanction(room: Room, p: Player, msg: dict):
     end = room.month + SANCTION_MONTHS
     p.sanctions_out[q.id] = end
     q.sanctions_in.append({"from": p.id, "end": end})
+    p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 18, -100, 100, 0))
+    q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 18, -100, 100, 0))
     await room.notice(f"⛔ {p.country} ввёл санкции против {q.country} на {SANCTION_MONTHS} мес.", "dip")
+    if p.relations.get(q.id, 0) <= -100 and not p.war and not q.war:
+        await room.notice(f"🚨 Отношения {p.country} и {q.country} достигли −100: начинается война.", "war")
+        await on_war(room, p, {"to": q.id})
 
 
 async def on_war(room: Room, p: Player, msg: dict):
@@ -702,6 +768,8 @@ async def on_war(room: Room, p: Player, msg: dict):
     wid = "w" + "".join(random.choices(string.digits, k=5))
     room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {}}
     p.war = q.war = wid
+    p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 35, -100, 100, 0))
+    q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 35, -100, 100, 0))
     await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True})
     await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False})
     await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}!", "war")
@@ -715,7 +783,7 @@ async def on_war_command(room: Room, p: Player, msg: dict):
         return
     region = "".join(ch for ch in str(msg.get("region", "")) if ch.isprintable()).strip()[:60]
     troops = int(num(msg.get("troops"), 0, 1_000_000, 0))
-    air = msg.get("air") if msg.get("air") in ("support", "patrol", "reserve") else "reserve"
+    air = msg.get("air") if msg.get("air") in ("support", "patrol", "defense", "reserve") else "reserve"
     navy = msg.get("navy") if msg.get("navy") in ("escort", "blockade", "reserve") else "reserve"
     w.setdefault("orders", {})[p.id] = {"region": region, "troops": troops, "air": air, "navy": navy}
     await room.broadcast({"type": "war_orders", "wars": [room.war_pub(x) for x in room.wars.values()]})
@@ -871,7 +939,7 @@ async def nations_socket(ws: WebSocket, code: str):
                         room.host = pid
                 await ws.send_json({"type": "joined", "id": me.id, "host": room.host == me.id,
                                     **room.lobby_info(),
-                                    "wars": [room.war_pub(w) for w in room.wars.values()]})
+                                    "wars": [room.war_pub(w) for w in room.wars.values()], "relations": room.relations_for(me)})
                 if room.state == "paused" and room.auto_paused:
                     room.auto_paused = False
                     room.state = "running"

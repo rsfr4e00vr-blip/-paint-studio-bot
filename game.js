@@ -1107,7 +1107,7 @@ const FOLD=window.__fold=window.__fold||{};
 function fold(id,title,html,def){const o=(id in FOLD)?FOLD[id]:!!def;return`<details class="fold" data-fold="${id}" ${o?'open':''}><summary>${title}</summary><div class="foldbody">${html}</div></details>`}
 const tryH=f=>{try{return f()}catch(e){console.warn('fold',e);return'<p class="muted">Раздел временно недоступен</p>'}};
 const _ct=$('#content');if(_ct)_ct.addEventListener('toggle',e=>{const d=e.target;if(d&&d.dataset&&d.dataset.fold)FOLD[d.dataset.fold]=d.open},true);
-function mergeEco(c){return fold('e0','▤ Сводка',c,1)+fold('e1','💰 Финансы и налоги',tryH(()=>finTab0()+fxCard()+card('🏭 Экономические программы',xcards(ECO2,'e'))))+fold('e2','🚢 Торговля и импорт',tryH(marketTab))+fold('e3','🏭 Заводы и стройки',tryH(indTab))+(window.NGRES?fold('e4','⛏ Недра и ресурсы',tryH(()=>NGRES.panel())):'')}
+function mergeEco(c){return autoPurchaseCard()+fold('e0','▤ Сводка',c,1)+fold('e1','💰 Финансы и налоги',tryH(()=>finTab0()+fxCard()+card('🏭 Экономические программы',xcards(ECO2,'e'))))+fold('e2','🚢 Торговля и импорт',tryH(marketTab))+fold('e3','🏭 Заводы и стройки',tryH(indTab))+(window.NGRES?fold('e4','⛏ Недра и ресурсы',tryH(()=>NGRES.panel())):'')}
 function mergeMil(c){return c+fold('m2','🎖 Военный штаб',tryH(staffTab))}
 function mergePol(c){return fold('p0','🏛 Партии и выборы',c,1)+fold('p1','🗳 Власть и управление',tryH(()=>card('🗳 Власть и политика',`<p class="muted">Режим: <b>${S.gov}</b> · легитимность ${Math.round(S.legitimacy)}% · риск переворота ${Math.round(S.coupRisk)}%</p>`+xcards(POL,'p'))))+fold('p2','📜 Законы и реформы',tryH(billsTab))+fold('p3','🧑‍💼 Советники',tryH(advTab))+fold('p4','👥 Население',tryH(peopleTab))}
 function addonTab(){ensure();let b=outBanner();if(tab==='resources'&&window.NGRES)return b+NGRES.panel();let hx=hoiTab();if(hx!=null)return b+hx;
@@ -1728,8 +1728,10 @@ function evTab(){
 
 /* ------------------------ ИНИЦИАЛИЗАЦИЯ ------------------------ */
 function ensureHoi(){
- const d={captured:[],lost:[],pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bld:{},sanc:{},supp:{},bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0}};
+ const d={captured:[],lost:[],pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bld:{},sanc:{},supp:{},bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0},autoPurchase:{enabled:false,items:{food:{on:false,target:55,amount:10},fuel:{on:false,target:45,amount:10},steel:{on:false,target:45,amount:10},energy:{on:false,target:45,amount:10},equipment:{on:false,target:40,amount:5},ammo:{on:false,target:40,amount:5}}}};
  for(const k in d)if(S[k]==null)S[k]=d[k];
+ if(!S.autoPurchase)S.autoPurchase=d.autoPurchase;else{S.autoPurchase.items=S.autoPurchase.items||{};for(const k in d.autoPurchase.items)if(!S.autoPurchase.items[k])S.autoPurchase.items[k]=d.autoPurchase.items[k];}
+ if(!S.mk)S.mk=d.mk;else{S.mk.m=S.mk.m||d.mk.m;S.mk.prev=S.mk.prev||{};S.mk.q=S.mk.q||d.mk.q;for(const k in d.mk.q)if(S.mk.q[k]==null)S.mk.q[k]=d.mk.q[k];if(S.mk.imp==null)S.mk.imp=0;if(S.mk.exp==null)S.mk.exp=0;}
  if(S.event&&!S.event.id)S.event=null;
  if(!S.regions.find(r=>r.name==='Центральный округ')&&!(S.lost||[]).includes('Центральный округ'))S.regions.push({name:'Центральный округ',pop:1100000,wealth:58,loyalty:66,unrest:15,industry:52,infra:62,resource:'Агро'});
  if(S.war&&!S.wars.length&&!S.martial&&!S._wfix){S.martial=true;S._wfix=1}
@@ -2170,7 +2172,8 @@ function worldReact(v,mode,f){
   const unj=mode==='unj';
   t.f.forEach(n=>R(n,-(unj?rnd(15,30):rnd(3,6))));
   t.e.forEach(n=>R(n,unj?rnd(8,15):rnd(2,5)));
-  neutral.forEach(n=>{if(Math.random()<(unj?.4:.1))R(n,-rnd(1,5))});
+  /* Нейтральные государства не обязаны вмешиваться: только редкие символические заявления. */
+  neutral.forEach(n=>{if(Math.random()<(unj?.035:.015))R(n,-rnd(1,2))});
   const sn=[],sp=[];
   if(unj){
    t.f.slice().sort((a,b)=>pw(b)-pw(a)).forEach(n=>{if(sn.length<8&&Math.random()<clamp(.35+pw(n)/200,.35,.85)&&sanctionBy(n,v))sn.push(n)});
@@ -2190,8 +2193,9 @@ function worldReact(v,mode,f){
   const k={mil:.4,infra:1.2,civ:3,bomb:6}[mode]*f/(mode==='bomb'?f:1);
   t.f.forEach(n=>R(n,-k));
   if(mode==='civ'||mode==='bomb')t.e.forEach(n=>R(n,-k*.2));
-  neutral.forEach(n=>R(n,-k*(mode==='bomb'?.8:.25)));
-  if(mode==='civ'||mode==='bomb'){const add=[];t.f.concat(mode==='bomb'?neutral:[]).sort((a,b)=>pw(b)-pw(a)).forEach(n=>{if(add.length<2&&Math.random()<(mode==='bomb'?.35:.12*f)&&sanctionBy(n,v))add.push(n)});if(add.length)log(`🌍 Новые санкции из-за ударов по гражданским/бомбы: ${add.join(', ')}.`)}
+  /* Нейтралитет сохраняется, если у страны нет прямых интересов в конфликте. */
+  if(mode==='bomb')neutral.forEach(n=>{if(Math.random()<.025)R(n,-Math.min(1,k*.15))});
+  if(mode==='civ'||mode==='bomb'){const add=[];t.f.slice().sort((a,b)=>pw(b)-pw(a)).forEach(n=>{if(add.length<2&&Math.random()<(mode==='bomb'?.35:.12*f)&&sanctionBy(n,v))add.push(n)});if(add.length)log(`🌍 Новые санкции из-за ударов по гражданским/бомбы: ${add.join(', ')}.`)}
  }
 }
 function worldTick(){
@@ -2442,8 +2446,9 @@ function spoils(name,mode,rid,keep){
 /* Реакция мира на захват: страны одобряют или осуждают (стр. зависит от отношений с жертвой и силы агрессора) */
 function intlReact(victim,kind){
  const al=alive().filter(r=>r.name!==victim),V=wi(victim);let cond=0,appr=0,names=[];
- al.forEach(r=>{const W=wi(r.name);const against=(r.value>20||W.cont===V.cont)&&Math.random()<(kind==='annex'?.5:.3)&&r.power>=14;
-  const pro=r.value<-25&&Math.random()<.12;
+ al.forEach(r=>{const W=wi(r.name);const tied=(r.value>35||W.cont===V.cont)&&r.power>=20;
+  const against=tied&&Math.random()<(kind==='annex'?.28:.14);
+  const pro=r.value<-40&&Math.random()<.07;
   if(against){cond++;r.value=clamp(r.value-(kind==='annex'?7:4),-100,100);if(names.length<3&&r.power>=40)names.push(r.name)}
   else if(pro){appr++;r.value=clamp(r.value+3,-100,100)}});
  S.intl=S.intl||[];S.intl.unshift({t:`Год ${S.year}, ${months[S.month]}`,v:victim,kind,cond,appr,names});S.intl=S.intl.slice(0,12);
@@ -2830,6 +2835,39 @@ function mkTick(){
   log(`📈 ${t}.`);say(t,up?'📈':'📉');
  }
 }
+/* ---------------- АВТОЗАКУПКИ РЕСУРСОВ ---------------- */
+function autoPurchaseEnsure(){
+ const d={enabled:false,items:{food:{on:false,target:55,amount:10},fuel:{on:false,target:45,amount:10},steel:{on:false,target:45,amount:10},energy:{on:false,target:45,amount:10},equipment:{on:false,target:40,amount:5},ammo:{on:false,target:40,amount:5}}};
+ if(!S.autoPurchase)S.autoPurchase=d;S.autoPurchase.items=S.autoPurchase.items||{};
+ for(const k in d.items)if(!S.autoPurchase.items[k])S.autoPurchase.items[k]=d.items[k];
+ return S.autoPurchase;
+}
+H.autoSet=(field,key,value)=>{
+ const A=autoPurchaseEnsure();
+ if(field==='enabled')A.enabled=!!value;
+ else if(A.items[key]){if(field==='on')A.items[key].on=!!value;else if(field==='target')A.items[key].target=clamp(+value,5,95);else if(field==='amount')A.items[key].amount=clamp(Math.round(+value),1,30)}
+ save();render();
+};
+function autoPurchaseTick(){
+ const A=autoPurchaseEnsure();if(!A.enabled)return;
+ const bought=[];
+ Object.keys(MK).forEach(g=>{
+  const cfg=A.items[g];if(!cfg||!cfg.on||S.mk.q[g]<=0)return;
+  const deficit=Math.max(0,Math.ceil(cfg.target-S[g]));if(deficit<1)return;
+  const room=100-Math.floor(S[g]),roomR=RSV[g]?Math.max(0,Math.floor(rsvCap(g)-rsvEnsure()[g])):0;
+  const n=Math.min(deficit,cfg.amount,30,S.mk.q[g],room+roomR);
+  if(n<1)return;const cost=Math.ceil(mkBuy(g)*n);if(S.money<cost)return;
+  S.money-=cost;const main=Math.min(n,room);S[g]=clamp(S[g]+main);if(n>main)rsvEnsure()[g]+=n-main;
+  S.mk.q[g]-=n;S.mk.imp+=cost;bought.push(`${MK[g][0]} +${n}`);
+ });
+ if(bought.length)log(`🤖 Автозакупки выполнили импорт: ${bought.join(', ')}.`);
+}
+function autoPurchaseCard(){
+ const A=autoPurchaseEnsure();
+ const rows=Object.keys(MK).map(g=>{const d=A.items[g];return `<div class="mini"><b>${MK[g][1]} ${MK[g][0]}</b><small>Текущий запас: <b>${Math.round(S[g])}%</b> · цена: ${mkBuy(g)} млн/ед.</small><label class="autoline"><input type="checkbox" ${d.on?'checked':''} onchange="H.autoSet('on','${g}',this.checked)"> Автоматически покупать</label><div class="autogrid"><label>Порог запаса, %<input type="number" min="5" max="95" value="${d.target}" onchange="H.autoSet('target','${g}',this.value)"></label><label>Покупать за месяц<input type="number" min="1" max="30" value="${d.amount}" onchange="H.autoSet('amount','${g}',this.value)"></label></div></div>`}).join('');
+ return card('🤖 Автоматические закупки','<p class="muted">Включите нужные товары. Каждый игровой месяц система проверит запас и автоматически купит выбранное количество, если запас ниже заданного порога. Покупки используют общий месячный лимит рынка (до 30 ед. на товар), учитывают цену и доступные деньги. Если денег или места не хватает — закупка пропускается.</p>'+`<label class="autoline autoglobal"><input type="checkbox" ${A.enabled?'checked':''} onchange="H.autoSet('enabled','',this.checked)"> <b>Включить автоматические закупки</b></label><div class="cards">${rows}</div>`);
+}
+
 function worldTensionValue(){
  const rels=(S.relations||[]).filter(r=>!r.annexed&&!r.self);
  const hostile=rels.filter(r=>r.value<-35).length;
@@ -2854,6 +2892,7 @@ function marketTab(){
 const SEA=`<text x="330" y="500" text-anchor="middle" class="maptxt2" style="opacity:.55">ЧЁРНОЕ МОРЕ</text><text x="640" y="430" text-anchor="middle" class="maptxt2" style="opacity:.55">Азовское</text>`;
 
 function hoiTab(){
+ if(tab==='autobuy')return `<div class="grid">${autoPurchaseCard()}${tryH(marketTab)}</div>`;
  if(tab==='events')return evTab();if(tab==='market')return marketTab();if(tab==='worldtension')return worldTensionTab();if(tab==='bills')return billsTab();if(tab==='people')return peopleTab();if(tab==='focus')return focusTab();if(tab==='research')return researchTab();
  if(tab==='industry')return indTab();if(tab==='staff')return staffTab();if(tab==='advisors')return advTab();
  return null;
@@ -2872,7 +2911,7 @@ function hoiTick(){
  S.approval=clamp(S.approval+(C.app||0)+(L.app||0));S.stability=clamp(S.stability+(L.stab||0));
  const cap=C.cap*(1+(DOCS[S.doc]?DOCS[S.doc].cap||0:0))*S.pop;
  if(S.army<cap)S.army+=Math.round(Math.min(cap-S.army,S.pop*.0005));
- budTick();taxTick();billsTick();grTick();mkTick();prodTick();buildTick();focusTick();researchTick();justTick();warTick();puppetTick();worldTick();if(window.NGRES)NGRES.tick();rsvTick();
+ budTick();taxTick();billsTick();grTick();mkTick();autoPurchaseTick();prodTick();buildTick();focusTick();researchTick();justTick();warTick();puppetTick();worldTick();if(window.NGRES)NGRES.tick();rsvTick();
  S.war=S.wars.length>0||!!S.martial;
  if(!S.war)S.threat=clamp(S.threat+(20-S.threat)*.03);
  clampFix();
