@@ -13,11 +13,11 @@
 <div class="subs">
 <div class="sub" data-cat="eco" hidden><button data-tab="economy">📊 Сводка экономики</button><button data-tab="autobuy">🤖 Автозакупки</button><button data-tab="market">🛒 Рынок и импорт</button><button data-tab="regions">🗺 Регионы</button><button data-tab="charts">📈 Графики</button></div>
 <div class="sub" data-cat="state" hidden><button data-tab="politics">Власть и законы</button><button data-tab="deputies">Парламент</button><button data-tab="documents">Документы</button><button data-tab="comeback">Возврат</button></div>
-<div class="sub" data-cat="dip" hidden><button data-tab="diplomacy">Страны и вассалы</button><button data-tab="worldtension">Напряжённость</button></div>
+<div class="sub" data-cat="dip" hidden><button data-tab="diplomacy">Страны и вассалы</button><button data-tab="worldtension">Напряжённость и события</button><button data-tab="intelligence">🕵 Разведка</button></div>
 <div class="sub" data-cat="dev" hidden><button data-tab="research">Наука</button><button data-tab="focus">Цели</button><button data-tab="settings">⚙ Настройки</button></div>
 </div></nav>
 <div id="content"></div></main><div class="notice" id="notice"></div>
-<script src="/world.js"></script><script src="/regions.js"></script><script src="/world_data.js"></script><script src="/fx.js?v=1"></script><script src="/resources.js?v=2"></script><script src="/nn_core.js?v=2"></script><script src="/ai_resources.js?v=1"></script><script src="/ai_arsenal.js?v=5"></script><script src="/ai_nations.js?v=28"></script><script src="/population_ai.js?v=2"></script><script src="/game.js?v=30"></script><script src="/nations.js?v=13"></script><script>(function(){var t=document.getElementById('tabs');if(!t)return;
+<script src="/world.js"></script><script src="/regions.js"></script><script src="/world_data.js"></script><script src="/fx.js?v=1"></script><script src="/resources.js?v=2"></script><script src="/nn_core.js?v=2"></script><script src="/ai_resources.js?v=1"></script><script src="/ai_arsenal.js?v=5"></script><script src="/ai_nations.js?v=28"></script><script src="/population_ai.js?v=2"></script><script src="/game.js?v=31"></script><script src="/nations.js?v=13"></script><script>(function(){var t=document.getElementById('tabs');if(!t)return;
 function show(c){t.querySelectorAll('.cats button').forEach(function(b){b.classList.toggle('on',b.dataset.cat===c)});t.querySelectorAll('.sub').forEach(function(s){s.hidden=s.dataset.cat!==c})}
 /* вкладки, которые теперь слиты внутрь больших страниц */
 var HUB={autobuy:'eco',finance:'eco',market:'eco',industry:'eco',resources:'eco',staff:'army',arms:'army',power:'state',bills:'state',advisors:'state',people:'state'};
