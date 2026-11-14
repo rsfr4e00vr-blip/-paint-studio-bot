@@ -110,3 +110,24 @@
 .strikemap svg{width:100%;height:100%;display:block}
 @keyframes warpulse{0%,100%{stroke-opacity:1}50%{stroke-opacity:.25}}
 .warpulse{animation:warpulse 1.2s ease-in-out infinite}
+
+/* ===== Арсенал: компактные кнопки, залпы, складные разделы ===== */
+.armctl{margin:0 0 8px}
+.armctl .seg{display:flex;gap:4px;margin:4px 0 8px}
+.armctl .seg button{flex:1 1 0;min-height:38px;padding:4px 6px;font-size:13px;margin:0}
+.armctl .seg button.on{background:linear-gradient(135deg,#e6b65b,#a8782c)!important;color:#1d1b15!important;border-color:#f2d28b!important}
+.arm .armhead{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.arm .armcnt{background:#0b1218;border:1px solid #d6b25e66;border-radius:999px;padding:1px 10px;font-weight:700;color:#f3d99b}
+.armbtns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.armbtns button{min-height:44px;padding:4px 3px;margin:0;font-size:12.5px;line-height:1.15;flex:none;white-space:normal}
+.armbtns button small{display:block;font-size:10.5px;opacity:.8;font-weight:400}
+.armbtns button.dim{opacity:.55}
+details.fold{background:#0f1c29;border:1px solid #2b415a;border-radius:12px;margin:0 0 10px;overflow:hidden}
+details.fold>summary{cursor:pointer;padding:12px 14px;font-weight:700;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::after{content:'▾';opacity:.7}
+details.fold[open]>summary::after{content:'▴'}
+details.fold>.foldbody{padding:0 8px 8px}
+details.fold.hint{margin-top:8px}
+details.fold.hint>p{padding:0 14px 10px}
+.cards.armlist{grid-template-columns:1fr!important}
