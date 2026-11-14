@@ -131,3 +131,21 @@ details.fold>.foldbody{padding:0 8px 8px}
 details.fold.hint{margin-top:8px}
 details.fold.hint>p{padding:0 14px 10px}
 .cards.armlist{grid-template-columns:1fr!important}
+
+/* ---- штаб: план армии и родов войск, эффект ударов на экономику ---- */
+.ecostrip{margin:6px 0;padding:6px 8px;border-radius:8px;background:#2a1b2e;border:1px solid #6b3d73;font-size:13px;line-height:1.35}
+.wplan{display:flex;flex-direction:column;gap:8px}
+.wplan .wp-sec{display:flex;flex-direction:column;gap:5px;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.04)}
+.wplan .wchips{display:flex;flex-wrap:wrap;gap:5px}
+.wplan .wtg{background:#23405c;border:1px solid #3f6a93;border-radius:999px;padding:3px 9px;font-size:12px}
+.wplan .wx{cursor:pointer;margin-left:4px;opacity:.85}
+.wplan .wx:hover{opacity:1;color:#ffd34d}
+.wplan .wp-grid{display:grid;grid-template-columns:1fr;gap:6px}
+.wplan .wp-grid label{display:flex;flex-direction:column;gap:3px;font-size:13px}
+.wplan select{max-width:100%}
+.wplan .seg{display:flex;flex-wrap:wrap;gap:4px}
+.wplan .seg button{flex:1 1 auto}
+.wplan .seg button.on{background:#c9902f;color:#1b1204;border-color:#c9902f}
+.wplan .wp-forecast{padding:6px 8px;border-radius:8px;background:#162a1e;border:1px solid #2f6b47;font-size:13px}
+.wtopeco{display:block;margin:6px 0}
+@media(min-width:560px){.wplan .wp-grid{grid-template-columns:1fr 1fr}}
