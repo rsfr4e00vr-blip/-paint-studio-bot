@@ -14,7 +14,7 @@ const LKEY=(c)=>'novariaMP:'+c, SKEY='novariaMPSession';
 const AIO={aggr:{calm:'спокойный',normal:'обычный',high:'агрессивный',extreme:'беспощадный'},nn:{off:'выключена',std:'обычная',fast:'быстро учится'},ars:{none:'нет (страны вырабатывают и покупают сами)',small:'небольшой запас'}};
 const aiv=()=>Object.assign({aggr:'normal',nn:'std',ars:'none'},room.ai||{});
 let ws=null,me={id:null,host:false},room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
-let standings=[],mods={},wars=[],relations={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
+let standings=[],mods={},wars=[],relations={},relationPrograms={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
 const orig={};
 let tg=window.Telegram&&Telegram.WebApp;if(tg){try{tg.ready();tg.expand()}catch(e){}}
 
@@ -48,18 +48,20 @@ setInterval(()=>send({type:'ping',t:Date.now()}),25000);
 function on(m){
   switch(m.type){
   case'joined':
-    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};
+    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};
     localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
     setBar();break;
   case'lobby':Object.assign(room,pick(m));me.host=room.host===me.id;
     if(room.state==='lobby'&&modal.classList.contains('open'))paintModal();setBar();paintAll();break;
-  case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;catchUp();setBar();paintAll();break;
+  case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
   case'war_orders':wars=m.wars||wars;syncMpWars();paintAll();break;
-  case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;paintAll();break;
+  case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;paintAll();break;
   case'relations':relations=m.relations&&m.relations[me.id]||relations;paintDip();break;
+  case'relation_programs':relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;paintDip();break;
+  case'pp_update':if(NG.S){NG.S.pp=Number(m.pp)||0;saveLocal();afterEffect()}break;
   case'paused':room.state=m.value?'paused':'running';note(m.value?'⏸ Хозяин комнаты поставил игру на паузу':'▶ Игра продолжается','info');setBar();break;
   case'notice':note(m.text,m.kind,true);break;
   case'chat':chat.push(m);chat=chat.slice(-60);paintChat();break;
@@ -112,7 +114,7 @@ function leaveMP(){
   if(room.code)localStorage.removeItem(LKEY(room.code));
   localStorage.removeItem(SKEY);closeWs();
   room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
-  standings=[];mods={};wars=[];relations={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
+  standings=[];mods={};wars=[];relations={};relationPrograms={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
   NG.end();setBar();closeModal();prop.classList.remove('open');
 }
 /* Мои войны из данных сервера → экономика клиента: ВВП падает, курс валюты слабеет (логика в game.js: S.mpWars) */
@@ -144,7 +146,7 @@ function catchUp(){
 function report(){
   const S=NG.S;if(!S||!active)return;
   let power=1;try{power=NG.warPower(null)}catch(e){}
-  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70,pvo:S.aa||0}});
+  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70,pvo:S.aa||0,pp:S.pp||0}});
 }
 function saveLocal(){try{localStorage.setItem(LKEY(room.code),JSON.stringify(NG.S))}catch(e){}}
 function addMoney(d){const S=NG.S;if(d>=0)S.money+=d;else{const n=-d;if(S.money>=n)S.money-=n;else{S.debt+=n-S.money;S.money=0}}}
@@ -287,11 +289,11 @@ function paintDip(){
   const myWar=wars.find(x=>x.a===me.id||x.d===me.id);
   const cap=Math.floor(S.money*.25/100)*100,amts=[300,500,1000,2000].filter(a=>a<=cap);
   e.innerHTML=list.map(p=>{
-    const atWar=myWar&&(myWar.a===p.id||myWar.d===p.id),dead=p.eliminated,rel=Number(relations[p.id]||0);
+    const atWar=myWar&&(myWar.a===p.id||myWar.d===p.id),dead=p.eliminated,rel=Number(relations[p.id]||0),program=relationPrograms[p.id];
     return `<div class="mini"><b>${esc(p.country)}</b> ${dead?'💀':atWar?'⚔️':rel<=-60?'🟠':rel>=40?'🤝':'⚖️'}<br><span class="muted2">${esc(p.name)} · очки ${p.score} · ВВП ${fmt(p.gdp)} · мощь ${p.power}</span><br><b>Отношения: ${rel>0?'+':''}${rel}/100</b> · ${rel<=-60?'напряжённые':rel>=40?'дружественные':'нейтралитет'}
 ${dead||S.campaignOver?'':`<div class="actions">
 ${amts.length?`<select data-amt="${p.id}">${amts.map(a=>`<option>${a}</option>`).join('')}</select><button data-act="aid" data-to="${p.id}">💸 Помощь</button>`:'<span class="muted2">Для помощи нужна казна от 1 200 млн</span>'}
-<button data-act="meeting" data-to="${p.id}">🤝 Улучшить отношения (+12)</button><button data-act="neutral" data-to="${p.id}">⚖️ Нейтралитет</button><button data-act="pact" data-to="${p.id}">📜 Торг. пакт</button>
+${program?`<span class="muted2">🤝 Программа активна: ещё ${program.months_left} мес. · улучшение через ${program.next_in} мес.</span>`:`<button data-act="program" data-to="${p.id}">🤝 Улучшать отношения 4 года · 40 ⭐</button>`}<button data-act="meeting" data-to="${p.id}">Разовая встреча (+12)</button><button data-act="neutral" data-to="${p.id}">⚖️ Нейтралитет</button><button data-act="pact" data-to="${p.id}">📜 Торг. пакт</button>
 <button data-act="sanction" data-to="${p.id}">⛔ Санкции</button>
 ${atWar?`<button class="good" data-act="peace" data-to="${p.id}">🕊 Мир</button>`:`<button class="danger" data-act="war" data-to="${p.id}">${warArm===p.id?'Точно? ⚔️':'⚔️ Война'}</button>`}</div>`}</div>`}).join('')||'<p class="muted2">Других игроков нет.</p>';
 }
@@ -300,6 +302,7 @@ function dipClick(ev){
   if(a==='aid'){const sel=document.querySelector(`select[data-amt="${to}"]`);send({type:'aid',to,amount:+(sel&&sel.value)||300})}
   else if(a==='pact')send({type:'propose',what:'pact',to});
   else if(a==='meeting')send({type:'diplomacy',action:'meeting',to});
+  else if(a==='program'){if(NG.S.pp<40)return NG.toast('Нужно 40 ⭐ политической власти');report();send({type:'diplomacy',action:'program',to})}
   else if(a==='neutral')send({type:'diplomacy',action:'neutral',to});
   else if(a==='sanction')send({type:'sanction',to});
   else if(a==='peace')send({type:'peace'});
