@@ -2771,8 +2771,31 @@ const avgReg=k=>(S.regions||[]).reduce((a,r)=>a+(+r[k]||0),0)/Math.max(1,(S.regi
 /* --- потери экономики во время войны --- */
 /* все войны, влияющие на экономику: одиночные (S.wars) и мультиплеерные (S.mpWars, их выставляет nations.js по данным сервера) */
 function warsAll(){return [...(S.wars||[]),...(S.mpWars||[])]}
+/* --- послевоенное восстановление и конверсия экономики ---
+   1) Разрушенные дороги, энергосеть и заводы областей восстанавливаются медленно (около 0,4 пункта в месяц на область)
+      и стоят денег; при пустой казне, низкой стабильности и доверии — ещё медленнее.
+   2) ВВП не может вернуться к довоенной траектории быстрее, чем отстроена инфраструктура (потолок = 80–100% траектории).
+   3) Конверсия: военная экономика перестраивается на гражданскую. Первую четверть срока заводы переходят с оружия
+      на гражданскую продукцию (небольшой спад), затем идёт рост. Срок зависит от длительности войны (6–48 мес.).
+   Восстановление длится, пока разрыв не закрыт (разрыв больше НЕ «забывается» через 36 мес.). */
+function recoverTick(E,W0,t){
+ const regs=S.regions||[],step=.4*(S.stability>55?1.2:S.stability<35?.4:1)*((S.trust==null||S.trust>40)?1:.6),afford=S.money>3000?1:S.money>800?.6:.25;
+ let need=0,have=0,cost=0;
+ regs.forEach(r=>{const o=W0.reg&&W0.reg[r.name],ti=o?o.i:W0.infra,tn=o?o.n:W0.ind;
+  if(r.infra<ti){const d=Math.min(ti-r.infra,step*afford);r.infra=clamp(r.infra+d);cost+=d*7}
+  if(r.industry<tn){const d=Math.min(tn-r.industry,step*.7*afford);r.industry=clamp(r.industry+d);cost+=d*9}
+  need+=Math.max(ti,1)+Math.max(tn,1);have+=Math.min(r.infra,ti)+Math.min(r.industry,tn)});
+ cost=Math.min(cost,S.money);S.money-=cost;
+ const frac=need>0?clamp(have/need,0,1):1;W0.frac=frac;W0.spent=(W0.spent||0)+cost;
+ const cap=E.pg*(.80+.20*frac);
+ if(S.stability>30&&S.gdp<cap)S.gdp*=1+Math.min(.006,(cap/S.gdp-1)*.07);
+ const cm=Math.max(6,Math.min(48,Math.round((E.wm||0)*.6))),m=t-W0.end;W0.convM=cm;
+ if(m<cm){W0.conv=m<cm*.25?'перестройка':'рост гражданских отраслей';S.gdp*=m<cm*.25?.9985:1.0015}else W0.conv='завершена';
+ if(E.pg-S.gdp<=E.pg*.005&&frac>=.98){W0.done=true;W0.doneT=t;log(`✅ Послевоенное восстановление завершено за ${t-W0.end} мес.: инфраструктура и ВВП вернулись к довоенной траектории (затраты ≈ ${fmt(W0.spent)} млн).`)}
+}
 function econWarTick(){
  const E=S.econ,t=S.year*12+S.month,ws=warsAll(),atWar=ws.length>0;
+ const nat=E.last>0?S.gdp/E.last-1:0;   // собственный рост ВВП за этот месяц (до военных поправок)
  // Экономика противника: игровая оценка, привязанная к ходу войны.
  // Индексы начинаются со 100; это не реальные статистические данные стран.
  ws.forEach(w=>{
@@ -2788,14 +2811,18 @@ function econWarTick(){
   q.months=(q.months||0)+1;if(w.eco)syncEnemyEcon(w);
  });
  if(atWar&&(!E.war0||E.war0.over)){
-  E.war0={t,gdp:S.gdp,infra:avgReg('infra'),ind:avgReg('industry'),emp:S.employment,infl:S.inflation,rate:S.fx.rate,pop:S.pop,army:S.army,tax:S.tax,sold:S.warSold||0,civ:S.warCiv||0};
+  const prevReg=E.war0&&!E.war0.done?E.war0.reg:null,reg={};
+  (S.regions||[]).forEach(r=>{const p=prevReg&&prevReg[r.name];reg[r.name]={i:Math.max(r.infra,p?p.i:0),n:Math.max(r.industry,p?p.n:0)}});
+  E.war0={t,gdp:S.gdp,infra:avgReg('infra'),ind:avgReg('industry'),emp:S.employment,infl:S.inflation,rate:S.fx.rate,pop:S.pop,army:S.army,tax:S.tax,sold:S.warSold||0,civ:S.warCiv||0,reg};
   E.loss0=E.loss;E.tax0=E.tax;E.peak=0;
   log('📉 Начат учёт экономических потерь войны (вкладка «Графики» → «Война и экономика»).');
  }
  if(!atWar&&E.war0&&!E.war0.over){E.war0.over=true;E.war0.end=t;E.war0.endGdp=S.gdp;E.war0.endRate=S.fx.rate;
   S.fx.base*=1+Math.max(0,S.fx.rate/S.fx.base-1)*.5;
   log(`📊 Война окончена. ВВП ниже довоенной траектории на ${E.lossPct.toFixed(1)}%, накопленные потери выпуска ≈ ${fmt(E.loss-(E.loss0||0))} млрд.`)}
- const post=!!(E.war0&&E.war0.over&&t-E.war0.end<=36);
+ const W0=E.war0;
+ if(W0&&W0.over&&!W0.done&&t-W0.end>180){W0.done=true;W0.doneT=t}   // страховка: восстановление не длится дольше 15 лет
+ const post=!!(W0&&W0.over&&!W0.done);
  if(!atWar&&!post&&E.last>0){const g=S.gdp/E.last-1;if(okn(g))E.tr=clamp(E.tr*.85+g*.15,-.004,.012)}
  let drag=0;
  if(atWar){
@@ -2804,11 +2831,9 @@ function econWarTick(){
   if(S.energy<30)drag+=.001;if(S.fuel<25)drag+=.001;
   drag=Math.min(.022,drag);
   S.gdp=Math.max(100,S.gdp*(1-drag));E.wm=(E.wm||0)+1;
- }else if(post&&E.pg>S.gdp*1.012&&S.stability>30){
-  S.gdp*=1+Math.min(.006,(E.pg/S.gdp-1)*.05);
- }
+ }else if(post){recoverTick(E,W0,t)}
  E.drag=drag;
- if(atWar||(post&&S.gdp<E.pg*.985))E.pg=Math.max(S.gdp,E.pg*(1+E.tr));else E.pg=S.gdp;
+ if(atWar||post)E.pg=Math.max(S.gdp,E.pg*(1+(post&&!atWar?Math.min(E.tr,Math.max(0,nat)):E.tr)));else E.pg=S.gdp;   // разрыв с довоенной траекторией НЕ стирается сам
  const gap=Math.max(0,E.pg-S.gdp);
  E.gap=gap;E.lossPct=E.pg>0?gap/E.pg*100:0;E.peak=Math.max(E.peak||0,E.lossPct);
  E.loss+=gap/12;E.tax+=gap*S.tax/100/12*1.12;E.last=S.gdp;
@@ -2939,6 +2964,13 @@ function chFxExtra(){
  const m=fxMarket();
  return card('🌍 Реальные курсы валют мира',`<p class="chnote">${st.txt}</p>${m?`<p>Ваша валюта <b>${F.cur}</b>: рынок — 1 ${F.ref} = <b>${fxRate(m)}</b>, в игре сейчас — <b>${fxRate(F.rate)}</b> (${pct((F.rate/m-1)*100)}).</p>`:'<p class="muted">Новария — вымышленное государство, её валюта (талер) в реальном мире не торгуется; реальные курсы ниже даны для сравнения.</p>'}<div style="overflow:auto"><table class="fxt"><tr><th>Валюта</th><th style="text-align:right">за 1 USD</th><th style="text-align:right">с начала партии</th></tr>${rows}</table></div><p class="chnote">Рост числа = валюта подешевела к USD (красным), падение = подорожала (зелёным). Для вашей валюты изменение считается по игровому курсу. ≈ — приблизительное значение (нет в снимке рынка); при подключении к интернету курсы обновляются автоматически.</p><button onclick="fxRefresh()">🔄 Обновить курсы</button>`)+(window.NationsAI?NationsAI.econPanel(S):'');
 }
+function chRecCard(){
+ const E=S.econ||{},w=E.war0;if(!w||!w.over)return'';
+ const t=S.year*12+S.month,pgap=E.pg>0?Math.max(0,(E.pg-S.gdp)/E.pg*100):0;
+ if(w.done)return card('🏗 Послевоенное восстановление',`<p>✅ Завершено за <b>${w.doneT-w.end}</b> мес. Затраты ≈ <b>${fmt(w.spent||0)} млн</b>.</p>`);
+ const fr=Math.round((w.frac==null?0:w.frac)*100);
+ return card('🏗 Послевоенное восстановление',`<div class="kpis"><div class="kpi"><small>Инфраструктура и заводы</small><b class="${fr<90?'dn':'up'}">${fr}%</b><i>от довоенного уровня</i></div><div class="kpi"><small>Разрыв ВВП</small><b class="${pgap>1?'dn':'up'}">−${pgap.toFixed(1)}%</b><i>до довоенной траектории</i></div><div class="kpi"><small>Конверсия</small><b>${w.conv||'—'}</b><i>${t-w.end} из ${w.convM||'?'} мес.</i></div><div class="kpi"><small>Потрачено на ремонт</small><b>${fmt(w.spent||0)}</b><i>млн</i></div></div><p class="chnote">Разрушенное не восстанавливается за пару лет: области отстраиваются постепенно (быстрее при стабильности, доверии и деньгах в казне), а ВВП не может обогнать инфраструктуру. Военная экономика постепенно переводится на гражданскую.</p>`);
+}
 function chWarExtra(){
  const E=S.econ||{},w=E.war0,F=S.fx;
  if(!w)return card('📊 Итоги экономики войны','<p class="muted">Войны ещё не было. Как только начнётся война, здесь появятся потери ВВП, курс валюты, разрушения и расходы.</p>');
@@ -2973,7 +3005,7 @@ function chartsHtml(){
  const n=(S.history||[]).length;
  return `<div id="chroot" class="chroot"><div class="chtabs">${gs.map(z=>`<button class="${z.id===CHU.g?'on':''}" onclick="chSet('g','${z.id}')">${z.ic} ${z.n}</button>`).join('')}</div>
  <div class="chbar">${seg(per,'p')}${seg(mod,'m')}</div><p class="chnote" style="margin:0 0 8px">С начала партии: ${n} мес.${n<2?' Графики появятся после нескольких месяцев игры.':''}</p>
- ${chKpis(g.id)}<div class="grid">${g.charts.map((c,i)=>chCard(c,g.id+i)).join('')}</div>${g.extra==='fx'?chFxExtra():''}${g.extra==='war'?chWarExtra():''}</div>`;
+ ${chKpis(g.id)}<div class="grid">${g.charts.map((c,i)=>chCard(c,g.id+i)).join('')}</div>${g.extra==='fx'?chFxExtra():''}${g.extra==='war'?chWarExtra()+chRecCard():''}</div>`;
 }
 window.chSet=(k,v)=>{CHU[k]=v;render()};
 window.chTog=(id,k)=>{const key=id+':'+k;CHU.h[key]=!CHU.h[key];render()};
