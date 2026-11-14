@@ -21,6 +21,11 @@ MAX_PLAYERS = 6
 SPEEDS = {"slow": 10.0, "normal": 6.0, "fast": 3.5}          # секунд на игровой месяц
 LENGTHS = {"short": 120, "normal": 180, "long": 240}          # месяцев (10 / 15 / 20 лет)
 DIFFS = {"story", "easy", "normal", "hard", "expert"}
+# Настройки ИИ-противников задаёт хозяин комнаты: они ОДИНАКОВЫ для всех игроков (честная игра)
+AI_AGGR = {"calm", "normal", "high", "extreme"}
+AI_NN = {"off", "std", "fast"}
+AI_ARS = {"none", "small"}
+AI_DEFAULT = {"aggr": "normal", "nn": "std", "ars": "none"}
 
 NEWBIE_SHIELD = 24        # первые 24 мес. нельзя объявлять войну
 WAR_COOLDOWN = 18         # агрессор ждёт 18 мес. после своей войны
@@ -94,7 +99,7 @@ class Player:
         # публичные показатели (ограничены сервером)
         self.rep = {"gdp": START_GDP, "money": 18000.0, "debt": 0.0, "stab": 68.0,
                     "appr": 61.0, "legit": 70.0, "power": START_POWER, "pop": 8200000.0,
-                    "trust": 70.0, "income": 800.0}
+                    "trust": 70.0, "income": 800.0, "res": 70.0}
         self.score_gdp = START_GDP    # «зачётный» ВВП: растёт не быстрее лимита
         self.score = 0.0
         self.comp = {}
@@ -121,7 +126,8 @@ class Player:
                 "vassal_of": self.vassal_of, "vassal_tax": self.vassal_tax,
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
-                "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"])}
+                "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
+                "res": round(self.rep.get("res", 70))}
 
 
 class Room:
@@ -134,6 +140,7 @@ class Room:
         self.length = LENGTHS["normal"]
         self.speed = "normal"
         self.diff = "normal"
+        self.ai = dict(AI_DEFAULT)
         self.auto_paused = False
         self.task: asyncio.Task | None = None
         self.proposals: dict = {}     # id -> dict
@@ -168,7 +175,7 @@ class Room:
     def lobby_info(self) -> dict:
         return {"code": self.code, "state": self.state, "host": self.host,
                 "month": self.month, "length": self.length, "speed": self.speed,
-                "diff": self.diff, "players": [p.pub() for p in self.players.values()]}
+                "diff": self.diff, "ai": self.ai, "players": [p.pub() for p in self.players.values()]}
 
     async def push_lobby(self):
         await self.broadcast({"type": "lobby", **self.lobby_info()})
@@ -186,7 +193,8 @@ class Room:
         g = max(0.05, p.score_gdp / START_GDP)
         # Логарифмическая шкала: ×1 → 30, ×2 → 60, ×4 → 90. Не насыщается при обычной игре.
         eco = max(0.0, min(100.0, 30.0 + 30.0 * math.log2(g)))
-        welfare = max(0.0, min(100.0, (r["stab"] + r["appr"]) / 2))
+        # благосостояние: стабильность и одобрение + ресурсная обеспеченность (еда, топливо, энергия, сталь)
+        welfare = max(0.0, min(100.0, r["stab"] * 0.4 + r["appr"] * 0.4 + r.get("res", 70.0) * 0.2))
         gov = max(0.0, min(100.0, (r["legit"] * 0.5 + r["trust"] * 0.5)))
         net = r["money"] - r["debt"]
         fin = max(0.0, min(100.0, 50 + (net - self.start_money) / 400))   # ±20000 млн от старта = край шкалы
@@ -470,6 +478,14 @@ async def handle(room: Room, p: Player, msg: dict):
             room.length = LENGTHS[msg["length"]]
         if msg.get("diff") in DIFFS:
             room.diff = msg["diff"]
+        ai = msg.get("ai")
+        if isinstance(ai, dict):
+            if ai.get("aggr") in AI_AGGR:
+                room.ai["aggr"] = ai["aggr"]
+            if ai.get("nn") in AI_NN:
+                room.ai["nn"] = ai["nn"]
+            if ai.get("ars") in AI_ARS:
+                room.ai["ars"] = ai["ars"]
         await room.push_lobby()
         return
 
@@ -484,7 +500,7 @@ async def handle(room: Room, p: Player, msg: dict):
             q.rep["money"] = room.start_money
             q.score_gdp = START_GDP
             room.compute_score(q)
-        await room.broadcast({"type": "start", "diff": room.diff, "length": room.length,
+        await room.broadcast({"type": "start", "diff": room.diff, "ai": room.ai, "length": room.length,
                               "speed": room.speed, "players": [q.pub() for q in room.players.values()]})
         room.task = asyncio.create_task(room.run())
         return
@@ -562,6 +578,7 @@ async def on_report(room: Room, p: Player, msg: dict):
         "power": num(r.get("power"), 1, 100000, old["power"]),
         "pop": num(r.get("pop"), 100000, 2_000_000_000, old["pop"]),
         "income": num(r.get("income"), 0, 100000, old["income"]),
+        "res": num(r.get("res"), 0, 100, old.get("res", 70.0)),
     }
     months = max(1, room.month - p.last_report)
     p.last_report = room.month

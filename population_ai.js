@@ -70,7 +70,7 @@ function envOf(S,g,gi,r,env){
     unrest:(r.unrest||0)/100,loy:(r.loyalty||50)/100,wealth:(r.wealth||50)/100,tax:C((S.tax||20)/50,0,1),def:C(((env.aa||0)+(env.bunkers||0))/12,0,1)};
 }
 function tick(S,env){
-  if(!window.NN||!S.regions||!S.regions.length)return;
+  if(!window.NN||window.NN.off||!S.regions||!S.regions.length)return;
   env=env||{};const p=P(S);
   p.hitPrev=p.hitNow;p.hitNow={};                                // налёты, прошедшие за последний месяц
   const tot=S.regions.reduce((a,r)=>a+(r.pop||0),0)||1;
@@ -110,7 +110,7 @@ function shelter(S,reg){const p=P(S),fr=(p.reg&&p.reg[reg])||0;return C(1-fr*(.3
 
 /* ---------- население стран-ботов: одна «национальная» когорта на страну ---------- */
 function tickNation(S,n){
-  if(!window.NN||n.annexed)return;
+  if(!window.NN||window.NN.off||n.annexed)return;
   const p=P(S),stab=n.stability/100,gdpv=Math.log10(Math.max(10,n.gdp))/6,war=!!n.war;
   const e1={sat:stab,appr:stab,stab:stab,infl:.2,unemp:C(1-n.treasury/Math.max(1,n.gdp)*20,0,1),food:.7,war,hit:C((n.dmg||0)/20,0,1),hitNow:C((n.dmgNew||0)/3,0,1),
     unrest:1-stab,loy:n.morale/100,wealth:gdpv,tax:.4,def:C((n.aa||0)/14,0,1)};

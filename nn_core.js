@@ -31,7 +31,7 @@ function fwd(n,x){
 const predict=(n,x)=>fwd(n,x).y;
 /* train: один шаг SGD только по выбранному выходу k (так учится Q-функция: меняем оценку сделанного действия) */
 function train(n,x,k,target,lr){
-  const f=fwd(n,x),err=C(target-f.y[k],-2,2);lr=lr||.03;
+  const f=fwd(n,x),err=C(target-f.y[k],-2,2);lr=(lr||.03)*((window.NN&&window.NN.lrMul)||1);
   const o2=k*n.nh,dh=new Array(n.nh);
   for(let j=0;j<n.nh;j++){dh[j]=err*n.W2[o2+j]*(1-f.h[j]*f.h[j]);n.W2[o2+j]+=lr*err*f.h[j]}
   n.b2[k]+=lr*err;

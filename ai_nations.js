@@ -17,7 +17,7 @@ let curS=null;
 /* Удар страны att по стране def: оружие и цель выбирает общий обучаемый тактик (AIARS). */
 function strike(W,w,att,def,isA){
  if(!window.AIARS||!curS)return;
- AIARS.stock(att,true);
+ AIARS.stock(att,true,curS);
  const n=Math.max(1,Math.min(4,1+Math.floor(att.power/55)+(att.intrigue>40?1:0)));
  for(let i=0;i<n;i++)strike1(W,w,att,def,isA);
 }
@@ -26,7 +26,7 @@ function strike1(W,w,att,def,isA){
  const WP=AIARS.WEAPONS;
  if(def.aa==null)def.aa=Math.round(def.power/25);
  const front=isA?w.front:100-w.front;
- const act=AIARS.pick(curS,att,{vs:'n',front,defAA:def.aa,defStab:def.stability,aggr:C(.45+att.intrigue/200,.2,.9),dmg:C((def.dmg||0)/20,0,1),months:w.months,allowBomb:att.power>=70&&front>70&&def.power<att.power*.6,allowCiv:true});
+ const act=AIARS.pick(curS,att,{vs:'n',front,defAA:def.aa,defStab:def.stability,aggr:C(.45+att.intrigue/200+(AIARS.aggrMult(curS)-1)*.2,.15,.95),dmg:C((def.dmg||0)/20,0,1),months:w.months,allowBomb:att.power>=70&&front>70&&def.power<att.power*.6,allowCiv:true});
  if(!act)return;att.ars[act.w]-=1;
  const f=WP[act.w].f,air=WP[act.w].air,sg=isA?1:-1;
  if(air)def.aa=Math.min(14,def.aa+.4*f);                      // противник учится и наращивает ПВО
@@ -137,7 +137,7 @@ function diplomacy(W,A){
  }
 }
 function declare(W,A){
- for(const a of A){if(a.war||a.cooldown||Math.random()>.0045)continue;
+ for(const a of A){if(a.war||a.cooldown||Math.random()>.0045*(window.AIARS&&curS?AIARS.aggrMult(curS):1))continue;
   let targets=A.filter(b=>b!==a&&!b.war&&!b.allies.includes(a.name)&&!a.allies.includes(b.name)&&!b.cooldown&&!W.wars.some(w=>(w.a===a.name&&w.b===b.name)||(w.a===b.name&&w.b===a.name)));
   targets.sort((x,y)=>(a.power/Math.max(1,x.power))*(1+Math.max(0,-x.relations)/180)+x.gdp/Math.max(1,a.gdp)*.12-((a.power/Math.max(1,y.power))*(1+Math.max(0,-y.relations)/180)+y.gdp/Math.max(1,a.gdp)*.12));
   if(!targets.length)continue;let b=targets[targets.length-1],ally=a.allies.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.28,0),def=b.allies.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.32,0);
@@ -206,7 +206,7 @@ function sfeat(W,n,A,m,wv){
 }
 function epsS(b){return Math.max(.05,.3*Math.exp(-b.steps/30000))}
 function think(W,n,A,m,wv){
- if(!window.NN||!W.brain)return;
+ if(!window.NN||window.NN.off||!W.brain)return;
  const B=W.brain,net=NN.get(B,'nn',SIN,SNH,SOUT,SPRIOR),x=sfeat(W,n,A,m,wv),v=value(n);
  /* 1) учимся на итоге прошлого решения: r = рост оценки состояния; цель = r + γ·max Q(новое состояние) */
  if(n.last&&n.last.x){const q2=NN.predict(net,x),r=C((v-n.last.v)*4,-2,2),t=r+.9*Math.max(...q2);
@@ -255,7 +255,7 @@ function brainStats(W){
  return{steps:B.steps,eps:epsS(B),avg:B.avg,rows:rows.sort((a,b)=>b.n-a.n),tot,coverage:Math.round(100*rows.length/ACTS.length)};
 }
 function tick(S){
- curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;curW=W;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);A.forEach(fxStep);if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
+ curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;curW=W;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);A.forEach(fxStep);if(window.AIARS)A.forEach(n=>{try{AIARS.stock(n,!!n.war,S)}catch(e){}});if(window.AIRES&&W.month%3===0){try{AIRES.updatePrices(S)}catch(e){}}if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
  W.nations.forEach(n=>{if(n.annexed)return;(n.gh||(n.gh=[])).push(Math.round(n.gdp*100)/100);if(n.gh.length>13)n.gh.shift();if(n.gdp>(n.gpeak||0))n.gpeak=n.gdp});
  {const m=med(A),wv=worldView(A);W.view={atWar:+wv.atWar.toFixed(3),growth:+wv.growth.toFixed(4)};A.forEach(n=>think(W,n,A,m,wv))}diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}

@@ -86,14 +86,16 @@ const API={
     }));
     const sup=supply(),base=d.base||sup;
     for(const k in K){const b=base[k];if(!b)continue;const ratio=sup[k]/b;const delta=(ratio-1)*K[k];if(Math.abs(delta)>.001)s[k]=clamp(s[k]+delta)}
+    if(s.autoImp)Object.keys(STOCK).forEach(k=>{if(s[k]<22)API.imp(k,true)});   // по желанию игрока государство докупает дефицит само
   },
   gain(name,resList){const d=ensure();if(!d)return;const res={};(resList||[]).forEach(it=>{if(NAME[it.t]){res[it.t]=mkRes(it.t,it.tier||1);if(res[it.t].left!=null)res[it.t].max=res[it.t].left}});if(!Object.keys(res).length)return;d.list.push({id:'c'+d.list.length+'_'+Date.now(),name,note:'Захвачено',res,captured:true});NG.log(`🛢 С землями «${name}» получены месторождения: ${Object.keys(res).map(t=>NAME[t]).join(', ')}.`)},
   lose(){const d=ensure();if(!d||d.list.length<=2)return;const cand=d.list.filter(r=>r.captured);const r=cand.length?cand[cand.length-1]:d.list[Math.floor(Math.random()*d.list.length)];d.list=d.list.filter(x=>x!==r);NG.log(`⛏ Потеряны месторождения региона «${r.name}».`)},
-  imp(stock){
+  imp(stock,silent){
     const s=S();if(!s)return;const t=Object.keys(FEED[stock])[0],price=API.prices[t]||1,cost=Math.round(IMPORT_COST*price);
-    if(s.money<cost)return NG.toast('Недостаточно средств');
-    s.money-=cost;s[stock]=clamp(s[stock]+IMPORT_GAIN);NG.log(`🚢 Импорт: ${STOCK[stock][0].toLowerCase()} +${IMPORT_GAIN} за ${cost} млн.`);NG.toast(`Закуплено: ${STOCK[stock][0].toLowerCase()} +${IMPORT_GAIN}`);NG.render();
+    if(s.money<cost){if(!silent)NG.toast('Недостаточно средств');return}
+    s.money-=cost;s[stock]=clamp(s[stock]+IMPORT_GAIN);NG.log(`🚢 ${silent?'Автозакупка':'Импорт'}: ${STOCK[stock][0].toLowerCase()} +${IMPORT_GAIN} за ${cost} млн.`);if(!silent){NG.toast(`Закуплено: ${STOCK[stock][0].toLowerCase()} +${IMPORT_GAIN}`);NG.render()}
   },
+  auto(){const s=S();if(!s)return;s.autoImp=!s.autoImp;NG.toast(s.autoImp?'Автозакупка включена: при запасе ниже 22 страна докупает сама':'Автозакупка выключена');NG.render()},
   explore(id,t){
     const s=S();if(!s)return;const d=ensure(),r=d.list.find(x=>x.id===id);if(!r||!r.res[t])return;
     const key=id+t;if(d.cd[key]!=null&&tm()-d.cd[key]<CD)return NG.toast(`Разведка недр: подождите ${CD-(tm()-d.cd[key])} мес.`);
@@ -113,7 +115,7 @@ const API={
         const btn=(x.dead||(x.left!=null&&p<40))?`<button type="button" onclick="NGRES.explore('${esc(r.id)}','${t}')">🔎 Разведка · ${EXPLORE_COST}</button>`:'';
         return`<div style="margin:4px 0">${state}${x.left!=null&&!x.dead?`<div class="bar"><i style="width:${p}%;background:${p<25?'#c23b4b':p<50?'#c9902f':'#2aa56d'}"></i></div>`:''}${btn}</div>`}).join('');
       return`<div class="mini"><b>${esc(r.name)}</b><small class="muted">${esc(r.note)}</small>${chips}</div>`}).join('');
-    return`<section class="panel wide"><h2>🛢 Ресурсы регионов</h2><p class="muted">Нефть, газ, уголь и руда истощаются. Когда месторождения пустеют, запасы страны падают: импорт доступен во вкладке «Торговля и рынок», ищите новые залежи или захватывайте богатые земли.</p><div class="cards">${stocks}</div><div class="cards" style="margin-top:8px">${regs}</div></section>`;
+    return`<section class="panel wide"><h2>🛢 Ресурсы регионов</h2><div class="actions"><button type="button" class="${s.autoImp?'good':''}" onclick="NGRES.auto()">${s.autoImp?'✅ Автозакупка дефицита включена':'⬜ Включить автозакупку дефицита'}</button></div><p class="muted">Нефть, газ, уголь и руда истощаются. Когда месторождения пустеют, запасы страны падают: импорт доступен во вкладке «Торговля и рынок», ищите новые залежи или захватывайте богатые земли.</p><div class="cards">${stocks}</div><div class="cards" style="margin-top:8px">${regs}</div></section>`;
   },
   depleted(){const d=S()&&S().deposits;if(!d)return[];const o=[];d.list.forEach(r=>Object.keys(r.res).forEach(t=>{if(r.res[t].dead)o.push({region:r.name,t})}));return o}
 };

@@ -11,6 +11,8 @@ const LENGTHS={short:'Короткая · 10 лет',normal:'Обычная · 1
 const DIFFS={story:'История',easy:'Лёгкая',normal:'Нормальная',hard:'Сложная',expert:'Эксперт'};
 const LKEY=(c)=>'novariaMP:'+c, SKEY='novariaMPSession';
 
+const AIO={aggr:{calm:'спокойный',normal:'обычный',high:'агрессивный',extreme:'беспощадный'},nn:{off:'выключена',std:'обычная',fast:'быстро учится'},ars:{none:'нет (страны вырабатывают и покупают сами)',small:'небольшой запас'}};
+const aiv=()=>Object.assign({aggr:'normal',nn:'std',ars:'none'},room.ai||{});
 let ws=null,me={id:null,host:false},room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
 let standings=[],mods={},wars=[],feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
 const orig={};
@@ -77,13 +79,13 @@ function on(m){
   case'error':note(m.text,'warn');if(m.fatal){localStorage.removeItem(SKEY);room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};active=false;view='setup';setBar();paintModal()}break;
   }
 }
-function pick(m){const o={};['code','state','host','month','length','speed','diff','players'].forEach(k=>{if(m[k]!==undefined)o[k]=m[k]});return o}
+function pick(m){const o={};['code','state','host','month','length','speed','diff','ai','players'].forEach(k=>{if(m[k]!==undefined)o[k]=m[k]});return o}
 
 /* ---------- игровой процесс ---------- */
 function startGame(m){
   const sess=JSON.parse(localStorage.getItem(SKEY)||'{}');
   Object.assign(room,{state:'running',diff:m.diff,length:m.length,speed:m.speed,month:0,players:m.players});
-  NG.begin(m.diff,sess.country||'Новария');NG.S.mpMonth=0;NG.S.mpFlat=0;
+  NG.begin(m.diff,sess.country||'Новария',m.ai);NG.S.mpMonth=0;NG.S.mpFlat=0;
   enterMP();sentElim=false;standings=m.players;mods={};wars=[];feed=[];lastTick=Date.now();
   closeModal();NG.setTab('mp');report();saveLocal();setBar();
   note('🌍 Игра началась! Все страны стартуют с одинаковыми условиями.','info');
@@ -141,7 +143,7 @@ function catchUp(){
 function report(){
   const S=NG.S;if(!S||!active)return;
   let power=1;try{power=NG.warPower(null)}catch(e){}
-  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income()}});
+  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70}});
 }
 function saveLocal(){try{localStorage.setItem(LKEY(room.code),JSON.stringify(NG.S))}catch(e){}}
 function addMoney(d){const S=NG.S;if(d>=0)S.money+=d;else{const n=-d;if(S.money>=n)S.money-=n;else{S.debt+=n-S.money;S.money=0}}}
@@ -211,13 +213,13 @@ function paintModal(){
 <h3>Игроки (${room.players.length}/6)</h3>${room.players.map(p=>`<div class="mpplayer"><span>${p.id===room.host?'👑':'👤'}</span><span class="nm"><b>${esc(p.country)}</b><br><small>${esc(p.name)}${p.id===me.id?' · это вы':''}</small></span><span>${p.ready?'✅':'⏳'}</span></div>`).join('')}
 ${host?`<label>Скорость времени</label><select id="mpSpeed">${Object.keys(SPEEDS).map(k=>`<option value="${k}" ${room.speed===k?'selected':''}>${SPEEDS[k][0]}</option>`).join('')}</select>
 <label>Длительность</label><select id="mpLen">${Object.keys(LENGTHS).map(k=>`<option value="${k}" ${room.length===({short:120,normal:180,long:240})[k]?'selected':''}>${LENGTHS[k]}</option>`).join('')}</select>
-<label>Сложность (одинакова для всех)</label><select id="mpDiff">${Object.keys(DIFFS).map(k=>`<option value="${k}" ${room.diff===k?'selected':''}>${DIFFS[k]}</option>`).join('')}</select>`
-:`<p class="muted2">Скорость: ${SPEEDS[room.speed][0]} · ${room.length/12} лет · сложность: ${DIFFS[room.diff]}</p>`}
+<label>Сложность (одинакова для всех)</label><select id="mpDiff">${Object.keys(DIFFS).map(k=>`<option value="${k}" ${room.diff===k?'selected':''}>${DIFFS[k]}</option>`).join('')}</select><label>Агрессия ИИ-стран (одинакова для всех)</label><select id="mpAiA">${Object.keys(AIO.aggr).map(k=>`<option value="${k}" ${aiv().aggr===k?'selected':''}>${AIO.aggr[k]}</option>`).join('')}</select><label>Нейросеть ИИ</label><select id="mpAiN">${Object.keys(AIO.nn).map(k=>`<option value="${k}" ${aiv().nn===k?'selected':''}>${AIO.nn[k]}</option>`).join('')}</select><label>Стартовый арсенал ИИ</label><select id="mpAiR">${Object.keys(AIO.ars).map(k=>`<option value="${k}" ${aiv().ars===k?'selected':''}>${AIO.ars[k]}</option>`).join('')}</select>`
+:`<p class="muted2">Скорость: ${SPEEDS[room.speed][0]} · ${room.length/12} лет · сложность: ${DIFFS[room.diff]}<br>ИИ-страны: агрессия — ${AIO.aggr[aiv().aggr]}, нейросеть — ${AIO.nn[aiv().nn]}, арсенал — ${AIO.ars[aiv().ars]}</p>`}
 <div class="mprow">${host?`<button class="primary" id="mpStart" ${room.players.length<2?'disabled':''}>▶ Начать игру</button>`:`<button class="good" id="mpReady">Я готов</button>`}<button class="danger" id="mpLeave">Выйти</button></div>
 ${host&&room.players.length<2?'<p class="muted2">Нужно минимум 2 игрока.</p>':''}</div>`;
     $('#mpCopy').onclick=()=>{copy(link);NG.toast('Ссылка скопирована')};
     const sh=$('#mpShare');if(sh)sh.onclick=()=>navigator.share({title:'Симулятор государства',text:`Играем вместе! Код комнаты: ${room.code}`,url:link}).catch(()=>{});
-    if(host){const up=()=>send({type:'settings',speed:val('#mpSpeed'),length:val('#mpLen'),diff:val('#mpDiff')});['#mpSpeed','#mpLen','#mpDiff'].forEach(s=>$(s).onchange=up);$('#mpStart').onclick=()=>send({type:'start'})}
+    if(host){const up=()=>send({type:'settings',speed:val('#mpSpeed'),length:val('#mpLen'),diff:val('#mpDiff'),ai:{aggr:val('#mpAiA'),nn:val('#mpAiN'),ars:val('#mpAiR')}});['#mpSpeed','#mpLen','#mpDiff','#mpAiA','#mpAiN','#mpAiR'].forEach(s=>$(s).onchange=up);$('#mpStart').onclick=()=>send({type:'start'})}
     else $('#mpReady').onclick=()=>send({type:'ready',value:true});
     $('#mpLeave').onclick=leaveMP;
   }else if(view==='final'&&finalData){

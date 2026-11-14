@@ -1,4 +1,4 @@
-/* Тактический ИИ арсенала (v3: настоящая нейросеть + опыт-реплей + принудительное опробование всего оружия).
+/* Тактический ИИ арсенала (v4: арсенал НЕ выдаётся на старте — страны вырабатывают и покупают оружие за деньги; настройки партии S.aiCfg; v3: настоящая нейросеть + опыт-реплей + принудительное опробование всего оружия).
    Страны-ИИ покупают оружие, выбирают цель (военные / инфраструктура / гражданские) и учатся:
    это контекстный бандит с Q-таблицей. Он пробует действия, получает награду за реальный результат
    удара (сдвиг фронта, потери врага, перехват ПВО, дипломатический штраф) и со временем всё чаще
@@ -56,33 +56,87 @@ function feats(o,c){
     C((+c.power||20)/150,0,1),have/WK.length,C(o.dmg||0,0,1),C((o.months||0)/24,0,1),C((c.exhaustion||0)/100,0,1),1].map(v=>+v.toFixed(3));
 }
 function net(S){
-  if(!window.NN)return null;
+  if(!window.NN||window.NN.off)return null;
   const bias=[];WK.forEach(w=>TARGETS.forEach(t=>bias.push(prior(w,t,NEUTRAL))));
   return NN.get(brain(S),'nn',NIN,NH,NOUT,bias);
 }
 
 function eps(b){return Math.max(.06,.32*Math.exp(-b.steps/500))}
 
-// Запас оружия страны (растёт от её военной мощи; на войне оборонка работает вдвое быстрее)
+/* ---------- НАСТРОЙКИ ПАРТИИ (S.aiCfg) ---------- */
+const AGGR={calm:{n:'Спокойный',m:.6},normal:{n:'Обычный',m:1},high:{n:'Агрессивный',m:1.35},extreme:{n:'Беспощадный',m:1.7}};
+const NNM={off:'Выключена (простой тактик)',std:'Обычная',fast:'Быстро учится'};
+const ARSM={none:'Нет — страны вырабатывают и покупают сами',small:'Небольшой запас'};
+function cfg(S){const c=(S&&S.aiCfg)||{};return{aggr:AGGR[c.aggr]?c.aggr:'normal',nn:NNM[c.nn]?c.nn:'std',ars:ARSM[c.ars]?c.ars:'none'}}
+const aggrMult=S=>AGGR[cfg(S).aggr].m;
+function applyCfg(S){const c=cfg(S);if(window.NN){NN.off=c.nn==='off';NN.lrMul=c.nn==='fast'?2.2:1}return c}
+
+/* ---------- ЭКОНОМИКА ОРУЖИЯ ----------
+   Арсенал на старте пуст. Каждый месяц страна выделяет оборонный бюджет и тратит его двумя способами:
+   1) вырабатывает на своих заводах (дешевле, но ограничено мощностью промышленности);
+   2) покупает на мировом рынке (дороже в 1.6 раза, нет лимита мощности, но не при эмбарго).
+   На войне бюджет в 3–4 раза больше + разовая мобилизация при начале войны. Старое оружие изнашивается. */
+const COST={cannon:6,drone:4,tank:22,rocket:26,bomb:40,howitzer:14,heli:35,mlrs:24,cruise:48,bomber:80};
+const BUY_MARKUP=1.6;
 const RATE={cannon:.05,drone:.05,tank:.02,rocket:.015,bomb:.004,howitzer:.025,heli:.012,mlrs:.012,cruise:.01,bomber:.006};
 const NEED={bomb:70,heli:35,mlrs:45,cruise:60,bomber:80,howitzer:25};
-function stock(c,atWar){
-  const p=Math.max(5,+c.power||20);
-  if(!c.ars)c.ars={};
-  const init={cannon:p*.2,drone:p*.14,tank:p*.07,rocket:p*.05,bomb:p>=70?1:0,howitzer:p>=25?p*.05:0,heli:p>=35?p*.03:0,mlrs:p>=45?p*.03:0,cruise:p>=60?p*.02:0,bomber:p>=80?1:0};
-  WK.forEach(k=>{if(c.ars[k]==null)c.ars[k]=init[k]});
-  const boost=atWar?2:1,cap=atWar?70:40;
-  WK.forEach(k=>{if(p>=(NEED[k]||0))c.ars[k]=Math.min(cap,(c.ars[k]||0)+p*RATE[k]*boost)});
+const mIdx=S=>(S&&S.year!=null)?(S.year*12+(S.month||0)):null;
+function weights(S,c){
+  const p=Math.max(5,+c.power||20),b=S?brain(S):null,ws=[];let tot=0;
+  WK.forEach(k=>{if(p<(NEED[k]||0))return;let r=0,n=0;
+    if(b)TARGETS.forEach(t=>{const s=b.stat[k+'>'+t];if(s){r+=s.r;n+=s.n}});
+    const w=Math.max(.15,.6+(n?r/n:0))/Math.sqrt(COST[k]);       // что лучше работало — и что дешевле
+    ws.push([k,w]);tot+=w});
+  return{ws,tot};
+}
+function pickWeapon(S,c){const {ws,tot}=weights(S,c);if(!ws.length)return null;let r=Math.random()*tot;for(const [k,w] of ws){r-=w;if(r<=0)return k}return ws[0][0]}
+/* Запас: создаёт пустой склад (или небольшой, если выбрано в настройках) и раз в месяц запускает выработку/закупку. */
+function stock(c,atWar,S){
+  if(!c.ars){
+    c.ars={};const p=Math.max(5,+c.power||20),small=S&&cfg(S).ars==='small';
+    WK.forEach(k=>{c.ars[k]=small&&p>=(NEED[k]||0)?Math.floor(p*(RATE[k]||.01)*6*10)/10:0});
+    c.arsMade=0;c.arsBought=0;
+    if(S&&!atWar)c.arsM=mIdx(S);      // в самый первый месяц склад остаётся пустым; на войне мобилизация срабатывает сразу
+  }
+  WK.forEach(k=>{if(c.ars[k]==null)c.ars[k]=0});
+  if(S)monthly(S,c,!!atWar);
   return c.ars;
 }
-/* Производство по результатам: страна вкладывает бюджет в то оружие, которое лучше всего работало (с учётом нужных заводов) */
+function monthly(S,c,atWar){
+  const mi=mIdx(S);if(mi==null||c.arsM===mi)return;c.arsM=mi;
+  if(window.AIRES){try{AIRES.tick(S,c,atWar)}catch(e){}}     // сначала ресурсы: добыча, нехватка, закупки сырья
+  const p=Math.max(5,+c.power||20),ind=Math.max(.4,c.industry||1),cap=atWar?70:40;
+  WK.forEach(k=>{c.ars[k]=Math.max(0,c.ars[k]*(atWar?.99:.985))});   // износ и устаревание
+  const hasTre=typeof c.treasury==='number';let funds=0;
+  if(hasTre){
+    const want=p*(atWar?1.4:.2),take=Math.max(0,Math.min(want,c.treasury*.08));
+    c.treasury-=take;funds=take;
+  }else{c.arsFund=(c.arsFund||0)+p*(atWar?1.4:.25);funds=c.arsFund;c.arsFund=0}
+  if(window.AIRES)funds*=Math.max(.3,1-.25*AIRES.shortage(c));     // страна в нехватке сырья тратит деньги на еду и топливо, а не на оружие
+  if(atWar&&!c.arsWar){   // начало войны: мобилизация оборонки и срочные закупки
+    c.arsWar=true;
+    if(hasTre){const x=Math.max(0,Math.min(p*2.5,c.treasury*.12));c.treasury-=x;funds+=x}else funds+=p*2.5;
+  }
+  if(!atWar)c.arsWar=false;
+  const embargo=c.embargo&&c.embargo>mi;
+  const rf=window.AIRES?Math.min(AIRES.factor(c,'steel'),AIRES.factor(c,'fuel')+.25):1;   // нет стали/топлива — заводы встают, остаётся покупать готовое
+  let capLeft=Math.max(rf<.5?0:1,Math.round(p/22*ind*(atWar?2:1)*(embargo?.7:1)*rf));   // сколько единиц заводы выпускают за месяц
+  const canBuy=!embargo&&(atWar||(c.aggr||.4)>.55||funds>p*1.2);
+  for(let i=0;i<10&&funds>=4;i++){
+    const w=pickWeapon(S,c);if(!w)break;
+    if((c.ars[w]||0)>=cap)continue;
+    const base=COST[w];
+    if(capLeft>0&&funds>=base){funds-=base;capLeft--;c.ars[w]+=1;c.arsMade=(c.arsMade||0)+1;if(window.AIRES){AIRES.use(c,'steel',base/25);AIRES.use(c,'fuel',base/70)}}
+    else if(canBuy&&funds>=base*BUY_MARKUP){funds-=base*BUY_MARKUP;c.ars[w]+=1;c.arsBought=(c.arsBought||0)+1}
+    else break;
+  }
+  if(funds>0){if(hasTre)c.treasury+=funds*.6;else c.arsFund=Math.min(funds,p*4)}    // неистраченное остаётся в бюджете
+}
+/* Производство по заказу стратегического ИИ страны (действие «арсенал»): деньги уже списаны с казны */
 function produce(S,c,units){
-  stock(c,!!c.war);const p=Math.max(5,+c.power||20),b=brain(S),ws=[];let tot=0;
-  WK.forEach(k=>{if(p<(NEED[k]||0))return;let r=0,n=0;TARGETS.forEach(t=>{const s=b.stat[k+'>'+t];if(s){r+=s.r;n+=s.n}});
-    const w=Math.max(.15,.6+(n?r/n:0));ws.push([k,w]);tot+=w});
-  if(!ws.length)return;
-  for(let i=0;i<2;i++){let r=Math.random()*tot,pick=ws[0][0];for(const [k,w] of ws){r-=w;if(r<=0){pick=k;break}}
-    c.ars[pick]=Math.min(c.war?70:40,(c.ars[pick]||0)+units/(WEAPONS[pick].f*1.2)/2)}
+  stock(c,!!c.war,S);const p=Math.max(5,+c.power||20),cap=c.war?70:40;
+  for(let i=0;i<2;i++){const pick=pickWeapon(S,c);if(!pick)return;
+    c.ars[pick]=Math.min(cap,(c.ars[pick]||0)+units/(WEAPONS[pick].f*1.2)/2);c.arsMade=(c.arsMade||0)+units/4}
 }
 function have(c,w){return (c.ars&&c.ars[w]||0)>=1}
 
@@ -130,7 +184,8 @@ function summary(S){
    Если у цели сильная ПВО — сначала дроны-приманки (decoy), чтобы выжечь перехватчики, затем дорогие ракеты. */
 function salvoSize(c,o){
   const p=Math.max(5,+c.power||20);
-  const base=1+p/45+(o.aggr-.5)*3+(o.front<45?1:0)+(o.war?.5:0);
+  const ramp=o.months==null?1:Math.min(1,.45+o.months*.12);                       // в первые месяцы войны залпы слабее: оборонка только разгоняется
+  const base=(1+p/45+(o.aggr-.5)*3+(o.front<45?1:0)+(o.war?.5:0))*ramp*(1-C((c.exhaustion||0)/250,0,.4));
   let have=0;WK.forEach(k=>{have+=Math.floor((c.ars&&c.ars[k])||0)});
   return Math.max(1,Math.min(7,Math.round(base),have));
 }
@@ -146,5 +201,5 @@ function plan(S,c,o){
   }
   return acts;
 }
-window.AIARS={WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN};
+window.AIARS={WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
 })();
