@@ -9,6 +9,8 @@ function init(S){
  }
  const W=S.aiWorld;W.version=3;W.player=player;W.events||=[];W.wars||=[];W.alliances||=[];W.owners||={};
  W.brain||={nn:null,steps:0,stat:{},mem:[],avg:0};
+ /* gdp0 — ВВП на старте игры. Для старых сохранений восстанавливаем по той же формуле, по которой мир создавался. */
+ W.nations.forEach(n=>{if(!(n.gdp0>0)){const c=window.WORLD&&WORLD.map&&WORLD.map[n.name];n.gdp0=c?Math.max(1,(+c.pop||1)*(+c.inc||1)*100):n.gdp}n.gh||=[];n.gpeak??=n.gdp});
  W.nations.forEach(n=>{n.aa??=Math.round(n.power/25);n.dmg??=0;n.manpower??=n.pop*.035;n.morale??=75;n.exhaustion??=0;n.industry??=1;n.infrastructure??=1;n.research??=1;n.exports??=0;n.imports??=0;n.cooldown??=0;n.tradePartners||=[];n.allies||=[];n.rivals||={};n.intrigue??=0;n.intent??='Развитие экономики';n.warPlan??=0;n.human=n.name===player});
 }
 let curS=null;
@@ -39,8 +41,11 @@ function strike1(W,w,att,def,isA){
  if(Math.random()<.12)ev(W,`${act.t==='civ'?'🏘':act.t==='infra'?'🏗':'🎯'} ${att.name}: ${AIARS.WN[act.w]} по цели «${AIARS.TN[act.t]}» (${def.name})`);
 }
 function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80)}
+/* Мировая обстановка влияет на рост: война у торговых партнёров и общая «горячность» мира тормозят экономику. */
+let worldDrag=0,byNameCur={};
 function economy(n){
- const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-R(.001,.0018),-.018,.024);
+ const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>byNameCur[x]&&byNameCur[x].war).length/tp.length:0;
+ const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-R(.001,.0018),-.018,.024);
  n.gdp=Math.max(1,n.gdp*(1+growth));n.pop=Math.max(.01,n.pop*(1+C(.00015+(n.stability-55)*.000006-R(0,.00025),-.001,.0008)));
  const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
  n.treasury=C(n.treasury+income-upkeep,0,n.gdp*.2);
@@ -104,18 +109,39 @@ function peace(W,w,a,b,A){
    страны (ВВП, стабильность, мощь, казна, потери войны). Так страны со временем сами находят, что работает. */
 const ACTS=['economy','industry','infra','research','army','aa','arsenal','stabilize','ally','trade','mobilize','peace'];
 const ACT_RU={economy:'бизнес-климат',industry:'промышленность',infra:'инфраструктура',research:'наука',army:'армия',aa:'ПВО',arsenal:'оружие',stabilize:'стабилизация',ally:'союзы',trade:'торговля',mobilize:'мобилизация',peace:'мир'};
-const SIN=13,SNH=22,SOUT=ACTS.length,SPRIOR=[.3,.25,.2,.2,.15,.1,.1,.1,.1,.2,0,0];
+const SIN=21,SNH=26,SOUT=ACTS.length,SPRIOR=[.3,.25,.2,.2,.15,.1,.1,.1,.1,.2,0,0];
 const med=a=>{const v=a.map(n=>n.gdp).sort((x,y)=>x-y);return v[v.length>>1]||1};
-function value(n){return Math.log(Math.max(1,n.gdp))*4+n.stability/25+n.power/50+C(n.treasury/Math.max(1,n.gdp),0,.3)*10+Math.log(Math.max(.01,n.pop))*.5-n.exhaustion/40-(n.dmg||0)/8}
-function sfeat(W,n,A,m){
+/* Оценка состояния страны. Главный вес — ВВП: нейросеть получает награду прежде всего за рост экономики. */
+function value(n){return Math.log(Math.max(1,n.gdp))*7+n.stability/25+n.power/50+C(n.treasury/Math.max(1,n.gdp),0,.3)*10+Math.log(Math.max(.01,n.pop))*.5-n.exhaustion/40-(n.dmg||0)/8}
+/* «Взгляд на мир»: общая картина, которую видит каждая страна (считается раз в месяц). */
+function worldView(A){
+ const live=A.filter(n=>!n.annexed),N=Math.max(1,live.length);
+ const g3=n=>{const h=n.gh||[];return h.length>3?Math.log(Math.max(1,n.gdp)/Math.max(1,h[h.length-4])):0};
+ const gs=live.map(g3).sort((a,b)=>a-b),gdps=live.map(n=>n.gdp).sort((a,b)=>a-b);
+ return{atWar:live.filter(n=>n.war).length/N,growth:gs[gs.length>>1]||0,gdps,N,byName:Object.fromEntries(live.map(n=>[n.name,n])),g3};
+}
+function sfeat(W,n,A,m,wv){
  const danger=A.reduce((b,x)=>x!==n&&!x.annexed&&x.power>b?x.power:b,0);
+ wv||=worldView(A);
+ const rank=wv.gdps.length?wv.gdps.filter(g=>g<n.gdp).length/wv.gdps.length:.5;
+ const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>wv.byName[x]&&wv.byName[x].war).length/tp.length:0;
+ const alWar=n.allies.length?n.allies.filter(x=>wv.byName[x]&&wv.byName[x].war).length/n.allies.length:0;
  return [C(Math.log(Math.max(1,n.gdp)/m)/3,-1,1),C(n.treasury/Math.max(1,n.gdp)*30,0,1),n.stability/100,C(n.power/150,0,1),n.war?1:0,C(danger/Math.max(5,n.power)/3,0,1),n.exhaustion/100,
-  C((n.aa||0)/14,0,1),C(n.manpower/Math.max(.01,n.pop*.08),0,1),C(n.allies.length/4,0,1),n.morale/100,C((n.dmg||0)/20,0,1),1].map(v=>+v.toFixed(3));
+  C((n.aa||0)/14,0,1),C(n.manpower/Math.max(.01,n.pop*.08),0,1),C(n.allies.length/4,0,1),n.morale/100,C((n.dmg||0)/20,0,1),1,
+  /* новое: экономика и мир вокруг */
+  C(Math.log(Math.max(1,n.gdp)/Math.max(1,n.gdp0||n.gdp)),-1,1),      // рост/падение ВВП с начала игры
+  C(wv.g3(n)*12,-1,1),                                                  // свой рост за 3 месяца
+  C((wv.g3(n)-wv.growth)*12,-1,1),                                      // мой рост лучше или хуже мирового
+  wv.atWar,                                                             // доля стран мира, ведущих войну
+  C(wv.growth*12,-1,1),                                                 // мировой рост
+  rank,                                                                 // место среди экономик
+  C(tp.length/8,0,1),tpWar+alWar*.5                                     // торговля и «война у партнёров»
+ ].map(v=>+v.toFixed(3));
 }
 function epsS(b){return Math.max(.05,.3*Math.exp(-b.steps/30000))}
-function think(W,n,A,m){
+function think(W,n,A,m,wv){
  if(!window.NN||!W.brain)return;
- const B=W.brain,net=NN.get(B,'nn',SIN,SNH,SOUT,SPRIOR),x=sfeat(W,n,A,m),v=value(n);
+ const B=W.brain,net=NN.get(B,'nn',SIN,SNH,SOUT,SPRIOR),x=sfeat(W,n,A,m,wv),v=value(n);
  /* 1) учимся на итоге прошлого решения: r = рост оценки состояния; цель = r + γ·max Q(новое состояние) */
  if(n.last&&n.last.x){const q2=NN.predict(net,x),r=C((v-n.last.v)*4,-2,2),t=r+.9*Math.max(...q2);
   NN.train(net,n.last.x,n.last.k,t,.03);NN.remember(B.mem,{x:n.last.x,k:n.last.k,t:+t.toFixed(3)},120);NN.replay(net,B.mem,2,.015);
@@ -155,7 +181,9 @@ function brainStats(W){
  return{steps:B.steps,eps:epsS(B),avg:B.avg,rows:rows.sort((a,b)=>b.n-a.n),tot,coverage:Math.round(100*rows.length/ACTS.length)};
 }
 function tick(S){
- curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);A.forEach(economy);if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});{const m=med(A);A.forEach(n=>think(W,n,A,m))}diplomacy(W,A);declare(W,A);
+ curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
+ W.nations.forEach(n=>{if(n.annexed)return;(n.gh||(n.gh=[])).push(Math.round(n.gdp*100)/100);if(n.gh.length>13)n.gh.shift();if(n.gdp>(n.gpeak||0))n.gpeak=n.gdp});
+ {const m=med(A),wv=worldView(A);W.view={atWar:+wv.atWar.toFixed(3),growth:+wv.growth.toFixed(4)};A.forEach(n=>think(W,n,A,m,wv))}diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
  fight(W,w,a,b,A);if(!(w.peaceReq&&w.months>=3)&&(w.months<4||(w.months<8&&Math.abs(w.score)<18)||(w.months<18&&Math.abs(w.score)<32&&a.treasury>a.gdp*.002&&b.treasury>b.gdp*.002)&&w.encirclementA<4&&w.encirclementB<4))return true;
  peace(W,w,a,b,A);return false});
@@ -164,7 +192,7 @@ function tick(S){
 }
 function exportData(format){
  let W=window.__activeGameState?.aiWorld;if(!W)return alert('Откройте вкладку дипломатии перед экспортом.');
- let data,name,type;if(format==='csv'){let cols=['name','iso','pop','gdp','power','stability','treasury','manpower','morale','exhaustion','industry','infrastructure','research','exports','imports','owner','annexed'];data=[cols.join(';'),...W.nations.map(n=>cols.map(k=>String(n[k]??'').replace(/;/g,',')).join(';'))].join('\n');name='world-nations.csv';type='text/csv;charset=utf-8'}else{data=JSON.stringify(W,null,2);name='world-ai-export.json';type='application/json'}
+ let data,name,type;if(format==='csv'){let cols=['name','iso','pop','gdp0','gdp','power','stability','treasury','manpower','morale','exhaustion','industry','infrastructure','research','exports','imports','owner','annexed'];data=[cols.join(';'),...W.nations.map(n=>cols.map(k=>String(n[k]??'').replace(/;/g,',')).join(';'))].join('\n');name='world-nations.csv';type='text/csv;charset=utf-8'}else{data=JSON.stringify(W,null,2);name='world-ai-export.json';type='application/json'}
  let blob=new Blob(['\ufeff',data],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
@@ -178,5 +206,54 @@ function panel(S){
  let wars=W.wars.map(w=>`<div class="mini"><b>⚔️ ${w.a} — ${w.b}</b><br>Контроль фронта: ${Math.round(w.front)}% · месяц войны: ${w.months}<br>Снабжение: ${Math.round(w.supplyA||0)}% / ${Math.round(w.supplyB||0)}% · окружение: ${w.encirclementA||0} / ${w.encirclementB||0}<br>Потери: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}</div>`).join('');
  return `<section class="panel wide"><h2>🌐 Умный мировой ИИ</h2><p class="muted">Государств ИИ: ${W.nations.filter(n=>!n.human).length} · независимых: ${W.nations.filter(n=>!n.annexed).length} · союзов: ${W.alliances.length} · войн: ${W.wars.length} · месяц: ${W.month}</p><div class="row"><button onclick="NationsAI.export('json')">⬇ Экспорт мира JSON</button><button onclick="NationsAI.export('csv')">⬇ Экспорт стран CSV</button></div>${brainPanel(W)}<h3>🏭 Сильнейшие экономики и армии</h3><div class="cards">${top.map(n=>`<div class="mini"><b>${n.name}</b><br><small class="muted">Стратегия: ${n.intent||'развитие экономики'}</small><br>ВВП: ${Math.round(n.gdp).toLocaleString('ru-RU')} · армия: ${Math.round(n.power)}<br>Казна: ${Math.round(n.treasury)} · резервы: ${Math.round(n.manpower)}<br>Мораль: ${Math.round(n.morale)}% · промышленность: ${n.industry.toFixed(1)}</div>`).join('')}</div><h3>⚔️ Военные кампании</h3><div class="cards">${wars||'<p class="muted">Активных войн нет.</p>'}</div><h3>📰 Мировые события</h3><div class="feed">${W.events.slice(0,14).map(e=>`<div>${e}</div>`).join('')||'<span class="muted">Мирная обстановка.</span>'}</div></section>`;
 }
-window.NationsAI={init,tick,panel,export:exportData,brainStats,ACTS};
+/* ================= ТАБЛИЦА: КАК ИЗМЕНИЛАСЬ ЭКОНОМИКА КАЖДОЙ СТРАНЫ С НАЧАЛА ИГРЫ ================= */
+let econSort='gain';
+const pc=(v,d=1)=>v==null||!isFinite(v)?'—':(v>=0?'+':'−')+Math.abs(v).toFixed(d)+'%';
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+function econRows(S){
+ init(S);const W=S.aiWorld,rows=[];if(!W)return rows;
+ W.nations.forEach(n=>{
+  const g0=n.gdp0>0?n.gdp0:n.gdp,h=n.gh||[],ago=h.length>=13?h[0]:h.length>1?h[0]:null;
+  rows.push({name:n.name,iso:n.iso,me:false,pct:(n.gdp/g0-1)*100,pct12:ago?(n.gdp/ago-1)*100:null,
+   state:n.annexed?'аннексирована':n.war?'война':n.exhaustion>60?'истощена':'',intent:n.annexed?'':(n.intent||''),gdp:n.gdp,peak:n.gpeak>0?(n.gdp/n.gpeak-1)*100:0,cur:window.FXD?FXD.cur(n.iso):''});
+ });
+ const h0=(S.history||[])[0],g0=h0&&h0.gdp>0?h0.gdp:null;
+ if(g0&&S.gdp>0){const hp=(S.history||[]),back=hp.length>12?hp[hp.length-13]:null;
+  rows.push({name:(S.me||S.name||'Новария')+' (вы)',iso:'',me:true,pct:(S.gdp/g0-1)*100,pct12:back&&back.gdp>0?(S.gdp/back.gdp-1)*100:null,state:(S.wars&&S.wars.length)?'война':'',intent:'ваш ход',gdp:S.gdp,peak:0,cur:''});}
+ return rows;
+}
+function econSorted(rows){
+ const r=[...rows];
+ if(econSort==='gain')r.sort((a,b)=>b.pct-a.pct);
+ else if(econSort==='loss')r.sort((a,b)=>a.pct-b.pct);
+ else if(econSort==='gdp')r.sort((a,b)=>b.gdp-a.gdp);
+ else r.sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+ return r;
+}
+function econBody(rows){
+ return econSorted(rows).map((r,i)=>{const c=Math.abs(r.pct)<.005?'':r.pct>0?'up':'dn',c12=r.pct12==null||Math.abs(r.pct12)<.005?'':r.pct12>0?'up':'dn';
+  return `<tr class="${r.me?'me':''}"><td class="r muted">${i+1}</td><td><b>${esc(r.name)}</b>${r.cur?` <span class="muted">${r.cur}</span>`:''}${r.state?` <small class="dn">${r.state}</small>`:''}</td><td class="r ${c}">${pc(r.pct)}</td><td class="r ${c12}">${pc(r.pct12)}</td></tr>`}).join('');
+}
+function econPanel(S){
+ window.__activeGameState=S;const rows=econRows(S);if(!rows.length)return '';
+ const ai=rows.filter(r=>!r.me),up=ai.filter(r=>r.pct>.05).length,dn=ai.filter(r=>r.pct<-.05).length;
+ const avg=ai.length?ai.reduce((s,r)=>s+r.pct,0)/ai.length:0,srt=[...ai].sort((a,b)=>b.pct-a.pct),best=srt[0],worst=srt[srt.length-1];
+ const me=rows.find(r=>r.me),rank=me?[...rows].sort((a,b)=>b.pct-a.pct).findIndex(r=>r.me)+1:0;
+ const W=S.aiWorld,wv=W&&W.view,months=W?W.month:0;
+ const kpi=(t,v,s,cl)=>`<div class="kpi"><small>${t}</small><b class="${cl||''}">${v}</b><i>${s||''}</i></div>`;
+ const btn=(k,t)=>`<button class="${econSort===k?'on':''}" onclick="NationsAI.econSort('${k}')">${t}</button>`;
+ return `<section class="panel wide" id="econPanel"><h2>📈 Экономика всех стран с начала игры</h2>
+ <p class="chnote" style="margin:0 0 8px">Изменение ВВП каждой страны в процентах от стартового значения. Прошло месяцев игры: <b>${months}</b>. «12 мес.» — за последний год. Зелёное — экономика выросла, красное — упала.</p>
+ <div class="kpis">${kpi('Растут',up+' стран','из '+ai.length,'up')}${kpi('Падают',dn+' стран','из '+ai.length,dn?'dn':'')}${kpi('В среднем',pc(avg),'по миру',avg>=0?'up':'dn')}${me?kpi('Вы',pc(me.pct),rank+'-е место из '+rows.length,me.pct>=0?'up':'dn'):kpi('Лидер',best?esc(best.name):'—',best?pc(best.pct):'','up')}</div>
+ ${best&&worst?`<p class="chnote" style="margin:0 0 8px">Лучшая динамика: <b>${esc(best.name)}</b> ${pc(best.pct)} · худшая: <b>${esc(worst.name)}</b> ${pc(worst.pct)}${wv?` · сейчас в мире воюет ${Math.round(wv.atWar*100)}% стран`:''}</p>`:''}
+ <div class="chbar"><div class="seg">${btn('gain','Рост ↓')}${btn('loss','Падение ↑')}${btn('gdp','По ВВП')}${btn('abc','А–Я')}</div></div>
+ <div style="overflow:auto;max-height:62vh"><table class="fxt" style="width:100%"><thead><tr><th class="r">#</th><th>Страна</th><th class="r">с начала</th><th class="r">12 мес.</th></tr></thead><tbody id="econTb">${econBody(rows)}</tbody></table></div>
+ <p class="chnote">Нейросеть стран видит эти же цифры: свой рост, рост мира, долю воюющих стран, торговых партнёров и союзников в войне — и учится выбирать то, что поднимает ВВП.</p></section>`;
+}
+function econSetSort(k){
+ econSort=k;const S=window.__activeGameState;if(!S)return;
+ const tb=document.getElementById('econTb');if(tb)tb.innerHTML=econBody(econRows(S));
+ const p=document.getElementById('econPanel');if(p)p.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.getAttribute('onclick')==="NationsAI.econSort('"+k+"')"));
+}
+window.NationsAI={init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort};
 })();

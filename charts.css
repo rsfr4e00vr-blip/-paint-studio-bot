@@ -31,4 +31,6 @@
 .chnote{font-size:12px;color:var(--muted,#a9bacb);margin:8px 0 0}
 .fxt td.r,.fxt th.r{text-align:right;font-variant-numeric:tabular-nums}
 .fxt tr.me td{background:#20344b}
+.fxt thead th{position:sticky;top:0;background:#132338}
+.fxt small.dn{font-size:10px}
 .fxt td{padding:6px 4px;border-bottom:1px solid #1d3047}

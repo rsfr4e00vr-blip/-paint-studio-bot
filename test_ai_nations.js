@@ -33,6 +33,13 @@ assert.ok(state.aiWorld.events.length<=80);
 const b=NationsAI.brainStats(state.aiWorld);
 assert.ok(b.steps>10000,'страны должны накопить опыт');
 assert.ok(b.coverage>=80,'страны должны освоить почти все 12 действий');
+/* таблица экономик: у каждой страны есть стартовый ВВП и процент изменения */
+state.history=[{gdp:900}];const er=NationsAI.econRows(state);
+assert.equal(er.length,195,'194 страны ИИ + игрок');
+assert.ok(er.every(r=>Number.isFinite(r.pct)),'процент изменения ВВП считается для всех стран');
+assert.ok(er.some(r=>r.pct>0)&&er.some(r=>r.pct!==0));
+const html=NationsAI.econPanel(state);assert.ok(html.includes('Экономика всех стран')&&html.includes('<tbody'));
+console.log(`  ВВП с начала игры: растут ${er.filter(r=>r.pct>0).length}, падают ${er.filter(r=>r.pct<0).length}, среднее ${(er.reduce((s,r)=>s+r.pct,0)/er.length).toFixed(1)}%`);
 const pm=PopAI.summary(state);
 assert.ok(pm.steps>1000,'население должно учиться');
 assert.ok(Number.isFinite(state.gdp)&&state.pop>0&&state.stability>=0&&state.stability<=100);
