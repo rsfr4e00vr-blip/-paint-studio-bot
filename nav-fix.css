@@ -149,3 +149,22 @@ details.fold.hint>p{padding:0 14px 10px}
 .wplan .wp-forecast{padding:6px 8px;border-radius:8px;background:#162a1e;border:1px solid #2f6b47;font-size:13px}
 .wtopeco{display:block;margin:6px 0}
 @media(min-width:560px){.wplan .wp-grid{grid-template-columns:1fr 1fr}}
+
+/* ---- выбор областей-целей (крупные строки, поиск, фильтры) ---- */
+.rpk{display:flex;flex-direction:column;gap:8px}
+.rpk .rp-bar{display:flex;gap:6px;flex-wrap:wrap}
+.rpk .rp-q{flex:1 1 160px;min-width:0;padding:10px 12px;font-size:15px;border-radius:10px}
+.rpk .rp-s{padding:10px;border-radius:10px;font-size:14px}
+.rpk .rp-chips,.rpk .rp-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.rpk .rp-chips button,.rpk .rp-acts button{padding:6px 10px;font-size:12.5px;min-height:0;line-height:1.2;border-radius:999px}
+.rpk .rp-chips button.on{background:#c9902f;color:#1b1204;border-color:#c9902f}
+.rpk .rp-list{max-height:55vh;overflow:auto;display:flex;flex-direction:column;gap:5px;-webkit-overflow-scrolling:touch;padding-right:2px}
+.rpk .rp-row{display:grid;grid-template-columns:34px 1fr auto 44px;align-items:center;gap:8px;min-height:50px;padding:6px 10px;border-radius:12px;background:#142437;border:1px solid #27425e;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.rpk .rp-row.on{background:#23405c;border-color:#c9902f}
+.rpk .rp-row.occ{opacity:.8}
+.rpk .rp-ck{width:28px;height:28px;border-radius:8px;border:2px solid #4b6d8f;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1b1204}
+.rpk .rp-row.on .rp-ck{background:#c9902f;border-color:#c9902f}
+.rpk .rp-n{font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rpk .rp-m{font-size:13px;color:#b6c6d8;white-space:nowrap}
+.rpk .rp-st{font-size:13px;text-align:right}
+.rpsel{display:flex;flex-direction:column;gap:5px}
