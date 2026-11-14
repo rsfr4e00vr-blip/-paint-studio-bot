@@ -48,7 +48,7 @@ setInterval(()=>send({type:'ping',t:Date.now()}),25000);
 function on(m){
   switch(m.type){
   case'joined':
-    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];standings=m.players||standings;const own=(m.players||[]).find(x=>x.id===me.id);if(NG.S&&own&&own.arsenal)NG.S.mpArsenal=own.arsenal;relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};
+    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};
     localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
@@ -58,8 +58,6 @@ function on(m){
   case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;embassies=m.embassies||embassies;if(NG.S)NG.S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_response?1:null}:null;if(m.global_next!=null)NG.S.globalNext=m.global_next;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
   case'war_orders':wars=m.wars||wars;syncMpWars();paintAll();break;
-  case'arsenal_stock':if(NG.S){NG.S.mpArsenal=m.arsenal||NG.S.mpArsenal||{};NG.S.money=Math.max(0,NG.S.money+(Number(m.money)||0));NG.log('📦 Арсенал пополнен.');saveLocal();NG.render(true);paintAll()}break;
-  case'arsenal_hit':{const S=NG.S;if(m.target===me.id&&S){const ratio=Math.max(.25,Math.min(1,Number(m.gdp_index||100)/Math.max(1,Number((wars.find(x=>x.id===m.war)?.econ||{})[me.id]?.gdp||100))));S.gdp=Math.max(100,S.gdp*ratio);S.trust=NG.clamp((S.trust||70)-Math.min(2,m.damage*.35));NG.log(`💥 Экономика повреждена ударом арсенала: индекс ВВП ${m.gdp_index}%.`);NG.say('Экономика страны получила долгосрочный ущерб','📉');saveLocal();NG.render(true)}if(m.attacker===me.id){NG.log(`🎯 Удар арсенала: экономика противника −${m.damage} п.п. (индекс ВВП ${m.gdp_index}%).`);note(`📉 Удар нанесён. Индекс ВВП врага: ${m.gdp_index}%`,'war')}paintAll();break}
   case'mp_adjust':if(NG.S){NG.S.money=Math.max(0,NG.S.money+(Number(m.money)||0));NG.S.approval=NG.clamp(NG.S.approval+(Number(m.approval)||0));NG.S.tech=NG.clamp((NG.S.tech||0)+(Number(m.tech)||0));['fuel','inflation','trust','stability','food','health','steel','gdp'].forEach(k=>{if(Number.isFinite(Number(m[k]))&&m[k]!==undefined)NG.S[k]=k==='gdp'?Math.max(100,NG.S[k]+Number(m[k])):k==='health'?Math.min(35,Math.max(0,(Number(NG.S[k])||0)+Number(m[k]))):NG.clamp((Number(NG.S[k])||0)+Number(m[k]))});if(m.crisis_response&&NG.S.globalCrisis)NG.S.globalCrisis.response=1;saveLocal();NG.render(true);paintAll()}break;
   case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;embassies=m.embassies&&m.embassies[me.id]||embassies;paintAll();break;
   case'relations':relations=m.relations&&m.relations[me.id]||relations;paintDip();break;
@@ -132,7 +130,7 @@ function applyMods(){
 }
 function onTick(m){
   if(!active)return;
-  const S=NG.S;room.month=m.month;room.length=m.length;standings=m.standings;const own=(standings||[]).find(x=>x.id===me.id);if(own&&own.arsenal)S.mpArsenal=own.arsenal;mods=m.mods||mods;wars=m.wars||[];relations=m.relations&&m.relations[me.id]||relations;lastTick=Date.now();
+  const S=NG.S;room.month=m.month;room.length=m.length;standings=m.standings;mods=m.mods||mods;wars=m.wars||[];relations=m.relations&&m.relations[me.id]||relations;if(m.mp_diplomacy&&m.mp_diplomacy[me.id])S.mpDiplomacy=m.mp_diplomacy[me.id];lastTick=Date.now();
   const miss=Math.max(1,Math.min(24,m.month-(S.mpMonth||0)));S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_responses&&m.crisis_responses[me.id]?1:null}:null;if(m.global_next!=null)S.globalNext=m.global_next;syncMpWars();
   for(let i=0;i<miss;i++){applyMods();NG.tick();S.mpMonth=(S.mpMonth||0)+1;if(S.campaignOver)break}
   S.mpMonth=m.month;
@@ -140,7 +138,7 @@ function onTick(m){
   report();saveLocal();setBar();paintAll();
 }
 function catchUp(){
-  if(!active)return;const S=NG.S;const own=(standings||[]).find(x=>x.id===me.id);if(own&&own.arsenal)S.mpArsenal=own.arsenal;const miss=Math.min(24,room.month-(S.mpMonth||0));syncMpWars();
+  if(!active)return;const S=NG.S;const miss=Math.min(24,room.month-(S.mpMonth||0));syncMpWars();
   for(let i=0;i<miss;i++){applyMods();NG.tick();S.mpMonth=(S.mpMonth||0)+1;if(S.campaignOver)break}
   S.mpMonth=Math.max(S.mpMonth||0,room.month);
   if(miss>0)NG.toast(`Пока вас не было, прошло ${miss} мес.`);
@@ -251,8 +249,6 @@ function table(list){
 }
 function chips(c){if(!c)return'';const n={eco:'Эко',welfare:'Нар.',gov:'Упр.',fin:'Фин.',mil:'Арм.'};return Object.keys(n).map(k=>`<span class="chip">${n[k]} ${c[k]}</span>`).join('')}
 window.NGMP={
-  buyArsenal(weapon,qty){send({type:'arsenal_buy',weapon,qty})},
-  strikeArsenal(weapon){send({type:'arsenal_strike',weapon})},
   setWarCommand(region,troops,air,navy){send({type:'war_command',region:String(region||'').slice(0,60),troops:Number(troops)||0,air,navy})},
   setWarPreset(preset){const S=NG.S;if(!S)return;const P={assault:[.70,'support','escort','recon','convoys'],balanced:[.40,'support','escort','recon','repair'],defense:[.50,'patrol','escort','recon','repair'],economy:[.20,'reserve','reserve','reserve','repair'],pressure:[.25,'strategic','blockade','recon','convoys']}[preset];if(!P)return;send({type:'war_command',preset,troops:Math.floor(Math.max(0,S.army||0)*P[0]),air:P[1],navy:P[2],spec:P[3],logi:P[4],alloc:preset==='defense'?'spread':'focus'})},
   setVassalTax(id,rate){send({type:'vassal_tax',vassal:id,rate:Number(rate)})},
@@ -269,7 +265,7 @@ window.NGMP={
     const p=$('#mpPause');if(p)p.onclick=()=>send({type:'pause'});
     const l=$('#mpLeave2');if(l)l.onclick=()=>{if(l.dataset.arm){leaveMP()}else{l.dataset.arm=1;l.textContent='Точно выйти? Нажмите ещё раз';setTimeout(()=>{if(l){delete l.dataset.arm;l.textContent='Покинуть игру'}},3000)}};
     const d=$('#mpDip');if(d)d.onclick=dipClick;
-    const mm=$('#mpMods');if(mm)mm.onclick=ev=>{const ab=ev.target.closest('button[data-arsenal]');if(ab){const weapon=val('#mpArsenalWeapon')||'missile';if(ab.dataset.arsenal==='buy')send({type:'arsenal_buy',weapon,qty:Number(val('#mpArsenalQty'))||1});else send({type:'arsenal_strike',weapon});return}const preset=ev.target.closest('button[data-preset]');if(preset){let v=preset.dataset.preset;if(v==='auto'){const S=NG.S,ww=wars.find(x=>x.a===me.id||x.d===me.id),front=ww?(ww.a===me.id?ww.p:100-ww.p):50;v=S.money<500||S.fuel<25||S.ammo<25||S.food<25||S.morale<35?'defense':front<35?'balanced':'assault'}window.NGMP.setWarPreset(v);return}const b=ev.target.closest('button[data-term]');if(!b||b.disabled)return;const t=b.dataset.term;if(t==='annex'||t==='region'){if(b.dataset.arm){send({type:'dictate',mode:t})}else{b.dataset.arm=1;const o=b.textContent;b.textContent='Точно? Нажмите ещё раз';setTimeout(()=>{b.dataset.arm='';b.textContent=o},3000)}}else send({type:'dictate',mode:t})};
+    const mm=$('#mpMods');if(mm)mm.onclick=ev=>{const preset=ev.target.closest('button[data-preset]');if(preset){let v=preset.dataset.preset;if(v==='auto'){const S=NG.S,ww=wars.find(x=>x.a===me.id||x.d===me.id),front=ww?(ww.a===me.id?ww.p:100-ww.p):50;v=S.money<500||S.fuel<25||S.ammo<25||S.food<25||S.morale<35?'defense':front<35?'balanced':'assault'}window.NGMP.setWarPreset(v);return}const b=ev.target.closest('button[data-term]');if(!b||b.disabled)return;const t=b.dataset.term;if(t==='annex'||t==='region'){if(b.dataset.arm){send({type:'dictate',mode:t})}else{b.dataset.arm=1;const o=b.textContent;b.textContent='Точно? Нажмите ещё раз';setTimeout(()=>{b.dataset.arm='';b.textContent=o},3000)}}else send({type:'dictate',mode:t})};
     paintAll();
   },
   open(){view=room.state==='lobby'?'lobby':'setup';paintModal();openModal()}
@@ -285,7 +281,6 @@ function paintMods(){
   if(w){const enemyId=(w.a===me.id?w.d:w.a),enemy=(standings.find(p=>p.id===enemyId)||{}).country||'противник',mine=w.a===me.id?w.p:100-w.p;const iWon=w.won===me.id,theyWon=w.won&&w.won!==me.id,can=mine>=60||iWon,reg=mine>=70||iWon;
     wh=`<h3>⚔️ Война с ${esc(enemy)}</h3><div class="warbar"><i style="width:${mine}%"></i></div><div class="muted2">Ваш перевес на фронте: <b>${mine}%</b> · месяц войны ${w.m}/24 · каждый месяц: −казна, −армия, −одобрение</div>`+
     `<div class="chips"><span class="chip">📉 Индекс ВВП врага: ${w.econ&&w.econ[enemyId]?Math.round(w.econ[enemyId].gdp):100}% от довоенного</span><span class="chip">💱 Индекс курса врага: ${w.econ&&w.econ[enemyId]?Math.round(w.econ[enemyId].fx):100}% от довоенного</span></div>`+
-    `<div class="mini"><b>🚀 Стратегический арсенал</b><p class="muted2">Удары по экономике действуют долго: индекс ВВП снижается, курс слабеет, восстановление занимает месяцы и годы. Применение доступно только во время войны.</p><div class="chips"><span class="chip">🛰 Дроны: ${NG.S.mpArsenal?.drone||0}</span><span class="chip">🚀 Ракеты: ${NG.S.mpArsenal?.missile||0}</span><span class="chip">💥 Стратегические: ${NG.S.mpArsenal?.strategic||0}</span></div><div class="row"><select id="mpArsenalWeapon"><option value="drone">🛰 Дрон · 120 млн</option><option value="missile" selected>🚀 Ракета · 260 млн</option><option value="strategic">💥 Стратегический удар · 520 млн</option></select><select id="mpArsenalQty"><option value="1">×1</option><option value="2">×2</option><option value="3">×3</option><option value="5">×5</option></select></div><div class="actions"><button data-arsenal="buy">📦 Закупить</button><button class="danger" data-arsenal="strike">🎯 Ударить по экономике</button></div><small class="muted2">Один удар раз в 2 месяца. Защита ПВО и стабильность уменьшают ущерб. Запас хранится на сервере.</small></div>`+
     `<div class="mini"><b>📋 Военный штаб — быстрые планы</b><small class="muted2">Активный план: ${(w.orders&&w.orders[me.id]&&w.orders[me.id].preset)||'не выбран'}</small><div class="actions"><button class="danger" data-preset="assault">⚔ Наступление</button><button data-preset="balanced">⚖ Баланс</button><button data-preset="defense">🛡 Оборона</button><button data-preset="economy">💰 Экономия</button><button data-preset="pressure">📉 Давление на экономику</button><button class="primary" data-preset="auto">✨ Автоподбор</button></div><div class="row"><input id="mpWarRegion" maxlength="60" placeholder="Область назначения" value="${esc((w.orders&&w.orders[me.id]&&w.orders[me.id].region)||'')}" /><input id="mpWarTroops" type="number" min="0" max="1000000" step="1000" placeholder="Солдаты" value="${(w.orders&&w.orders[me.id]&&w.orders[me.id].troops)||0}" /></div><div class="row"><select id="mpWarAir"><option value="support">Авиация: поддержка</option><option value="patrol">Авиация: патруль</option><option value="defense">🛡 ПВО: оборона</option><option value="reserve">Авиация: резерв</option></select><select id="mpWarNavy"><option value="escort">Флот: снабжение</option><option value="blockade">Флот: блокада</option><option value="reserve">Флот: резерв</option></select><button class="primary" id="mpWarPlan">📌 Передать ручной приказ</button></div><small class="muted2">Приказы проверяются сервером и сразу видны обеим сторонам. Наступление сильнее, но дороже; экономия слабее, зато дешевле.</small></div>`+
     (theyWon?`<p><b>🏳 Вы разгромлены.</b> Противник выбирает условия (${3-(w.wm||0)} мес.), иначе — контрибуция.</p>`:
     `<p class="muted2">${iWon?`🏆 Полная победа! Вы решаете, чем закончить войну (${3-(w.wm||0)} мес., иначе контрибуция):`:can?'💪 Перевес! Вы решаете, чем закончить войну:':'Условия можно диктовать при перевесе от 60%, область — от 70%, захват страны — при полной победе.'}</p>

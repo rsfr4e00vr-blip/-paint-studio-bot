@@ -54,23 +54,11 @@ async def run_checks():
     assert order["preset"] == "pressure"
     assert order["air"] == "strategic" and order["troops"] == 12_345
 
-    # Arsenal purchases and economic strikes are server-validated and shared.
-    a.rep["money"] = 5_000
-    await ns.on_arsenal_buy(room, a, {"weapon": "missile", "qty": 2})
-    assert a.arsenal["missile"] == 2 and a.rep["money"] == 4_480
-    w = room.wars["w1"]
-    w["econ"] = {a.id: {"gdp": 100.0, "fx": 100.0}, b.id: {"gdp": 100.0, "fx": 100.0}}
-    before = b.rep["gdp"]
-    await ns.on_arsenal_strike(room, a, {"weapon": "missile"})
-    assert a.arsenal["missile"] == 1
-    assert w["econ"][b.id]["gdp"] < 100.0 and b.rep["gdp"] < before
-    assert any(x.get("type") == "arsenal_hit" for x in ws_a.messages + ws_b.messages)
-
     # Tick carries shared crisis, per-player responses and embassy state.
     await room.tick()
     tick = next(x for x in ws_a.messages if x.get("type") == "tick")
     assert "global_crisis" in tick and "crisis_responses" in tick and "embassies" in tick
-    print("OK: multiplayer diplomacy, embassies, shared crisis response, war presets and arsenal strikes")
+    print("OK: multiplayer diplomacy, embassies, shared crisis response and war presets")
 
 
 if __name__ == "__main__":

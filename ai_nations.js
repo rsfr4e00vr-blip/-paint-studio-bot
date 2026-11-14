@@ -82,7 +82,8 @@ function economy(n){
  n.inflation??=4.5;n.cbRate??=5;n.priceStability??=50;
  const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>byNameCur[x]&&byNameCur[x].war).length/tp.length:0;
  const inflationPressure=(n.fx||100)>125?.00045:(n.fx||100)<90?-.00012:0;
- const growth=C(n.growth-(n.inflation>12?.00018:0)+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-(n.war?.0022+n.exhaustion*.00003+(n.dmg||0)*.00015:0)+recov(n)-R(.001,.0016),-.012,.024);
+ const diplomacyDrag=window.ECODIP?ECODIP.ai(n):0;
+ const growth=C(n.growth-(n.inflation>12?.00018:0)+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag+diplomacyDrag-(n.war?.0022+n.exhaustion*.00003+(n.dmg||0)*.00015:0)+recov(n)-R(.001,.0016),-.012,.024);
  n.inflation=C(n.inflation+inflationPressure+(n.war?.12:0)+(n.foodShortage?.18:0)-(n.cbRate-5)*.012,-2,60);n.priceStability=C(n.priceStability+(n.inflation<7?.6:-.35),0,100);
  n.gdp=Math.max(1,n.gdp*(1+growth));n.pop=Math.max(.01,n.pop*(1+C(.00015+(n.stability-55)*.000006-R(0,.00025),-.001,.0008)));
  const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
