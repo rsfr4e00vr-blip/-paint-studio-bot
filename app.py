@@ -563,52 +563,68 @@ async def lifespan(app: FastAPI):
     tg = None
     global TG_BOT
     if BOT_TOKEN and WEBAPP_URL:
-        tg = Application.builder().token(BOT_TOKEN).build()
-        tg.add_handler(CommandHandler("start", start))
-        tg.add_handler(CommandHandler("draw", draw_command))
-        tg.add_handler(CommandHandler("drawgroup", drawgroup_command))
-        tg.add_handler(CommandHandler("guessdraw", drawgroup_command))
-        tg.add_handler(CommandHandler("drawscores", draw_scores_command))
-        tg.add_handler(CommandHandler("drawhelp", drawhelp_command))
-        tg.add_handler(CallbackQueryHandler(drawgroup_callback, pattern=r"^tgdraw:"))
-        tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, group_text_handler))
-        tg.add_handler(CommandHandler("nations", nations_command))
-        await tg.initialize()
-        # Register slash-command suggestions in Telegram's command menu.
-        # Group scope is important: Telegram will suggest these after the user types '/'.
-        drawing_commands = [
-            BotCommand("drawgroup", "🎮 Сыграть в игру — групповая рисовалка"),
-            BotCommand("drawscores", "🏆 Таблица очков рисовалки"),
-            BotCommand("drawhelp", "💡 Как играть в рисовалку"),
-        ]
         try:
-            await tg.bot.set_my_commands(
-                drawing_commands,
-                scope=BotCommandScopeAllGroupChats(),
-                language_code="ru",
-            )
-            # Also expose commands in private chat command menu.
-            await tg.bot.set_my_commands(
-                drawing_commands,
-                scope=BotCommandScopeDefault(),
-                language_code="ru",
-            )
+            tg = Application.builder().token(BOT_TOKEN).build()
+            tg.add_handler(CommandHandler("start", start))
+            tg.add_handler(CommandHandler("draw", draw_command))
+            tg.add_handler(CommandHandler("drawgroup", drawgroup_command))
+            tg.add_handler(CommandHandler("guessdraw", drawgroup_command))
+            tg.add_handler(CommandHandler("drawscores", draw_scores_command))
+            tg.add_handler(CommandHandler("drawhelp", drawhelp_command))
+            tg.add_handler(CallbackQueryHandler(drawgroup_callback, pattern=r"^tgdraw:"))
+            tg.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, group_text_handler))
+            tg.add_handler(CommandHandler("nations", nations_command))
+            await tg.initialize()
+            # Register slash-command suggestions in Telegram's command menu.
+            # Group scope is important: Telegram will suggest these after the user types '/'.
+            drawing_commands = [
+                BotCommand("drawgroup", "🎮 Сыграть в игру — групповая рисовалка"),
+                BotCommand("drawscores", "🏆 Таблица очков рисовалки"),
+                BotCommand("drawhelp", "💡 Как играть в рисовалку"),
+            ]
+            try:
+                await tg.bot.set_my_commands(
+                    drawing_commands,
+                    scope=BotCommandScopeAllGroupChats(),
+                    language_code="ru",
+                )
+                # Also expose commands in private chat command menu.
+                await tg.bot.set_my_commands(
+                    drawing_commands,
+                    scope=BotCommandScopeDefault(),
+                    language_code="ru",
+                )
+            except Exception as exc:
+                # A command-menu setup failure must not prevent the bot from starting.
+                print(f"Не удалось зарегистрировать slash-команды Telegram: {exc}")
+            TG_BOT = tg.bot
+            if not BOT_USERNAME:
+                me = await tg.bot.get_me()
+                BOT_USERNAME = me.username or ""
+            await tg.start()
+            await tg.updater.start_polling(drop_pending_updates=True)
         except Exception as exc:
-            # A command-menu setup failure must not prevent the bot from starting.
-            print(f"Не удалось зарегистрировать slash-команды Telegram: {exc}")
-        TG_BOT = tg.bot
-        if not BOT_USERNAME:
-            me = await tg.bot.get_me()
-            BOT_USERNAME = me.username or ""
-        await tg.start()
-        await tg.updater.start_polling(drop_pending_updates=True)
+            # Ошибка бота Telegram не должна ронять сайт и деплой на Render.
+            import traceback
+            traceback.print_exc()
+            print(f"Telegram-бот не запущен из-за ошибки: {exc!r}. Сайт продолжает работать.")
+            if tg is not None:
+                try:
+                    await tg.shutdown()
+                except Exception:
+                    pass
+            tg = None
+            TG_BOT = None
     else:
         print("BOT_TOKEN или WEBAPP_URL не заданы: бот не запущен, работает только сайт.")
     yield
     if tg:
-        await tg.updater.stop()
-        await tg.stop()
-        await tg.shutdown()
+        try:
+            await tg.updater.stop()
+            await tg.stop()
+            await tg.shutdown()
+        except Exception as exc:
+            print(f"Ошибка при остановке Telegram-бота: {exc!r}")
         TG_BOT = None
 
 

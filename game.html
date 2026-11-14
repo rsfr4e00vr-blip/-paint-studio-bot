@@ -19,7 +19,7 @@
 <div class="sub" data-cat="sys" hidden><button data-tab="settings">Настройки и сохранения</button></div>
 </div></nav>
 <div id="content"></div></main><div class="notice" id="notice"></div>
-<script src="/world.js"></script><script src="/regions.js"></script><script src="/world_data.js"></script><script src="/fx.js?v=1"></script><script src="/resources.js"></script><script src="/ai_arsenal.js?v=2"></script><script src="/ai_nations.js?v=2"></script><script src="/game.js?v=13"></script><script src="/nations.js?v=9"></script><script>(function(){var t=document.getElementById('tabs');if(!t)return;
+<script src="/world.js"></script><script src="/regions.js"></script><script src="/world_data.js"></script><script src="/fx.js?v=1"></script><script src="/resources.js"></script><script src="/ai_arsenal.js?v=2"></script><script src="/ai_nations.js?v=2"></script><script src="/game.js?v=14"></script><script src="/nations.js?v=9"></script><script>(function(){var t=document.getElementById('tabs');if(!t)return;
 function show(c){t.querySelectorAll('.cats button').forEach(function(b){b.classList.toggle('on',b.dataset.cat===c)});t.querySelectorAll('.sub').forEach(function(s){s.hidden=s.dataset.cat!==c})}
 t.addEventListener('click',function(e){var c=e.target.closest('[data-cat]');if(c&&c.closest('.cats')){show(c.dataset.cat);return}
 var b=e.target.closest('[data-tab]');if(b){var s=b.closest('.sub');if(s)show(s.dataset.cat)}});})();</script></body></html>

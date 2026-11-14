@@ -348,7 +348,7 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)pause()});
 /* ===== ДОПОЛНЕНИЯ v2 ===== */
 let down=false;document.addEventListener('pointerdown',()=>down=true,true);['pointerup','pointercancel'].forEach(e=>document.addEventListener(e,()=>setTimeout(()=>down=false,80),true));
 const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
-function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust,t:S.year*12+S.month,war:(S.wars&&S.wars.length)?1:0,fxA:S.fx?S.fx.rate:null,fxB:S.fx?S.fx.rate*fxReal(S.fx.ref)/fxReal(S.fx.refB):null,fxMom:S.fx?S.fx.mom:null,pg:S.econ?S.econ.pg:null,lossPct:S.econ?S.econ.lossPct:0,lossCum:S.econ?S.econ.loss-(S.econ.loss0||0):0,income:S.lastInc==null?null:S.lastInc,expense:S.lastExp==null?null:S.lastExp,civDead:S.warCiv||0,soldDead:S.warSold||0,legit:S.legitimacy,coup:S.coupRisk,energy:S.energy,morale:S.morale,ammo:S.ammo,equip:S.equipment}}
+function snap(){let mp=S.parties.find(p=>p.name===S.playerParty);return{year:S.year,month:S.month,gdp:S.gdp,money:S.money,debt:S.debt,approval:S.approval,stability:S.stability,partySupport:mp?mp.support:0,pop:S.pop,food:S.food,fuel:S.fuel,inflation:S.inflation,army:S.army,threat:S.threat,employment:S.employment,trust:S.trust,t:S.year*12+S.month,war:(S.wars&&S.wars.length)?1:0,fxA:S.fx?S.fx.rate:null,fxB:S.fx?S.fx.rate*fxReal(S.fx.ref)/fxReal(S.fx.refB):null,fxMom:S.fx?S.fx.mom:null,pg:S.econ?S.econ.pg:null,lossPct:S.econ?S.econ.lossPct:0,lossCum:S.econ?S.econ.loss-(S.econ.loss0||0):0,income:S.lastInc==null?null:S.lastInc,expense:S.lastExp==null?null:S.lastExp,civDead:S.warCiv||0,soldDead:S.warSold||0,legit:S.legitimacy,coup:S.coupRisk,eGdp:(S.wars&&S.wars.length&&S.econ&&S.econ.eLast)?S.econ.eLast.g/S.econ.eLast.g0*100:null,eFx:(S.wars&&S.wars.length&&S.econ&&S.econ.eLast)?S.econ.eLast.r:null,energy:S.energy,morale:S.morale,ammo:S.ammo,equip:S.equipment}}
 const C0_OLD=[['Аркания',15,65,.4,'Торговая держава'],['Белория',48,42,.2,'Дружелюбный сосед'],['Тарвия',-20,80,.8,'Милитаристы'],['Дорвин',5,55,.5,'Союз торговцев'],['Силезия',-5,38,.3,'Горная республика'],['Мерейя',25,48,.2,'Морская федерация'],['Остмарк',-35,70,.7,'Имперские амбиции']];
 const C0=window.WORLD?WORLD.list.map(c=>[c.name,c.value,c.power,c.aggr,c.trait]):C0_OLD;
 const WM=(window.WORLD&&WORLD.map)||{},RLAB=(window.WORLD&&WORLD.RL)||{},CONTN=(window.WORLD&&WORLD.CONT)||{};
@@ -452,6 +452,41 @@ function darkTickEnemy(w){const D=w.dark;if(!D)return;Object.keys(D).forEach(k=>
 function warEnemyCiv(w,d){
  const k=(Math.max(0,d)*rnd(260,640)+rnd(80,260))*enLS(w.n),c=Math.round(k*(.1+(w.encirclement||0)*.03)*(w.order==='attack'?1.35:1)*rnd(.7,1.3));
  w.eCiv=(w.eCiv||0)+c;S.warECiv=(S.warECiv||0)+c;
+}
+
+/* ---------- экономика врага: потери ВВП, курс валюты, истощение ---------- */
+function enemyEco(w){
+ if(w.eco)return w.eco;
+ const W=(window.WORLD&&WORLD.map&&WORLD.map[w.n])||{},D=((window.WORLD_DATA&&WORLD_DATA.countries)||[]).find(x=>x.ru===w.n||(W.iso&&x.a===W.iso));
+ const cur=window.FXD&&W.iso?FXD.cur(W.iso):'USD',ref=cur==='USD'?'EUR':'USD';
+ const g0=D&&D.g?D.g:Math.max(4,Math.round(((wi(w.n).pop)||8)*4)),r0=fxReal(cur)/fxReal(ref);
+ return w.eco={g0,g:g0,cum:0,pend:0,loss:0,drag:0,cur,ref,r0,r:r0,step:0};
+}
+function enemyEcoHit(w,t,f){const E=enemyEco(w);E.pend+=({mil:.0006,infra:.0035,civ:.0012}[t]||0)*(f||1)}
+function enemyEcoTick(w,c,d){
+ const E=enemyEco(w),occ=(w.occ||[]).length/Math.max(1,regCount(w.n)||1);
+ let dr=.004+.006*(w.p/100)+.0015*(w.encirclement||0)+.015*occ+E.pend;E.pend=0;
+ dr=Math.min(.03,dr);E.g*=1-dr;E.drag=dr;
+ E.loss=(1-E.g/E.g0)*100;E.cum+=(E.g0-E.g)/12;
+ c.power=Math.max(10,c.power-Math.min(.5,dr*22));
+ const tgt=E.r0*Math.exp(.12+.014*E.loss+.10*(w.p/100));
+ E.r+=(tgt-E.r)*.14;E.r*=Math.exp(rnd(-.006,.006));
+ const st=Math.floor(E.loss/10);
+ if(st>E.step){E.step=st;const m=`Экономика ${w.n}: ВВП упал на ${Math.round(E.loss)}% от довоенного, 1 ${E.ref} = ${nf(E.r,E.r<10?2:E.r<100?1:0)} ${E.cur}`;log('📉 '+m);warNews(w,'📉',m)}
+ if(S.econ)S.econ.eLast={n:w.n,g0:E.g0,g:E.g,loss:E.loss,cum:E.cum,cur:E.cur,ref:E.ref,r0:E.r0,r:E.r};
+}
+/* ---------- мягкие меры мира против обоснованной войны (вместо санкций) ---------- */
+const RTYPE={
+ demarche:{n:'дипломатический протест и призыв остановить войну',tick:()=>{S.legitimacy=clamp(S.legitimacy-.04)}},
+ embargo:{n:'эмбарго на поставки оружия',tick:()=>{S.equipment=clamp(S.equipment-.12);S.ammo=clamp(S.ammo-.08)}},
+ tech:{n:'запрет на экспорт технологий',tick:()=>{S.tech=clamp(S.tech-.04);S.gdp*=1-.0002}},
+ travel:{n:'визовые и авиаограничения',tick:()=>{S.gdp*=1-.0003}},
+ assets:{n:'заморозка части резервов',once:r=>{r.frozen=Math.round(S.money*.02);S.money-=r.frozen},end:r=>{S.money+=r.frozen||0}}
+};
+function restrictBy(n,v){
+ const c=rel(n);if(!c||(S.restr&&S.restr[n])||(S.sanc&&S.sanc[n]))return null;
+ const k=pick(Object.keys(RTYPE)),r={why:v,k,left:6};(S.restr=S.restr||{})[n]=r;
+ if(RTYPE[k].once)RTYPE[k].once(r);return k;
 }
 function enemyStrikes(w,c){
  if(!window.AIARS)return;
@@ -569,9 +604,9 @@ if(t&&TG[k]&&atWar()){
  const rally=({mil:5,infra:4,civ:2}[t])*Math.max(.7,Math.min(1.4,f/1.5+.35))*Math.max(.15,Math.min(1,(100-S.approval)/50));
  S.approval=clamp(S.approval+rally);
  const eC=Math.round(({mil:rnd(30,250),infra:rnd(150,700),civ:rnd(3000,9000)}[t])*f*wt*enLS(w.n));w.eCiv=(w.eCiv||0)+eC;S.warECiv=(S.warECiv||0)+eC;if(eC>400)S.legitimacy=clamp(S.legitimacy-eC/60000);
- if(t==='mil'){hit(2.5*f,.3*f);S.threat=clamp(S.threat-2*f);S.morale=clamp(S.morale+1);worldReact(w.n,'mil',f);log(`${A.ic} ${A.n}: удар по военным объектам врага (${w.n})${where}. Побочно погибло ${fmt(eC)} мирных жителей врага.`);say(`Разбиты военные объекты врага: ${rn}`,'🎯')}
- else if(t==='infra'){hit(1.5*f,1*f);S.threat=clamp(S.threat-.5*f);worldReact(w.n,'infra',f);log(`${A.ic} ${A.n}: разрушена инфраструктура врага (${w.n})${where} — мосты, склады, энергосеть. Погибло ${fmt(eC)} мирных жителей врага.`);say(`Инфраструктура области ${rn} разрушена — экономика врага трещит`,'🏗');infraNews(w,rn,true)}
- else{hit(.5*f,.5*f);worldReact(w.n,'civ',f);S.legitimacy=clamp(S.legitimacy-1.5*f);S.stability=clamp(S.stability-.5*f);log(`${A.ic} ${A.n}: удар по гражданским целям (${w.n})${where}. Погибло ${fmt(eC)} мирных жителей врага. Мир осуждает.`);say(`Удар по гражданским в области ${rn}: мир возмущён`,'😡');warNews(w,'🏘',`${cityOf(rn)}: наш удар по гражданским целям — погибло ${fmt(eC)} мирных жителей`)}
+ if(t==='mil'){hit(2.5*f,.3*f);S.threat=clamp(S.threat-2*f);S.morale=clamp(S.morale+1);worldReact(w.n,'mil',f);enemyEcoHit(w,'mil',f);log(`${A.ic} ${A.n}: удар по военным объектам врага (${w.n})${where}. Побочно погибло ${fmt(eC)} мирных жителей врага.`);say(`Разбиты военные объекты врага: ${rn}`,'🎯')}
+ else if(t==='infra'){hit(1.5*f,1*f);S.threat=clamp(S.threat-.5*f);worldReact(w.n,'infra',f);enemyEcoHit(w,'infra',f);log(`${A.ic} ${A.n}: разрушена инфраструктура врага (${w.n})${where} — мосты, склады, энергосеть. Погибло ${fmt(eC)} мирных жителей врага.`);say(`Инфраструктура области ${rn} разрушена — экономика врага трещит`,'🏗');infraNews(w,rn,true)}
+ else{hit(.5*f,.5*f);worldReact(w.n,'civ',f);enemyEcoHit(w,'civ',f);S.legitimacy=clamp(S.legitimacy-1.5*f);S.stability=clamp(S.stability-.5*f);log(`${A.ic} ${A.n}: удар по гражданским целям (${w.n})${where}. Погибло ${fmt(eC)} мирных жителей врага. Мир осуждает.`);say(`Удар по гражданским в области ${rn}: мир возмущён`,'😡');warNews(w,'🏘',`${cityOf(rn)}: наш удар по гражданским целям — погибло ${fmt(eC)} мирных жителей`)}
  if(k==='bomb'){S.threat=clamp(S.threat-10);worldReact(w.n,'bomb',f)}
  toast(`${A.n} → ${rn} · рейтинг +${rally.toFixed(1)}%${wt<.9?' (область уже разрушена, эффект слабее)':''}`);
  save();render();return}
@@ -1823,7 +1858,12 @@ function worldReact(v,mode,f){
   }
   if(sn.length)log(`🌍 Санкции против вас ввели друзья ${v}: ${sn.join(', ')}.`);
   if(sp.length)log(`🤝 Вас поддержали враги ${v}: ${sp.join(', ')}.`);
-  if(!sn.length&&!sp.length)log(`🌍 Реакция мира на войну с ${v}: ${unj?'осуждение, санкций пока нет':'понимание'}.`);
+  const rs=[];
+  if(!unj){
+   t.f.slice().sort((a,b)=>pw(b)-pw(a)).forEach(n=>{if(rs.length<4&&Math.random()<clamp(.3+pw(n)/220,.3,.7)){const k=restrictBy(n,v);if(k)rs.push(`${n}: ${RTYPE[k].n}`)}});
+   if(rs.length){log(`🌍 Война обоснована, но мир её не одобряет: ${rs.join('; ')}.`);say(`Даже обоснованная война против ${v} не нравится миру: «так нельзя»`,'🗣');toast(`🌍 Меры против вас: ${rs.length}`)}
+  }
+  if(!sn.length&&!sp.length&&!rs.length)log(`🌍 Реакция мира на войну с ${v}: ${unj?'осуждение, санкций пока нет':'понимание'}.`);
   if(unj){say(sn.length?`Мир шокирован нападением на ${v}. ${sn.slice(0,3).join(', ')} вводят санкции`:`Нападение на ${v} осуждают`,'🌍')}
   if(unj)toast(`🌍 Санкции: ${sn.length} · поддержка: ${sp.length}`);
  }else{
@@ -1838,6 +1878,11 @@ function worldTick(){
  const sc=S.sanc||{};let k=0;
  Object.keys(sc).forEach(n=>{const s=sc[n],war=S.wars.some(w=>w.n===s.why);if(war)s.left=Math.max(s.left,12);else s.left--;if(s.left<=0){delete sc[n];log(`🌍 ${n} снимает санкции.`);return}k+=s.k});
  if(k>0){S.gdp*=1-Math.min(.006,k);S.inflation=clamp(S.inflation+Math.min(.15,k*60),0,100)}
+ const rs=S.restr||{};
+ Object.keys(rs).forEach(n=>{const r=rs[n],T=RTYPE[r.k],war=S.wars.some(w=>w.n===r.why);if(!T){delete rs[n];return}
+  if(war)r.left=Math.max(r.left,6);else r.left--;
+  if(r.left<=0){if(T.end)T.end(r);delete rs[n];log(`🌍 ${n} снимает ограничение: ${T.n}.`);return}
+  if(T.tick)T.tick(r)});
  const sp=S.supp||{};
  Object.keys(sp).forEach(n=>{const s=sp[n],war=S.wars.some(w=>w.n===s.why);if(war)s.left=Math.max(s.left,12);else s.left--;if(s.left<=0){delete sp[n];log(`🤝 ${n} прекращает поддержку.`);return}S.money+=s.aid;if(war)S.equipment=clamp(S.equipment+.1)});
  // друзья жертвы вооружают её (не больше +30% к исходной мощи)
@@ -1848,8 +1893,9 @@ function worldCard(){
  const eff=sk.reduce((a,n)=>a+sc[n].k,0);
  const w0=S.wars[0],t=w0?ties(w0.n):null;
  let h=`<div class="cards"><div class="mini"><b>🚫 Санкции против вас: ${sk.length}</b><small>${sk.length?sk.map(n=>`${n} (${sc[n].left} мес.)`).join(', ')+` · ВВП −${(Math.min(.006,eff)*100).toFixed(2)}%/мес`:'Нет'}</small></div><div class="mini"><b>🤝 Вас поддерживают: ${pk.length}</b><small>${pk.length?pk.map(n=>`${n} (+${sp[n].aid} млн/мес)`).join(', '):'Нет'}</small></div></div>`;
+ {const rk=Object.keys(S.restr||{});h+=`<div class="mini"><b>🟡 Протесты и ограничения: ${rk.length}</b><small>${rk.length?rk.map(n=>`${n}: ${RTYPE[S.restr[n].k].n} (${S.restr[n].left} мес.)`).join('; '):'Нет'}</small></div>`}
  if(t)h+=`<div class="mini"><b>⚔️ Расклад вокруг ${w0.n}</b><small>Друзья жертвы (осуждают вас, могут ввести санкции и вооружать её): ${t.f.slice(0,12).join(', ')||'—'}${t.f.length>12?'…':''}</small><small>Враги жертвы (могут вас поддержать): ${t.e.slice(0,12).join(', ')||'—'}${t.e.length>12?'…':''}</small></div>`;
- h+=`<p class="muted">Нападение без обоснования: друзья жертвы портят с вами отношения и вводят санкции, её враги — сближаются и помогают деньгами. Удары по гражданским и бомба вызывают новые санкции. С обоснованием войны реакция гораздо мягче.</p>`;
+ h+=`<p class="muted">Нападение без обоснования: друзья жертвы портят с вами отношения и вводят санкции, её враги — сближаются и помогают деньгами. Удары по гражданским и бомба вызывают новые санкции. С обоснованием санкций нет, но друзья жертвы всё равно выражают протест и вводят мягкие меры: эмбарго на оружие, запрет на технологии, визовые и авиаограничения, заморозку части резервов.</p>`;
  return card('🌍 Реакция мира',h)}
 function warPower(w){
  const q=(.55+S.equipment/100*.6)*(.7+S.training/100*.5)*(.7+S.morale/100*.4);
@@ -1874,7 +1920,7 @@ function warTick(){
   w.lost=(w.lost||0)+Math.max(0,a0-S.army);w.kills=(w.kills||0)+Math.round((Math.max(0,d)*rnd(260,640)+rnd(80,260))*enLS(w.n));battleEvent(w,d,c);ch({money:-120-(100-supply)*2},false);S.approval=clamp(S.approval+(w.m<=12&&w.p>=40?.35:-.12));S.fuel=clamp(S.fuel-(supply<45?3:1));S.ammo=clamp(S.ammo-(supply<45?3:1));
   if(dc&&dc.ammoS)S.ammo=clamp(S.ammo+dc.ammoS);if(dc&&dc.fuelC)S.fuel=clamp(S.fuel-dc.fuelC);
   c.power=Math.max(10,Math.round(c.power-Math.max(0,d)*(.35+w.encirclement*.12)+Math.max(0,-d)*.1+(d>0?Math.max(1,c.power*.012):0)));
-  warCasualties(w,a0);occupyTick(w);warEnemyCiv(w,d);darkTickEnemy(w);enemyStrikes(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
+  warCasualties(w,a0);occupyTick(w);warEnemyCiv(w,d);enemyEcoTick(w,c,d);darkTickEnemy(w);enemyStrikes(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
   if(w.m%3===0&&supply<30)log(`🚚 Критический кризис снабжения на фронте с ${w.n}: наступление замедлено.`);if(d>0&&w.m%6===0)log(`🪖 ${w.n} проводит мобилизацию, чтобы удержать фронт.`);c.value=clamp(c.value-.8,-100,100);
   if(w.p>=100){w.won=true;w.wm=0;log(`🏆 Победа над государством ${w.n}! Выбери плоды победы во вкладке «Штаб».`);say('Мы победили в войне!','🎉');toast('🏆 Победа над '+w.n+'!');pause()}
   else if(w.p>=90&&w.encirclement>=4){w.p=100;w.won=true;w.wm=0;log(`🏳️ ${w.n} запросила капитуляцию после окружения основных сил!`);toast('Противник капитулирует');pause()}
@@ -2046,7 +2092,7 @@ function warCard(w){
  <div class="wmeta">${w.frontLine||'Центральный фронт'} · месяц войны: ${w.m}${w.def?' · на нас напали':''}</div>
  <div class="wforce"><div class="fs us"><small>Наша сила</small><b>${fmt(mine)}</b></div><div class="fbar"><i style="width:${Math.round(mine/sum*100)}%"></i></div><div class="fs them"><small>Сила врага</small><b>${fmt(theirs)}</b></div></div>
  <div class="wtrack"><div class="wfill" style="width:${p}%"></div><div class="wmark" style="left:${p}%"></div></div><div class="wscale"><span>Поражение</span><b>Фронт ${p}%</b><span>Победа</span></div>
- <div class="wtiles">${tile('🚚','Снабжение',sup+'%')}${tile('⭕','Окружение',(w.encirclement||0)+'/5')}${tile('👑','Вассалы','+'+fmt(w.aid||vassalAid()))}${tile('🤝','Союзники',allyL.length?allyL.length:'—')}${tile('🪦','Наши потери',fmt(w.lost||0))}${tile('☠','Потери врага',fmt(w.kills||0))}${tile('🚩','Занято областей',(w.occ||[]).length+'/'+regCount(w.n))}${tile('🏘','Мирные у нас',fmt(w.civDead||0))}${tile('🏚','Мирные у врага',fmt(w.eCiv||0))}</div>
+ <div class="wtiles">${tile('🚚','Снабжение',sup+'%')}${tile('⭕','Окружение',(w.encirclement||0)+'/5')}${tile('👑','Вассалы','+'+fmt(w.aid||vassalAid()))}${tile('🤝','Союзники',allyL.length?allyL.length:'—')}${tile('🪦','Наши потери',fmt(w.lost||0))}${tile('☠','Потери врага',fmt(w.kills||0))}${tile('🚩','Занято областей',(w.occ||[]).length+'/'+regCount(w.n))}${tile('🏘','Мирные у нас',fmt(w.civDead||0))}${tile('🏚','Мирные у врага',fmt(w.eCiv||0))}${tile('📉','ВВП врага','−'+(w.eco?w.eco.loss:0).toFixed(1)+'%')}${tile('💱','Валюта врага',w.eco?pct((w.eco.r/w.eco.r0-1)*100,0):'—')}</div>
  ${warNewsHtml(w)}
  ${allyL.length?`<div class="wallies">На нашей стороне: ${allyL.map(n=>`<span class="chip">${n}</span>`).join('')}</div>`:''}
  <div class="worders"><button class="${ord==='attack'?'on atk':''}" onclick="H.warOrder(${nm},'attack')">⚔ Наступать</button><button class="${ord==='balanced'?'on bal':''}" onclick="H.warOrder(${nm},'balanced')">⚖ Баланс</button><button class="${ord==='defend'?'on def':''}" onclick="H.warOrder(${nm},'defend')">🛡 Оборона</button></div><div class="actions"><button onclick="armyAttack(${nm})">🪖 Показать атаку пехоты на карте</button></div>
@@ -2409,6 +2455,7 @@ function fxStress(){
  x+=.002*Math.max(0,S.threat-40);
  ws.forEach(w=>{x+=.10+.12*(1-clamp(w.p,0,100)/100)+.02*(w.encirclement||0)});
  x+=.010*Math.max(0,E.lossPct||0);
+ x+=Math.min(.05,Object.keys(S.restr||{}).length*.01);
  x-=.003*Math.max(0,S.stability-70)+.002*Math.max(0,(S.trust==null?70:S.trust)-75);
  return clamp(x,-.12,1.6,1.6);
 }
@@ -2450,7 +2497,8 @@ function chGroups(){
  {id:'war',ic:'⚔️',n:'Война и экономика',charts:[
   {t:'ВВП: факт и «если бы не было войны»',m:'abs',s:[{k:'pg',n:'Без войны',c:'#8aa0b6',u:' млрд',dash:1},{k:'gdp',n:'Факт',c:'#69aef2',u:' млрд'}],note:'Разрыв между линиями — потерянная экономика.'},
   {t:'Война: ВВП падает — курс растёт',m:'idx',win:'war',s:[{k:'gdp',n:'ВВП',c:'#69aef2'},{k:'fxA',n:`Курс ${ref}`,c:'#f0bd58',bad:1},{k:'income',n:'Доходы бюджета',c:'#55c58a'}],note:'Окно — с начала последней войны (за 3 месяца до неё).'},
-  {t:'Потери экономики',m:'own',s:[{k:'lossPct',n:'Потеря ВВП, %',c:'#ef6d72',u:'%',d:1,bad:1},{k:'lossCum',n:'Накоплено потерь, млрд',c:'#f0bd58',u:' млрд',bad:1},{k:'civDead',n:'Мирные жертвы',c:'#a98be8',bad:1}]}],extra:'war'},
+  {t:'Потери экономики',m:'own',s:[{k:'lossPct',n:'Потеря ВВП, %',c:'#ef6d72',u:'%',d:1,bad:1},{k:'lossCum',n:'Накоплено потерь, млрд',c:'#f0bd58',u:' млрд',bad:1},{k:'civDead',n:'Мирные жертвы',c:'#a98be8',bad:1}]},
+  {t:'Экономика врага: ВВП падает — валюта слабеет',m:'idx',win:'war',s:[{k:'eGdp',n:'ВВП врага',c:'#a98be8',u:'% от довоенного',d:1},{k:'eFx',n:'Курс валюты врага',c:'#f0bd58',d:2,bad:1}],note:'ВВП врага падает от удержания фронта, оккупации областей, окружения и наших ударов по инфраструктуре. Экономическое истощение ослабляет и его армию.'}],extra:'war'},
  {id:'pol',ic:'🏛',n:'Политика',charts:[
   {t:'Партия, одобрение, стабильность',m:'abs',s:[{k:'partySupport',n:'Партия',c:'#f0bd58',u:'%',d:1},{k:'approval',n:'Одобрение',c:'#69aef2',u:'%',d:1},{k:'stability',n:'Стабильность',c:'#55c58a',u:'%',d:1},{k:'legit',n:'Легитимность',c:'#a98be8',u:'%',d:1}]},
   {t:'Риск переворота',m:'abs',s:[{k:'coup',n:'Риск переворота',c:'#ef6d72',u:'%',d:1,bad:1}]}]},
@@ -2494,6 +2542,7 @@ function chKpis(gid){
   const r=w0?dlt(w0.rate,F.rate,1):['',''];
   k=[kpi('Потеря ВВП',(E.lossPct||0).toFixed(1)+'%','пик '+(E.peak||0).toFixed(1)+'%',(E.lossPct||0)>.5?'dn':''),kpi('Потери выпуска',fmt((E.loss||0)-(E.loss0||0))+' млрд','за войну'),
      kpi(`Курс ${F.ref}`,nf(F.rate,F.rate<10?2:F.rate<100?1:0),w0?'с войны '+r[0]:'',r[1]),kpi('Погибших',fmt(dead),'солдат и мирных')];
+  if(E.eLast){const e=E.eLast;k.push(kpi('ВВП врага','−'+e.loss.toFixed(1)+'%',e.n,e.loss>.5?'up':''),kpi('Валюта врага',nf(e.r,e.r<10?2:e.r<100?1:0)+' '+e.cur,'1 '+e.ref+' · '+pct((e.r/e.r0-1)*100,0)))}
  }else{
   const g=chGroups().find(z=>z.id===gid),s=g.charts[0].s.slice(0,4);
   k=s.map(z=>{const a=okn(F0[z.k])?F0[z.k]:null,b=okn(L[z.k])?L[z.k]:null,d=dlt(a,b,z.bad);return kpi(z.n,okn(b)?nf(b,z.d,z.u)+(z.u||''):'—','с начала '+d[0],d[1])});
@@ -2516,6 +2565,7 @@ function chWarExtra(){
  return card('📊 Итоги экономики войны',`<p class="chnote">${w.over?'Война окончена':'⚔ Война идёт'} · длительность ${dur} мес.</p><div style="overflow:auto"><table class="fxt"><tr><th></th><th style="text-align:right">До войны</th><th style="text-align:right">Сейчас</th><th style="text-align:right">Δ</th></tr>
  ${row('ВВП, млрд',w.gdp,S.gdp)}${row(`Курс 1 ${F.ref}, ${F.cur}`,w.rate,F.rate,1,v=>nf(v,v<10?2:v<100?1:0))}${row('Инфляция, %',w.infl,S.inflation,1,f1)}${row('Занятость, %',w.emp,S.employment,0,f1)}
  ${row('Инфраструктура (ср.)',w.infra,avgReg('infra'),0,f1)}${row('Промышленность (ср.)',w.ind,avgReg('industry'),0,f1)}${row('Армия',w.army,S.army)}${row('Население',w.pop,S.pop)}</table></div>
+ ${E.eLast?`<p>Враг (<b>${E.eLast.n}</b>): ВВП −<b>${E.eLast.loss.toFixed(1)}%</b> от довоенного, накопленные потери ≈ <b>${fmt(E.eLast.cum)} млрд $</b>, курс 1 ${E.eLast.ref} вырос с ${nf(E.eLast.r0,E.eLast.r0<10?2:E.eLast.r0<100?1:0)} до <b>${nf(E.eLast.r,E.eLast.r<10?2:E.eLast.r<100?1:0)}</b> ${E.eLast.cur}.</p>`:''}
  <p>Потеря выпуска за войну: <b>${fmt((E.loss||0)-(E.loss0||0))} млрд</b> · недополученные налоги: <b>${fmt((E.tax||0)-(E.tax0||0))} млн</b> · погибло: <b>${fmt((S.warSold||0)-(w.sold||0))}</b> солдат и <b>${fmt((S.warCiv||0)-(w.civ||0))}</b> мирных.</p>
  <h3>🎯 Воздействие на экономику противника</h3>
  <p class="chnote">Модельная оценка симуляции: индекс до войны = 100. Это игровой расчёт, а не официальная статистика ВВП.</p>
