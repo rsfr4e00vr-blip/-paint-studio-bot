@@ -3,6 +3,7 @@ const assert=require('node:assert/strict');
 global.window=global;
 global.WORLD={map:{}};
 global.WORLD_DATA={countries:[{ru:'Альфа',i:'AA',lat:10,lon:10},{ru:'Бета',i:'BB',lat:11,lon:11}]};
+global.WORLD_SEEDS={Бета:[{n:'Северная область'},{n:'Южная область'}]};
 require('./nn_core.js');require('./grand_diplomacy.js');
 const a={name:'Альфа',iso:'AA',relations:-45,power:80,gdp:100,stability:70,treasury:10,ideology:'либеральный курс',allies:[],tradePartners:[],imports:20,exports:10};
 const b={name:'Бета',iso:'BB',relations:-45,power:40,gdp:70,stability:65,treasury:8,ideology:'традиционализм',allies:[],tradePartners:[],imports:10,exports:20};
@@ -16,6 +17,12 @@ a.securityCases={Бета:{severity:70,expires:40,detail:'Консульский
 assert.ok(GrandDiplomacy.causes(a,b,12).some(x=>x.id==='security'));
 
 const S={name:'Альфа',year:1,month:0,ideology:'либеральный курс',grandDiplomacy:{claims:{},borderCases:{}}};
+const missingRegion=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'territorial');
+assert.equal(missingRegion.ok,false);
+const territorial=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'territorial','Северная область');
+assert.equal(territorial.ok,true);assert.equal(S.grandDiplomacy.claims.Бета.region,'Северная область');
+assert.ok(GrandDiplomacy.playerCauses(S,{name:'Бета',value:-40,ideology:'традиционализм'}).includes('territorial'));
+const wrongRegion=GrandDiplomacy.preparePlayerCase({year:1,month:0,grandDiplomacy:{claims:{}}},{name:'Бета',value:-40},'territorial','Несуществующая');assert.equal(wrongRegion.ok,false);
 const r=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'border');
 assert.equal(r.ok,true);assert.ok(GrandDiplomacy.playerCauses(S,{name:'Бета',value:-40,ideology:'традиционализм'}).includes('border'));
 const security=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'security');

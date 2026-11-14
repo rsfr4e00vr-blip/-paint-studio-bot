@@ -26,8 +26,9 @@ async def run_checks():
     assert not a.war and not room.wars
 
     # Territorial claims mature for two months before they can justify war.
-    await ns.on_claim(room, a, {"to": b.id})
+    await ns.on_claim(room, a, {"to": b.id, "region": "Восточная область"})
     assert b.id in a.claims
+    assert a.claims[b.id]["region"] == "Восточная область"
     assert "territorial" not in room.diplomacy_grounds(a, b)
     room.month += 2
     assert "territorial" in room.diplomacy_grounds(a, b)
@@ -73,7 +74,17 @@ async def run_checks():
     await ns.on_ultimatum(room3, e, {"to": f.id, "cause": "security"})
     assert e.ultimatums[f.id]["cause"] == "security"
 
-    print("OK: multiplayer validation, claims, ultimatum, ideology and consular-security crisis")
+    g = ns.Player(FakeSocket(), "g", "Игрок З", "Альфа", "либеральный курс")
+    h = ns.Player(FakeSocket(), "h", "Игрок И", "Нигерия", "традиционализм")
+    room4 = ns.Room("REGION")
+    room4.month = 10
+    room4.players = {g.id: g, h.id: h}
+    g.rep["pp"] = 30
+    await ns.on_claim(room4, g, {"to": h.id, "region": "Несуществующая область"})
+    assert h.id not in g.claims
+    await ns.on_claim(room4, g, {"to": h.id, "region": "Лагос"})
+    assert g.claims[h.id]["region"] == "Лагос"
+    print("OK: multiplayer validation, region-specific claims, catalog ownership, ultimatum, ideology and consular-security crisis")
 
 
 if __name__ == "__main__":

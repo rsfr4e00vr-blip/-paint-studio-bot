@@ -32,7 +32,7 @@
  }
  function causes(att,def,month){
   const out=[];
-  if(active(att.claims&&att.claims[def.name],month))out.push({id:'territorial',severity:C(att.claims[def.name].severity||65,35,100),detail:att.claims[def.name].detail||'Официальная территориальная претензия'});
+  if(active(att.claims&&att.claims[def.name],month)){const claim=att.claims[def.name];out.push({id:'territorial',severity:C(claim.severity||65,35,100),region:claim.region||null,detail:claim.detail||(claim.region?`Требование передачи региона «${claim.region}»`:'Официальная территориальная претензия')});}
   if(active(att.borderCases&&att.borderCases[def.name],month))out.push({id:'border',severity:C(att.borderCases[def.name].severity||60,35,100),detail:att.borderCases[def.name].detail||'Зарегистрированный пограничный инцидент'});
   const ideol=att.ideology&&def.ideology&&att.ideology!==def.ideology;
   if(ideol&&active(att.ideologyDisputes&&att.ideologyDisputes[def.name],month))out.push({id:'ideology',severity:C(att.ideologyDisputes[def.name].severity||48,25,90),detail:`Противостояние: ${att.ideology} — ${def.ideology}`});
@@ -55,6 +55,14 @@
    if(a.ideology!==b.ideology&&Math.min(ab,ba)<-8&&hash(pairKey(a,b)+'ideology')%1000<6){
     a.ideologyDisputes[b.name]=a.ideologyDisputes[b.name]||{severity:48,expires:month+18,detail:`Политическое противостояние: ${a.ideology} и ${b.ideology}`};
     b.ideologyDisputes[a.name]=b.ideologyDisputes[a.name]||{severity:48,expires:month+18,detail:`Политическое противостояние: ${b.ideology} и ${a.ideology}`};
+   }
+   // AI territorial claims are region-specific and arise only from sustained hostility between nearby states.
+   if(dist<1800&&Math.min(ab,ba)<-28&&month%3===0&&hash(pairKey(a,b)+'region-claim')%100<9&&!active(a.claims&&a.claims[b.name],month)){
+    const regions=(root.WORLD_SEEDS&&root.WORLD_SEEDS[b.name])||b.regions||[];
+    if(regions.length){const idx=hash(pairKey(a,b)+':'+month)%regions.length,region=regions[idx].n||regions[idx].name;
+     a.claims[b.name]={severity:68,expires:month+36,created:month,region,detail:`Территориальная претензия на область «${region}»`};
+     if(ev)ev(W,`🗺 ${a.name} предъявила ${b.name} претензию на область «${region}».`);
+    }
    }
    const trading=(a.tradePartners||[]).includes(b.name)||(b.tradePartners||[]).includes(a.name);
    const sanctions=(a.sanctions||{})[b.name]>(month)||(b.sanctions||{})[a.name]>(month);
@@ -110,10 +118,10 @@
   if(G.securityCases&&active(G.securityCases[c.name],month))out.push('security');
   return out;
  }
- function preparePlayerCase(S,c,cause){
+ function preparePlayerCase(S,c,cause,region){
   const month=(S.year||0)*12+(S.month||0),G=S.grandDiplomacy||(S.grandDiplomacy={version:1,claims:{},borderCases:{}});G.claims=G.claims||{};G.borderCases=G.borderCases||{};G.securityCases=G.securityCases||{};
   if(!CAUSES[cause])return{ok:false,error:'Неизвестное основание.'};
-  if(cause==='territorial')G.claims[c.name]={severity:65,expires:month+36,created:month,detail:'Официальная территориальная претензия'};
+  if(cause==='territorial'){const target=String(region||'').trim().slice(0,80);if(!target)return{ok:false,error:'Выберите конкретную область, на которую предъявляется претензия.'};const known=(root.WORLD_SEEDS&&root.WORLD_SEEDS[c.name]||[]).some(x=>x.n===target);if(root.WORLD_SEEDS&&root.WORLD_SEEDS[c.name]&&!known)return{ok:false,error:'Выбранная область не принадлежит этой стране.'};G.claims[c.name]={severity:68,expires:month+36,created:month,region:target,detail:`Официальное требование передачи региона «${target}»`};}
   else if(cause==='border'){
    if((+c.value||0)>15)return{ok:false,error:'Пограничный кризис возможен только при напряжённых отношениях.'};
    G.borderCases[c.name]={severity:(+c.value||0)<=-60?88:68,expires:month+24,created:month,detail:'Официально зарегистрированный пограничный инцидент'};
@@ -140,6 +148,10 @@
   if(!active(n.borderCases[player.name],month)&&typeof S._gdNearPlayer==='boolean'&&S._gdNearPlayer&&(+c.value||0)<-28&&month%2===0&&Math.random()<.012){
    n.borderCases[player.name]={severity:78,expires:month+18,detail:'Вооружённый инцидент в приграничной зоне'};
    if(S.feed)S.feed.unshift({t:`🚧 Пограничный инцидент между ${n.name} и ${player.name}: стороны обмениваются обвинениями.`,m:'🚧',d:'Мировая хроника'});
+  }
+  if((+c.value||0)<-42&&!active(n.claims[player.name],month)&&month%4===0){
+   const playerRegions=(S.regions||[]).filter(r=>!r.lost&&!r.enemyOccupied);
+   if(playerRegions.length){const chosen=playerRegions[hash(n.name+player.name+month)%playerRegions.length];n.claims[player.name]={severity:68,expires:month+36,created:month,region:chosen.name,detail:`Территориальная претензия на область «${chosen.name}»`};if(S.feed)S.feed.unshift({t:`🗺 ${n.name} предъявила претензию на область «${chosen.name}» государства ${player.name}.`,m:'🗺',d:'Мировая хроника'});}
   }
   if(n.ideology!==player.ideology&&(+c.value||0)<-35)n.ideologyDisputes[player.name]=n.ideologyDisputes[player.name]||{severity:52,expires:month+24,detail:`Идеологическое противостояние: ${n.ideology} — ${player.ideology}`};
   if((c.embargo||0)>month||(S.sanc&&S.sanc[c.name]&&S.sanc[c.name].left>0))n.economicGrievances[player.name]=n.economicGrievances[player.name]||{severity:72,expires:month+24,detail:'Экономические ограничения и санкции'};

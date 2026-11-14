@@ -16,6 +16,29 @@ from fastapi import WebSocket, WebSocketDisconnect
 
 NROOMS: dict = {}
 
+_REGION_CATALOG_CACHE = None
+def region_catalog() -> dict:
+    """Load the same country -> region names used by the browser map seeds."""
+    global _REGION_CATALOG_CACHE
+    if _REGION_CATALOG_CACHE is not None:
+        return _REGION_CATALOG_CACHE
+    catalog = {}
+    try:
+        from pathlib import Path
+        import re
+        source = Path(__file__).with_name("regions.js").read_text(encoding="utf-8")
+        match = re.search(r"const RAW=`(.*?)`;", source, re.S)
+        if match:
+            for line in match.group(1).splitlines():
+                if "=" not in line:
+                    continue
+                country, values = line.split("=", 1)
+                catalog[country.strip()] = {part.split(":", 1)[0].strip() for part in values.split(";") if part.strip()}
+    except Exception:
+        catalog = {}
+    _REGION_CATALOG_CACHE = catalog
+    return catalog
+
 # ------------------------------------------------------------------ настройки
 MAX_PLAYERS = 6
 SPEEDS = {"slow": 10.0, "normal": 6.0, "fast": 3.5}          # секунд на игровой месяц
@@ -1047,18 +1070,27 @@ async def on_claim(room: Room, p: Player, msg: dict):
     if p.claims.get(q.id, {}).get("expires", 0) > room.month:
         await room.notice("Территориальная претензия уже действует.", "warn", p)
         return
+    region = clean_name(msg.get("region"), default="", n=80)
+    if not region:
+        await room.notice("Выберите конкретную область, на которую предъявляется претензия.", "warn", p)
+        return
+    catalog = region_catalog()
+    known = catalog.get(q.country)
+    if known is not None and region not in known:
+        await room.notice("Выбранная область не относится к указанной стране.", "warn", p)
+        return
     cost = 15
     if p.rep.get("pp", 0) < cost:
         await room.notice(f"Для официальной претензии нужно {cost} политической власти.", "warn", p)
         return
     p.rep["pp"] -= cost
     p.claims[q.id] = {"created": room.month, "expires": room.month + 36,
-                      "detail": "Официальное требование пересмотра территориального статуса", "severity": 68}
+                      "region": region, "detail": f"Официальное требование передачи области «{region}»", "severity": 68}
     p.ultimatums.pop(q.id, None)
     p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 6, -100, 100, 0))
     q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 6, -100, 100, 0))
     await room.send(p, {"type": "pp_update", "pp": p.rep["pp"]})
-    await room.notice(f"🗺 {p.country} предъявила {q.country} территориальную претензию. У сторон есть время для переговоров.", "dip")
+    await room.notice(f"🗺 {p.country} предъявила {q.country} претензию на область «{region}». У сторон есть время для переговоров.", "dip")
     await room.broadcast({"type": "relations", "relations": {x.id: room.relations_for(x) for x in room.players.values()}})
     await room.push_diplomacy_state()
 
