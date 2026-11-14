@@ -185,3 +185,8 @@ details.fold.hint>p{padding:0 14px 10px}
 .autogrid label{font-size:12px!important;color:#aebed0!important}
 .autogrid input{display:block!important;width:100%!important;min-height:38px!important;margin-top:4px!important;padding:6px!important;background:#091522!important;color:#fff!important;border:1px solid #52677c!important;border-radius:7px!important}
 @media(max-width:600px){#tabs .cats button{font-size:12px!important;padding:7px 9px!important}.autogrid{grid-template-columns:1fr 1fr!important}}
+/* Быстрые шаблоны управления войной */
+.wglobal,.wp-presets{display:flex;flex-direction:column;gap:7px;padding:9px 10px;margin:7px 0;border:1px solid rgba(104,151,194,.28);border-radius:11px;background:rgba(42,86,126,.12)}
+.wglobal .actions,.wp-presets .actions{display:flex;flex-wrap:wrap;gap:6px}
+.wglobal small,.wp-presets small{line-height:1.4}
+.wp-presets button{font-size:12px;padding:7px 9px}

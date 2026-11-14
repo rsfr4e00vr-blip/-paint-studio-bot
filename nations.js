@@ -14,7 +14,7 @@ const LKEY=(c)=>'novariaMP:'+c, SKEY='novariaMPSession';
 const AIO={aggr:{calm:'спокойный',normal:'обычный',high:'агрессивный',extreme:'беспощадный'},nn:{off:'выключена',std:'обычная',fast:'быстро учится'},ars:{none:'нет (страны вырабатывают и покупают сами)',small:'небольшой запас'}};
 const aiv=()=>Object.assign({aggr:'normal',nn:'std',ars:'none'},room.ai||{});
 let ws=null,me={id:null,host:false},room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
-let standings=[],mods={},wars=[],relations={},relationPrograms={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
+let standings=[],mods={},wars=[],relations={},relationPrograms={},embassies={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
 const orig={};
 let tg=window.Telegram&&Telegram.WebApp;if(tg){try{tg.ready();tg.expand()}catch(e){}}
 
@@ -48,18 +48,20 @@ setInterval(()=>send({type:'ping',t:Date.now()}),25000);
 function on(m){
   switch(m.type){
   case'joined':
-    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};
+    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};
     localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
     setBar();break;
   case'lobby':Object.assign(room,pick(m));me.host=room.host===me.id;
     if(room.state==='lobby'&&modal.classList.contains('open'))paintModal();setBar();paintAll();break;
-  case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;catchUp();setBar();paintAll();break;
+  case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;embassies=m.embassies||embassies;if(NG.S)NG.S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_response?1:null}:null;if(m.global_next!=null)NG.S.globalNext=m.global_next;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
   case'war_orders':wars=m.wars||wars;syncMpWars();paintAll();break;
-  case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;paintAll();break;
+  case'mp_adjust':if(NG.S){NG.S.money=Math.max(0,NG.S.money+(Number(m.money)||0));NG.S.approval=NG.clamp(NG.S.approval+(Number(m.approval)||0));NG.S.tech=NG.clamp((NG.S.tech||0)+(Number(m.tech)||0));['fuel','inflation','trust','stability','food','health','steel','gdp'].forEach(k=>{if(Number.isFinite(Number(m[k]))&&m[k]!==undefined)NG.S[k]=k==='gdp'?Math.max(100,NG.S[k]+Number(m[k])):k==='health'?Math.min(35,Math.max(0,(Number(NG.S[k])||0)+Number(m[k]))):NG.clamp((Number(NG.S[k])||0)+Number(m[k]))});if(m.crisis_response&&NG.S.globalCrisis)NG.S.globalCrisis.response=1;saveLocal();NG.render(true);paintAll()}break;
+  case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;embassies=m.embassies&&m.embassies[me.id]||embassies;paintAll();break;
   case'relations':relations=m.relations&&m.relations[me.id]||relations;paintDip();break;
+  case'embassies':embassies=m.embassies&&m.embassies[me.id]||embassies;paintDip();break;
   case'relation_programs':relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;paintDip();break;
   case'pp_update':if(NG.S){NG.S.pp=Number(m.pp)||0;saveLocal();afterEffect()}break;
   case'paused':room.state=m.value?'paused':'running';note(m.value?'⏸ Хозяин комнаты поставил игру на паузу':'▶ Игра продолжается','info');setBar();break;
@@ -114,7 +116,7 @@ function leaveMP(){
   if(room.code)localStorage.removeItem(LKEY(room.code));
   localStorage.removeItem(SKEY);closeWs();
   room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
-  standings=[];mods={};wars=[];relations={};relationPrograms={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
+  standings=[];mods={};wars=[];relations={};relationPrograms={};embassies={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
   NG.end();setBar();closeModal();prop.classList.remove('open');
 }
 /* Мои войны из данных сервера → экономика клиента: ВВП падает, курс валюты слабеет (логика в game.js: S.mpWars) */
@@ -129,7 +131,7 @@ function applyMods(){
 function onTick(m){
   if(!active)return;
   const S=NG.S;room.month=m.month;room.length=m.length;standings=m.standings;mods=m.mods||mods;wars=m.wars||[];relations=m.relations&&m.relations[me.id]||relations;lastTick=Date.now();
-  const miss=Math.max(1,Math.min(24,m.month-(S.mpMonth||0)));syncMpWars();
+  const miss=Math.max(1,Math.min(24,m.month-(S.mpMonth||0)));S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_responses&&m.crisis_responses[me.id]?1:null}:null;if(m.global_next!=null)S.globalNext=m.global_next;syncMpWars();
   for(let i=0;i<miss;i++){applyMods();NG.tick();S.mpMonth=(S.mpMonth||0)+1;if(S.campaignOver)break}
   S.mpMonth=m.month;
   if(S.campaignOver&&!sentElim){sentElim=true;send({type:'eliminated'});note('💀 Ваша кампания окончена. Вы наблюдаете за игрой.','warn')}
@@ -248,11 +250,14 @@ function table(list){
 function chips(c){if(!c)return'';const n={eco:'Эко',welfare:'Нар.',gov:'Упр.',fin:'Фин.',mil:'Арм.'};return Object.keys(n).map(k=>`<span class="chip">${n[k]} ${c[k]}</span>`).join('')}
 window.NGMP={
   setWarCommand(region,troops,air,navy){send({type:'war_command',region:String(region||'').slice(0,60),troops:Number(troops)||0,air,navy})},
+  setWarPreset(preset){const S=NG.S;if(!S)return;const P={assault:[.70,'support','escort','recon','convoys'],balanced:[.40,'support','escort','recon','repair'],defense:[.50,'patrol','escort','recon','repair'],economy:[.20,'reserve','reserve','reserve','repair'],pressure:[.25,'strategic','blockade','recon','convoys']}[preset];if(!P)return;send({type:'war_command',preset,troops:Math.floor(Math.max(0,S.army||0)*P[0]),air:P[1],navy:P[2],spec:P[3],logi:P[4],alloc:preset==='defense'?'spread':'focus'})},
   setVassalTax(id,rate){send({type:'vassal_tax',vassal:id,rate:Number(rate)})},
+  saveLocal(){saveLocal()},
+  respondGlobalCrisis(){send({type:'global_response'})},
   tab(){
     if(!room.code)return `<section class="panel"><h2>🌍 Мультиплеер</h2><p>Вы не в комнате.</p><button class="primary" onclick="NGMP.open()">Создать или войти</button></section>`;
     if(room.state==='lobby')return `<section class="panel"><h2>🌍 Комната ${esc(room.code)}</h2><p>Игра ещё не началась.</p><button class="primary" onclick="NGMP.open()">Открыть лобби</button></section>`;
-    return `<div class="mpwrap"><section class="panel"><h2>🧭 Быстрый доступ к функциям государства</h2><p class="muted2">Эти системы работают и в сетевой партии: закупки, экономика, армия, ПВО, карта и дипломатия.</p><div class="mprow mpquick"><button onclick="NG.setTab('autobuy')">🤖 Автозакупки</button><button onclick="NG.setTab('economy')">💰 Экономика</button><button onclick="NG.setTab('military')">🛡 Армия и ПВО</button><button onclick="NG.setTab('diplomacy')">🌐 Дипломатия мира</button><button onclick="NG.setTab('map')">🗺 Карта и регионы</button><button onclick="NG.setTab('market')">🛒 Рынок</button></div><div id="mpAutoSummary" class="muted2"></div></section><section class="panel" id="mpStand"></section><section class="panel" id="mpMods"></section><section class="panel"><h2>Дипломатия игроков</h2><p class="muted2">По умолчанию все игроки нейтральны. Чужая война не втягивает остальные страны автоматически.</p><div class="mpdip" id="mpDip"></div></section><section class="panel"><h2>Чат</h2><div class="mpchat" id="mpChatLog"></div><div class="row"><input id="mpChatIn" maxlength="200" placeholder="Сообщение игрокам"><button id="mpChatSend">➤</button></div></section><section class="panel"><h2>События мира</h2><div class="mpfeed" id="mpFeed"></div></section>${me.host?`<section class="panel"><button id="mpPause">${room.state==='paused'?'▶ Продолжить':'⏸ Пауза'}</button> <button class="danger" id="mpLeave2">Покинуть игру</button></section>`:`<section class="panel"><button class="danger" id="mpLeave2">Покинуть игру</button></section>`}</div>`;
+    return `<div class="mpwrap">${NG.missionsHtml?NG.missionsHtml():''}<section class="panel"><h2>🧭 Быстрый доступ к функциям государства</h2><p class="muted2">Эти системы работают и в сетевой партии: закупки, экономика, армия, ПВО, карта и дипломатия.</p><div class="mprow mpquick"><button onclick="NG.setTab('autobuy')">🤖 Автозакупки</button><button onclick="NG.setTab('economy')">💰 Экономика</button><button onclick="NG.setTab('military')">🛡 Армия и ПВО</button><button onclick="NG.setTab('diplomacy')">🌐 Дипломатия мира</button><button onclick="NG.setTab('politics')">🏛 Политика</button><button onclick="NG.setTab('intelligence')">🕵 Разведка</button><button onclick="NG.setTab('worldtension')">🌍 Мировые события</button><button onclick="NG.setTab('map')">🗺 Карта и регионы</button><button onclick="NG.setTab('market')">🛒 Рынок</button></div><div id="mpAutoSummary" class="muted2"></div></section><section class="panel" id="mpStand"></section><section class="panel" id="mpMods"></section><section class="panel"><h2>Дипломатия игроков</h2><p class="muted2">По умолчанию все игроки нейтральны. Чужая война не втягивает остальные страны автоматически.</p><div class="mpdip" id="mpDip"></div></section><section class="panel"><h2>Чат</h2><div class="mpchat" id="mpChatLog"></div><div class="row"><input id="mpChatIn" maxlength="200" placeholder="Сообщение игрокам"><button id="mpChatSend">➤</button></div></section><section class="panel"><h2>События мира</h2><div class="mpfeed" id="mpFeed"></div></section>${me.host?`<section class="panel"><button id="mpPause">${room.state==='paused'?'▶ Продолжить':'⏸ Пауза'}</button> <button class="danger" id="mpLeave2">Покинуть игру</button></section>`:`<section class="panel"><button class="danger" id="mpLeave2">Покинуть игру</button></section>`}</div>`;
   },
   after(){
     if(!room.code||room.state==='lobby')return;
@@ -260,7 +265,7 @@ window.NGMP={
     const p=$('#mpPause');if(p)p.onclick=()=>send({type:'pause'});
     const l=$('#mpLeave2');if(l)l.onclick=()=>{if(l.dataset.arm){leaveMP()}else{l.dataset.arm=1;l.textContent='Точно выйти? Нажмите ещё раз';setTimeout(()=>{if(l){delete l.dataset.arm;l.textContent='Покинуть игру'}},3000)}};
     const d=$('#mpDip');if(d)d.onclick=dipClick;
-    const mm=$('#mpMods');if(mm)mm.onclick=ev=>{const b=ev.target.closest('button[data-term]');if(!b||b.disabled)return;const t=b.dataset.term;if(t==='annex'||t==='region'){if(b.dataset.arm){send({type:'dictate',mode:t})}else{b.dataset.arm=1;const o=b.textContent;b.textContent='Точно? Нажмите ещё раз';setTimeout(()=>{b.dataset.arm='';b.textContent=o},3000)}}else send({type:'dictate',mode:t})};
+    const mm=$('#mpMods');if(mm)mm.onclick=ev=>{const preset=ev.target.closest('button[data-preset]');if(preset){let v=preset.dataset.preset;if(v==='auto'){const S=NG.S,ww=wars.find(x=>x.a===me.id||x.d===me.id),front=ww?(ww.a===me.id?ww.p:100-ww.p):50;v=S.money<500||S.fuel<25||S.ammo<25||S.food<25||S.morale<35?'defense':front<35?'balanced':'assault'}window.NGMP.setWarPreset(v);return}const b=ev.target.closest('button[data-term]');if(!b||b.disabled)return;const t=b.dataset.term;if(t==='annex'||t==='region'){if(b.dataset.arm){send({type:'dictate',mode:t})}else{b.dataset.arm=1;const o=b.textContent;b.textContent='Точно? Нажмите ещё раз';setTimeout(()=>{b.dataset.arm='';b.textContent=o},3000)}}else send({type:'dictate',mode:t})};
     paintAll();
   },
   open(){view=room.state==='lobby'?'lobby':'setup';paintModal();openModal()}
@@ -269,13 +274,14 @@ function paintAll(){if(NG.getTab()!=='mp'||!active&&room.state==='lobby')return;
 function paintAutoSummary(){const e=$('#mpAutoSummary');if(!e||!NG.S)return;const a=NG.S.autoPurchase||{},items=a.items||{},on=Object.keys(items).filter(k=>items[k]&&items[k].on);e.innerHTML=`<b>Автозакупки:</b> ${a.enabled?'включены':'выключены'} · ${on.length?`товары: ${on.map(esc).join(', ')}`:'товары не выбраны'} <button onclick="NG.setTab('autobuy')">Настроить</button>`}
 function paintStand(){const e=$('#mpStand');if(!e)return;const list=standings.length?standings:room.players;e.innerHTML=`<h2>🏆 Таблица очков · месяц ${room.month}/${room.length}</h2>${table(list)}<p class="muted2">Очки: экономика 36%, народ 20%, управление 14%, финансы 14%, армия 16%. Считаются на сервере; рост ВВП в зачёте ограничен 1,5% в месяц.</p>`}
 function pct(v){return(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v*1000)/10)+'%'}
+function relationTier(v){return v>=80?'🌟 стратегический партнёр':v>=60?'🤝 близкий партнёр':v>=35?'🙂 дружелюбные отношения':v>=10?'🕊 партнёрский диалог':v>-10?'😐 нейтралитет':v>-35?'🧊 напряжённые отношения':v>-60?'⚠️ недружественные отношения':'😠 враждебные отношения'}
 function paintMods(){
   const e=$('#mpMods');if(!e)return;const md=mods[me.id]||{pact:0,sanction:0,rubber:0,total:0},S=NG.S;
   const w=wars.find(x=>x.a===me.id||x.d===me.id);let wh='';
   if(w){const enemyId=(w.a===me.id?w.d:w.a),enemy=(standings.find(p=>p.id===enemyId)||{}).country||'противник',mine=w.a===me.id?w.p:100-w.p;const iWon=w.won===me.id,theyWon=w.won&&w.won!==me.id,can=mine>=60||iWon,reg=mine>=70||iWon;
     wh=`<h3>⚔️ Война с ${esc(enemy)}</h3><div class="warbar"><i style="width:${mine}%"></i></div><div class="muted2">Ваш перевес на фронте: <b>${mine}%</b> · месяц войны ${w.m}/24 · каждый месяц: −казна, −армия, −одобрение</div>`+
     `<div class="chips"><span class="chip">📉 Индекс ВВП врага: ${w.econ&&w.econ[enemyId]?Math.round(w.econ[enemyId].gdp):100}% от довоенного</span><span class="chip">💱 Индекс курса врага: ${w.econ&&w.econ[enemyId]?Math.round(w.econ[enemyId].fx):100}% от довоенного</span></div>`+
-    `<div class="mini"><b>📋 Совместный план армии</b><div class="row"><input id="mpWarRegion" maxlength="60" placeholder="Область назначения" value="${esc((w.orders&&w.orders[me.id]&&w.orders[me.id].region)||'')}" /><input id="mpWarTroops" type="number" min="0" max="1000000" step="1000" placeholder="Солдаты" value="${(w.orders&&w.orders[me.id]&&w.orders[me.id].troops)||0}" /></div><div class="row"><select id="mpWarAir"><option value="support">Авиация: поддержка</option><option value="patrol">Авиация: патруль</option><option value="defense">🛡 ПВО: оборона</option><option value="reserve">Авиация: резерв</option></select><select id="mpWarNavy"><option value="escort">Флот: снабжение</option><option value="blockade">Флот: блокада</option><option value="reserve">Флот: резерв</option></select><button class="primary" id="mpWarPlan">📌 Передать приказ</button></div><small class="muted2">Приказ проверяется сервером и виден обеим сторонам. Эффекты условные и игровые.</small></div>`+
+    `<div class="mini"><b>📋 Военный штаб — быстрые планы</b><small class="muted2">Активный план: ${(w.orders&&w.orders[me.id]&&w.orders[me.id].preset)||'не выбран'}</small><div class="actions"><button class="danger" data-preset="assault">⚔ Наступление</button><button data-preset="balanced">⚖ Баланс</button><button data-preset="defense">🛡 Оборона</button><button data-preset="economy">💰 Экономия</button><button data-preset="pressure">📉 Давление на экономику</button><button class="primary" data-preset="auto">✨ Автоподбор</button></div><div class="row"><input id="mpWarRegion" maxlength="60" placeholder="Область назначения" value="${esc((w.orders&&w.orders[me.id]&&w.orders[me.id].region)||'')}" /><input id="mpWarTroops" type="number" min="0" max="1000000" step="1000" placeholder="Солдаты" value="${(w.orders&&w.orders[me.id]&&w.orders[me.id].troops)||0}" /></div><div class="row"><select id="mpWarAir"><option value="support">Авиация: поддержка</option><option value="patrol">Авиация: патруль</option><option value="defense">🛡 ПВО: оборона</option><option value="reserve">Авиация: резерв</option></select><select id="mpWarNavy"><option value="escort">Флот: снабжение</option><option value="blockade">Флот: блокада</option><option value="reserve">Флот: резерв</option></select><button class="primary" id="mpWarPlan">📌 Передать ручной приказ</button></div><small class="muted2">Приказы проверяются сервером и сразу видны обеим сторонам. Наступление сильнее, но дороже; экономия слабее, зато дешевле.</small></div>`+
     (theyWon?`<p><b>🏳 Вы разгромлены.</b> Противник выбирает условия (${3-(w.wm||0)} мес.), иначе — контрибуция.</p>`:
     `<p class="muted2">${iWon?`🏆 Полная победа! Вы решаете, чем закончить войну (${3-(w.wm||0)} мес., иначе контрибуция):`:can?'💪 Перевес! Вы решаете, чем закончить войну:':'Условия можно диктовать при перевесе от 60%, область — от 70%, захват страны — при полной победе.'}</p>
     <div class="row"><button class="good" data-term="tribute" ${can?'':'disabled'}>💰 Контрибуция</button><button class="primary" data-term="vassal" ${can?'':'disabled'}>👑 Вассал (24 мес.)</button><button class="danger" data-term="region" ${reg?'':'disabled'}>🗺 Отнять область</button><button class="danger" data-term="annex" ${iWon?'':'disabled'}>🏴 Захватить страну</button></div>`)}
@@ -290,11 +296,11 @@ function paintDip(){
   const cap=Math.floor(S.money*.25/100)*100,amts=[300,500,1000,2000].filter(a=>a<=cap);
   e.innerHTML=list.map(p=>{
     const atWar=myWar&&(myWar.a===p.id||myWar.d===p.id),dead=p.eliminated,rel=Number(relations[p.id]||0),program=relationPrograms[p.id];
-    return `<div class="mini"><b>${esc(p.country)}</b> ${dead?'💀':atWar?'⚔️':rel<=-60?'🟠':rel>=40?'🤝':'⚖️'}<br><span class="muted2">${esc(p.name)} · очки ${p.score} · ВВП ${fmt(p.gdp)} · мощь ${p.power}</span><br><b>Отношения: ${rel>0?'+':''}${rel}/100</b> · ${rel<=-60?'напряжённые':rel>=40?'дружественные':'нейтралитет'}
+    return `<div class="mini"><b>${esc(p.country)}</b> ${dead?'💀':atWar?'⚔️':rel<=-60?'🟠':rel>=40?'🤝':'⚖️'}<br><span class="muted2">${esc(p.name)} · очки ${p.score} · ВВП ${fmt(p.gdp)} · мощь ${p.power}</span><br><b>Отношения: ${rel>0?'+':''}${rel}/100</b> · ${relationTier(rel)}
 ${dead||S.campaignOver?'':`<div class="actions">
 ${amts.length?`<select data-amt="${p.id}">${amts.map(a=>`<option>${a}</option>`).join('')}</select><button data-act="aid" data-to="${p.id}">💸 Помощь</button>`:'<span class="muted2">Для помощи нужна казна от 1 200 млн</span>'}
-${program?`<span class="muted2">🤝 Программа активна: ещё ${program.months_left} мес. · улучшение через ${program.next_in} мес.</span>`:`<button data-act="program" data-to="${p.id}">🤝 Улучшать отношения 4 года · 40 ⭐</button>`}<button data-act="meeting" data-to="${p.id}">Разовая встреча (+12)</button><button data-act="neutral" data-to="${p.id}">⚖️ Нейтралитет</button><button data-act="pact" data-to="${p.id}">📜 Торг. пакт</button>
-<button data-act="sanction" data-to="${p.id}">⛔ Санкции</button>
+${program?`<span class="muted2">🤝 Программа активна: ещё ${program.months_left} мес. · улучшение через ${program.next_in} мес.</span>`:`<button data-act="program" data-to="${p.id}">🤝 Улучшать отношения 4 года · 40 ⭐</button>`}${embassies[p.id]?`<span class="muted2">🏛 Посольство: ${embassies[p.id].paused?'пауза':'работает'} · ${embassies[p.id].months_left} мес. осталось</span>`:''}<button data-act="meeting" data-to="${p.id}">Разовая встреча (+12)</button><button data-act="neutral" data-to="${p.id}">⚖️ Нейтралитет</button><button data-act="pact" data-to="${p.id}">📜 Торг. пакт</button>
+<button data-act="sanction" data-to="${p.id}">⛔ Санкции</button><button data-act="gift" data-to="${p.id}">🎁 Подарок · 450</button><button data-act="visit" data-to="${p.id}">🎭 Культурный обмен · 180</button><button data-act="summit" data-to="${p.id}">🏛 Саммит · 260</button><button data-act="humanitarian" data-to="${p.id}">🧰 Гуманитарная помощь · 500</button><button data-act="education" data-to="${p.id}">🎓 Образовательный обмен · 320</button>${embassies[p.id]?'':`<button data-act="embassy" data-to="${p.id}">🏛 Посольство · 500</button>`}
 ${atWar?`<button class="good" data-act="peace" data-to="${p.id}">🕊 Мир</button>`:`<button class="danger" data-act="war" data-to="${p.id}">${warArm===p.id?'Точно? ⚔️':'⚔️ Война'}</button>`}</div>`}</div>`}).join('')||'<p class="muted2">Других игроков нет.</p>';
 }
 function dipClick(ev){
@@ -302,6 +308,7 @@ function dipClick(ev){
   if(a==='aid'){const sel=document.querySelector(`select[data-amt="${to}"]`);send({type:'aid',to,amount:+(sel&&sel.value)||300})}
   else if(a==='pact')send({type:'propose',what:'pact',to});
   else if(a==='meeting')send({type:'diplomacy',action:'meeting',to});
+  else if(['gift','visit','summit','humanitarian','education','embassy'].includes(a))send({type:'diplomacy',action:a,to});
   else if(a==='program'){if(NG.S.pp<40)return NG.toast('Нужно 40 ⭐ политической власти');report();send({type:'diplomacy',action:'program',to})}
   else if(a==='neutral')send({type:'diplomacy',action:'neutral',to});
   else if(a==='sanction')send({type:'sanction',to});
