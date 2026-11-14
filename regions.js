@@ -33,5 +33,29 @@ const RAW=`Россия=Москва:37.6:55.7:13;Московская обла�
 Колумбия=Антьокия:-75.5:6.5:6.9;Богота:-74.1:4.65:7.9;Кундинамарка:-74.4:4.9:2.9;Валье-дель-Каука:-76.5:3.8:4.6;Атлантико:-74.9:10.7:2.7;Боливар:-74.5:9:2.2;Магдалена:-74.2:10.2:1.4;Ла-Гуахира:-72.5:11.5:1;Северный Сантандер:-72.9:8:1.6;Сантандер:-73.2:6.7:2.2;Нариньо:-77.6:1.3:1.6;Кордова:-75.8:8.3:1.8;Мета:-73:3.5:1;Каука:-76.8:2.4:1.5;Толима:-75.2:4.2:1.3;Бояка:-73.4:5.6:1.2;Чоко:-76.7:5.7:0.55;Уила:-75.5:2.5:1.1;Касанаре:-71.5:5.3:0.4;Амасонас:-71:-1.5:0.08`;
 const SEEDS={};
 RAW.split('\n').forEach(l=>{const i=l.indexOf('=');if(i<0)return;SEEDS[l.slice(0,i)]=l.slice(i+1).split(';').map(x=>{const p=x.split(':');return {n:p[0],lon:+p[1],lat:+p[2],p:+p[3]||0}})});
+// Дополнительные характеристики регионов из Realistic Regions Extension.py.
+// Координаты, население и полный список регионов остаются из основной базы выше.
+const REGION_META={
+ 'США':{
+  'Калифорния':{type:'state',urban_dev:.90,resources:['tech','agriculture']},'Техас':{type:'state',urban_dev:.80,resources:['oil','cattle','tech']},'Нью-Йорк':{type:'state',urban_dev:.95,resources:['finance','services']},'Флорида':{type:'state',urban_dev:.80,resources:['tourism','agriculture']},'Иллинойс':{type:'state',urban_dev:.75,resources:['industry','agriculture']},'Пенсильвания':{type:'state',urban_dev:.70,resources:['industry','coal']},'Огайо':{type:'state',urban_dev:.65,resources:['industry','manufacturing']},'Вашингтон':{type:'state',urban_dev:.80,resources:['tech','timber']}
+ },
+ 'Россия':{
+  'Москва':{type:'federal_city',urban_dev:.98,resources:['finance','tech','industry']},'Санкт-Петербург':{type:'federal_city',urban_dev:.90,resources:['industry','shipping']},'Тюменская область':{type:'oblast',urban_dev:.50,resources:['oil','gas']},'Красноярский край':{type:'krai',urban_dev:.40,resources:['minerals','timber','hydro']},'Свердловская область':{type:'oblast',urban_dev:.70,resources:['metals','industry','machinery']},'Татарстан':{type:'republic',urban_dev:.65,resources:['oil','automotive','agriculture']},'Краснодарский край':{type:'krai',urban_dev:.60,resources:['agriculture','tourism']}
+ },
+ 'Китай':{
+  'Гуандун':{type:'province',urban_dev:.90,resources:['manufacturing','electronics','trade']},'Цзянсу':{type:'province',urban_dev:.88,resources:['manufacturing','textiles']},'Шаньдун':{type:'province',urban_dev:.80,resources:['agriculture','industry','oil']},'Чжэцзян':{type:'province',urban_dev:.85,resources:['e-commerce','light_industry']},'Сычуань':{type:'province',urban_dev:.70,resources:['agriculture','tech','energy']},'Пекин':{type:'municipality',urban_dev:.98,resources:['government','tech','finance']}
+ },
+ 'Германия':{
+  'Северный Рейн-Вестфалия':{type:'state',urban_dev:.90,resources:['industry','coal','steel']},'Бавария':{type:'state',urban_dev:.85,resources:['tech','automotive','finance']},'Баден-Вюртемберг':{type:'state',urban_dev:.85,resources:['automotive','machinery','tech']},'Берлин':{type:'state',urban_dev:.95,resources:['government','services','startups']}
+ },
+ 'Франция':{
+  'Иль-де-Франс':{type:'region',urban_dev:.96,resources:['finance','tech','tourism']},'Овернь-Рона-Альпы':{type:'region',urban_dev:.75,resources:['industry','agriculture','energy']},'Прованс — Лазурный Берег':{type:'region',urban_dev:.80,resources:['tourism','shipping','aerospace']}
+ }
+};
+Object.keys(SEEDS).forEach(country=>SEEDS[country].forEach(region=>{
+ const meta=REGION_META[country]&&REGION_META[country][region.n];
+ if(meta)region.meta=meta;
+}));
+window.WORLD_REGION_META=REGION_META;
 window.WORLD_SEEDS=SEEDS;
 })();
