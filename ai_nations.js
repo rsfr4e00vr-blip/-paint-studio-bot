@@ -85,12 +85,15 @@ function economy(n){
  const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
  /* Разрешаем уходить в минус (бюджетный дефицит до -5% ВВП) при тяжёлых расходах */
  n.treasury=C(n.treasury+income-upkeep,-n.gdp*.05,n.gdp*.25);debtService(n);
- /* Автоматический экстренный военный заём при тяжёлой войне (истощение > 35 или дефицит бюджета) */
- if(n.war&&(n.treasury<n.gdp*.005||n.exhaustion>35)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<debtLimit(n)){
-  const emer=Math.min(debtLimit(n)-n.debt,n.gdp*.04);
+ /* Военные займы ИИ при тяжёлой войне: кредит при дефиците казны, истощении или низком духе; каждый заём ослабляет валюту */
+ if(n.war&&(n.treasury<n.gdp*.01||n.exhaustion>28||n.morale<55)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<debtLimit(n)){
+  const emer=Math.min(debtLimit(n)-n.debt,n.gdp*.055);
   if(emer>n.gdp*.002){
-   n.debt+=emer;n.treasury+=emer;n.power=C(n.power+emer*.12,2,150);n.morale=C(n.morale+.8,15,100);
-   if(curW&&Math.random()<.15)ev(curW,`💳 ${n.name} взяла военный кредит ${Math.round(emer)} из-за тяжёлой войны (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`);
+   n.debt+=emer;n.treasury+=emer;
+   n.power=C(n.power+emer*.14,2,150);
+   n.morale=C(n.morale+1.2,15,100);
+   n.fx=C((n.fx||100)*1.035,45,950);
+   if(curW&&Math.random()<.22)ev(curW,`💳 ${n.name} выпустила военные облигации (+${Math.round(emer)}) из-за тяжёлой войны (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`);
   }
  }
  if(!window.NN&&n.treasury>n.gdp*.025){
@@ -108,16 +111,19 @@ function economy(n){
 function fxStep(n){
  n.fx??=100;
  const h=n.gh||[],g=h.length>3?Math.log(Math.max(1,n.gdp)/Math.max(1,h[h.length-4])):0;
+ const lostShare=n.gpeak>0?Math.max(0,1-n.gdp/n.gpeak):0; /* доля потерянного от пика ВВП (в т.ч. из-за потери областей) */
  let x=0;
- if(n.war)x+=.16+.002*n.exhaustion;
- x+=.004*(n.dmg||0);
- x+=3*Math.max(0,-g);
- x+=.006*Math.max(0,50-n.stability);
- if(n.treasury<n.gdp*.004)x+=.05;
- x+=.3*Math.max(0,(n.debt||0)/Math.max(1,n.gdp)-.3);
- x-=.002*Math.max(0,n.stability-70)+.6*Math.max(0,g);
- const target=100*Math.exp(C(x,-.12,1.4));
- n.fx=C(n.fx+(target-n.fx)*(n.war?.3:.15)+R(-.4,.4),45,700);
+ if(n.war)x+=.18+.0025*n.exhaustion;
+ x+=.005*(n.dmg||0);
+ x+=3.5*Math.max(0,-g);
+ x+=1.6*lostShare;
+ x+=.007*Math.max(0,50-n.stability);
+ if(n.treasury<n.gdp*.004)x+=.07;
+ x+=.45*Math.max(0,(n.debt||0)/Math.max(1,n.gdp)-.25); /* давление госдолга на курс */
+ if(n.defMonth!=null&&curW&&curW.month-n.defMonth<24)x+=.35; /* эффект недавнего дефолта */
+ x-=.0025*Math.max(0,n.stability-70)+.65*Math.max(0,g);
+ const target=100*Math.exp(C(x,-.18,1.95));
+ n.fx=C(n.fx+(target-n.fx)*(n.war?.32:.18)+R(-.35,.35),45,950);
 }
 function fxIndex(S,code){
  const W=S&&S.aiWorld;if(!W||!window.FXD)return null;
@@ -137,13 +143,32 @@ function diplomacy(W,A){
  }
 }
 function declare(W,A){
- for(const a of A){if(a.war||a.cooldown||Math.random()>.0045*(window.AIARS&&curS?AIARS.aggrMult(curS):1))continue;
-  let targets=A.filter(b=>b!==a&&!b.war&&!b.allies.includes(a.name)&&!a.allies.includes(b.name)&&!b.cooldown&&!W.wars.some(w=>(w.a===a.name&&w.b===b.name)||(w.a===b.name&&w.b===a.name)));
+ const live=A.filter(n=>!n.annexed);
+ const avgPower=live.reduce((t,n)=>t+n.power,0)/Math.max(1,live.length);
+ for(const a of A){
+  if(a.annexed||a.war||a.cooldown||a.exhaustion>35||a.stability<42)continue;
+  /* страна в долгах или с упавшей валютой не начинает новую войну */
+  if((a.debt||0)>a.gdp*.45||(a.fx||100)>165)continue;
+  if(Math.random()>.0035*(window.AIARS&&curS?AIARS.aggrMult(curS):1))continue;
+  let targets=A.filter(b=>b!==a&&!b.annexed&&!b.war&&!b.allies.includes(a.name)&&!a.allies.includes(b.name)&&!b.cooldown&&!W.wars.some(w=>(w.a===a.name&&w.b===b.name)||(w.a===b.name&&w.b===a.name)));
+  targets=targets.filter(b=>{
+   const badRel=Math.max(0,-(b.relations||0));
+   const hasClaim=!!(a.rivals&&a.rivals[b.name]>15)||badRel>=35;
+   /* без повода (вражды/претензий) нападают только на цель, намного более слабую */
+   if(!hasClaim&&a.power<b.power*2.5)return false;
+   /* страх: недавний победитель крупной войны или сильнейший сосед */
+   if(b.deterUntil!=null&&b.deterUntil>W.month&&!hasClaim)return false;
+   const fear=(b.power/Math.max(1,a.power))*(b.power>avgPower*1.4?1.35:1);
+   if(fear>1.15&&!hasClaim)return false;
+   return true;
+  });
   targets.sort((x,y)=>(a.power/Math.max(1,x.power))*(1+Math.max(0,-x.relations)/180)+x.gdp/Math.max(1,a.gdp)*.12-((a.power/Math.max(1,y.power))*(1+Math.max(0,-y.relations)/180)+y.gdp/Math.max(1,a.gdp)*.12));
-  if(!targets.length)continue;let b=targets[targets.length-1],ally=a.allies.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.28,0),def=b.allies.reduce((s,x)=>s+(A.find(n=>n.name===x)?.power||0)*.32,0);
-  if(a.treasury<a.gdp*.012||a.power+ally<b.power*.88+def*.65)continue;
-  let id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal:b.gdp>a.gdp?'cripple':'territory',joinedA:[],joinedB:[]});
-  ev(W,`⚔️ ${a.name} начала войну против ${b.name}. Военная цель: ${b.gdp>a.gdp?'сломить экономику':'захватить территории'}`);
+  if(!targets.length)continue;
+  let b=targets[targets.length-1],ally=a.allies.reduce((t,x)=>t+(A.find(n=>n.name===x)?.power||0)*.28,0),def=b.allies.reduce((t,x)=>t+(A.find(n=>n.name===x)?.power||0)*.32,0);
+  if(a.treasury<a.gdp*.015||a.power+ally<(b.power+def)*1.15)continue;
+  let id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;
+  W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal:b.gdp>a.gdp?'cripple':'territory',joinedA:[],joinedB:[]});
+  ev(W,`⚔️ ${a.name} начала войну против ${b.name} (повод: ${Math.max(0,-(b.relations||0))>=35?'вражда и кризис':'территориальные претензии'}). Военная цель: ${b.gdp>a.gdp?'сломить экономику':'захватить территории'}`);
  }
 }
 function fight(W,w,a,b,A){
@@ -159,11 +184,11 @@ function fight(W,w,a,b,A){
 }
 function peace(W,w,a,b,A){
  let win=w.score>=0?a:b,lose=win===a?b:a,margin=Math.abs(w.score),share=C(.06+margin/500+R(0,.04),.05,.28);
- if(margin>18){let g=lose.gdp*share;win.gdp+=g*.72;lose.gdp-=g;lose.gpeak=Math.max(lose.gdp,(lose.gpeak||lose.gdp)*(1-share));win.gpeak=Math.max(win.gpeak||0,win.gdp);win.treasury+=Math.min(lose.treasury*.18,win.gdp*.025);lose.treasury*=.82;lose.pop*=1-share*.12;lose.stability=C(lose.stability-8-margin*.08,5,95);lose.relations-=12;win.relations+=5;
+ if(margin>18){let g=lose.gdp*share;win.gdp+=g*.72;lose.gdp-=g;lose.gpeak=Math.max(lose.gdp,(lose.gpeak||lose.gdp)*(1-share));win.gpeak=Math.max(win.gpeak||0,win.gdp);win.treasury+=Math.min(lose.treasury*.18,win.gdp*.025);lose.treasury*=.82;lose.pop*=1-share*.12;lose.stability=C(lose.stability-8-margin*.08,5,95);lose.relations-=12;win.relations+=5;lose.dmg=(lose.dmg||0)+share*40;lose.industry=C(lose.industry*(1-share*.5),.3,3);lose.infrastructure=C(lose.infrastructure*(1-share*.4),.3,3);lose.fx=C((lose.fx||100)*(1.25+share*2),45,950);lose.exhaustion=C(lose.exhaustion+share*50,0,100);win.deterUntil=W.month+(margin>40?18:12);
   if(margin>65&&win.power>lose.power*1.45&&Math.random()<.28){lose.annexed=true;lose.owner=win.name;W.owners[lose.name]=win.name;win.pop+=lose.pop;win.gdp+=lose.gdp;ev(W,`🏴 ${win.name} полностью аннексировала ${lose.name}`)}
   else{W.owners[lose.name+':occupied']=win.name;ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки`)}
  }else ev(W,`🕊 ${a.name} и ${b.name} подписали мир без решающей победы`);
- [a,b,...w.joinedA.map(x=>A.find(n=>n.name===x)),...w.joinedB.map(x=>A.find(n=>n.name===x))].filter(Boolean).forEach(n=>{n.war=null;n.cooldown=10;n.exhaustion=C(n.exhaustion-18,0,100);n.morale=C(n.morale+(n===win?8:-8),15,100)});
+ [a,b,...w.joinedA.map(x=>A.find(n=>n.name===x)),...w.joinedB.map(x=>A.find(n=>n.name===x))].filter(Boolean).forEach(n=>{n.war=null;n.cooldown=n===lose&&margin>18?24:10;n.exhaustion=C(n.exhaustion-18,0,100);n.morale=C(n.morale+(n===win?8:-8),15,100)});
  ev(W,`📜 Мирный договор: ${win.name} получила преимущество, ${lose.name} принимает условия капитуляции/уступок. Потери армий: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}`);
 }
 

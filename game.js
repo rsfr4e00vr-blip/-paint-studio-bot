@@ -687,6 +687,42 @@ C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r
 function say(t,m){if(window.__salv)return;ensure();S.feed.unshift({t,m:m||'🙂',d:`${months[S.month]} ${S.year}`});S.feed=S.feed.slice(0,40)}
 const blocked=()=>{if(S.campaignOver){toast('Кампания завершена. Начни новую игру.');return true}if(S.out){toast('Вы в оппозиции — вернуться к власти можно во вкладке «Возврат»');return true}return false};
 const myPower=()=>S.army/1000+S.air*1.5+S.navy*2+ARMK.reduce((a,k)=>a+(S[k]||0)*ARMS[k].pw,0);
+/* ИИ не нападает на игрока без повода, из страха и из состояния кризиса (долги, слабая валюта, истощение) */
+function aiMayAttackPlayer(c,me){
+ const now=S.year*12+S.month,n=aiNationOf(c.name);
+ if(n){
+  if(n.war||(n.exhaustion||0)>30||(n.debt||0)>n.gdp*.4||(n.fx||100)>160||(n.cooldown||0)>0)return false;
+ }
+ /* эффект устрашения после победы игрока над крупным противником */
+ if((S.deterUntil||0)>now&&c.power<me*1.8)return false;
+ /* без повода (враждебные отношения) нападает только заметно более сильная страна */
+ if(c.power<me*1.4&&c.value>-60)return false;
+ return true;
+}
+/* Последствия потери земель для побеждённой ИИ-страны: ВВП, промышленность, стабильность, курс, перемирие */
+function aiLossShock(name,share,w){
+ const n=aiNationOf(name);if(!n||!(share>0))return;
+ share=clamp(share,.03,.9);
+ const now=S.year*12+S.month;
+ n.gpeak=Math.max(n.gpeak||0,n.gdp);
+ n.gdp=Math.max(1,n.gdp*(1-share*.75));
+ n.pop=Math.max(.01,n.pop*(1-share*.8));
+ n.industry=clamp((n.industry||1)*(1-share*.5),.3,3);
+ n.infrastructure=clamp((n.infrastructure||1)*(1-share*.4),.3,3);
+ n.stability=clamp((n.stability||50)-8-share*30,5,96);
+ n.exhaustion=clamp((n.exhaustion||0)+share*40,0,100);
+ n.dmg=(n.dmg||0)+share*25;
+ n.fx=clamp((n.fx||100)*(1.35+Math.min(1,share/.3)*.55),45,950);
+ n.treasury=(n.treasury||0)*(1-share*.5);
+ n.war=null;n.cooldown=24;
+ if(w&&w.eco)w.eco.g=n.gdp;
+ /* игрок: послевоенное восстановление и эффект устрашения */
+ S.deterUntil=now+12+Math.round(share*10);
+ S.money+=Math.round(share*600);
+ S.inflation=Math.max(0,(S.inflation||0)-share*2);
+ S.approval=clamp((S.approval||50)+Math.round(share*6));
+ log(`📉 Потеря земель ударила по ${name}: ВВП −${Math.round(share*75)}%, валюта обесценилась, страна не сможет воевать ~2 года. Соседи опасаются вас.`);
+}
 function aiTick(){let me=myPower(),trade=0,help=0,sanc=0,thr=0,cand=[];
  S.relations.forEach(c=>{if(c.annexed||c.self)return;c.power=Math.max(10,Math.round(c.power+rnd(-1,1.3)));if(window.AIARS){try{AIARS.stock(c,S.wars.some(w=>w.n===c.name),S)}catch(e){}}c.value=clamp(c.value+(c.value>0?.1:-.1)*c.aggr,-100,100);
   if(c.value>40){c.intent='Хочет дружить и торговать';if(Math.random()<.08)trade++}
@@ -701,6 +737,7 @@ function aiTick(){let me=myPower(),trade=0,help=0,sanc=0,thr=0,cand=[];
  if(help){const n=Math.min(help,2);S.money+=300*n;log(`Союзники помогают деньгами: +${300*n} млн`)}
  if(sanc){S.gdp*=Math.pow(.995,Math.min(sanc,2));log('Против вас введены торговые санкции')}
  aiBrain(cand,me);
+ cand=cand.filter(c=>aiMayAttackPlayer(c,me));
  const now=S.year*12+S.month;
  if(cand.length&&(!S.war||(S.wars.length===1&&weakness()>=45))&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=18){const c=pick(cand);S.aiWarLast=now;startWar(c.name,true);log(`⚔️ ${c.name} объявил вам войну!`);say(`${c.name} напал на нас!`,'😱');pause()}}
 function people(){let L=[],h=S.history,p=h[h.length-2];if(S.approval<35)L.push(['Правительству пора уходить!','😡']);if(S.inflation>12)L.push(['Цены растут каждый месяц','😟']);if(S.employment<85)L.push(['Работы нет, заводы закрываются','😞']);if(S.war)L.push(['Сыновья на фронте, когда это кончится?','😢']);if(S.approval>65)L.push(['Жить стало лучше, спасибо!','😊']);if(S.tax>35)L.push(['Налоги душат малый бизнес','😠']);if(S.food<35)L.push(['Полки пусты, не хватает еды','😰']);if(S.stability<40)L.push(['На улицах неспокойно — выходим на протест','✊']);if(p&&S.gdp>p.gdp*1.003)L.push(['Экономика растёт, ура!','😃']);if(S.out)L.push(['Новая власть — посмотрим, что она сделает','🤔']);if(!L.length)L.push(['Всё спокойно, живём','🙂']);let a=pick(L);say(a[0],a[1]);if(a[1]=='✊'||a[1]=='😡')S.regions.forEach(r=>r.unrest=clamp(r.unrest+1))}
@@ -2366,7 +2403,7 @@ function peaceAll(free){
 }
 function spoils(name,mode,rid,keep){
  const w=S.wars.find(x=>x.n===name),c=rel(name);if(!w||!c)return;
- const k=w.won?1:.4+.6*w.p/100,W=wi(name);
+ const k=w.won?1:.4+.6*w.p/100,W=wi(name);let shock=0;
  if(c.popLeft==null)c.popLeft=W.pop?W.pop*1e6:c.power*3500;
  const gpc=S.gdp/Math.max(1,S.pop)*([0,.25,.55,.9,1.4,2.2][W.inc||2]);
  const resName=RLAB[(W.res||'f')[0]]||'Захвачено';
@@ -2374,18 +2411,19 @@ function spoils(name,mode,rid,keep){
   S.pop+=pop;S.gdp+=gdp;S.captured=S.captured||[];S.captured.push({name:label,from:name,pop,full:!!full,res:rs||W.res||'f',cont:W.cont});
   S.regions.push({name:label,pop,wealth:40,loyalty:35,unrest:38,industry:36,infra:34,resource:RLAB[(rs||W.res||'f')[0]]||resName,captured:true,from:name,res:rs||W.res||'f'});
  };
- if(mode==='tribute'){const m=Math.round((800+c.power*25)*k);ch({money:m,approval:2},false);c.value=clamp(c.value-30,-100,100);c.power=Math.round(c.power*.8);log(`💰 ${name} выплатил контрибуцию: +${fmt(m)} млн.`)}
+ if(mode==='tribute'){shock=.04;const m=Math.round((800+c.power*25)*k);ch({money:m,approval:2},false);c.value=clamp(c.value-30,-100,100);c.power=Math.round(c.power*.8);log(`💰 ${name} выплатил контрибуцию: +${fmt(m)} млн.`)}
  if(mode==='region'){const n=(c.regLost||0)+1,rg=regsOf(name);let R=rg&&rid?rg.find(x=>x.id===rid):null;
   if(R&&taken()[R.id])return;
   if(!R){const all=(WORLD.REGS[name]||WORLD.GEN.map(x=>({n:x[0]+' · '+name,s:x[1],res:x[2]}))),tk=c.regTaken=c.regTaken||[],left=all.filter(r=>!tk.includes(r.n));R=pick(left.length?left:all);tk.push(R.n)}
   else taken()[R.id]=1;
   const basePop=W.pop?W.pop*1e6:c.power*3500;let p=Math.round(Math.min(basePop*(R.s/100),c.popLeft,S.pop*.12));p=Math.max(p,Math.min(60000,c.popLeft));const g=Math.round(Math.min(p*gpc,S.gdp*.1));
-  c.popLeft=Math.max(0,c.popLeft-p);c.regLost=n;grab(R.n,p,g,false,R.res);ch({stability:-2,threat:3,legitimacy:-1},false);c.value=clamp(-45,-100,100);c.power=Math.max(10,Math.round(c.power*.8));
+  shock=Math.max(.04,Math.min(.35,R.s/100));c.popLeft=Math.max(0,c.popLeft-p);c.regLost=n;grab(R.n,p,g,false,R.res);ch({stability:-2,threat:3,legitimacy:-1},false);c.value=clamp(-45,-100,100);c.power=Math.max(10,Math.round(c.power*.8));
   log(`🗺 Вы захватили регион: ${R.n} (${name}). Население +${fmt(p)}, ВВП +${fmt(g)}.`);if(!keep)intlReact(name,'region');
   if(rg&&rg.every(x=>taken()[x.id])){c.annexed=true;S.puppets=S.puppets.filter(x=>x!==name);log(`🏴 Вы захватили все регионы — ${name} исчезла с карты мира.`)}}
  if(mode==='annex'){const p=Math.round(Math.min(c.popLeft,S.pop*.5)),g=Math.round(Math.min(p*gpc*1.1,S.gdp*.35));
-  grab(`Земли ${name}`,p,g,true);{const rg=regsOf(name)||[];S.captured[S.captured.length-1].regs=rg.filter(x=>!taken()[x.id]).map(x=>x.n);rg.forEach(x=>taken()[x.id]=1)}c.annexed=true;c.popLeft=0;S.puppets=S.puppets.filter(x=>x!==name);ch({stability:-5,legitimacy:-2,threat:8,rel:-6,reg:4},false);log(`🏴 Полностью захвачено государство ${name}: население +${fmt(p)}, ВВП +${fmt(g)}. Страна исчезла с карты мира, её земли показаны на вашей карте.`);intlReact(name,'annex')}
- if(mode==='puppet'){c.value=60;c.power=Math.max(10,Math.round(c.power*.7));if(!S.puppets.includes(name))S.puppets.push(name);ch({approval:3},false);log(`🎭 ${name} стал вассалом (+70 млн/мес). Его ${regCount(name)} обл. показаны на вашей карте светло-синим.`)}
+  grab(`Земли ${name}`,p,g,true);{const rg=regsOf(name)||[];S.captured[S.captured.length-1].regs=rg.filter(x=>!taken()[x.id]).map(x=>x.n);rg.forEach(x=>taken()[x.id]=1)}shock=1;c.annexed=true;c.popLeft=0;S.puppets=S.puppets.filter(x=>x!==name);ch({stability:-5,legitimacy:-2,threat:8,rel:-6,reg:4},false);log(`🏴 Полностью захвачено государство ${name}: население +${fmt(p)}, ВВП +${fmt(g)}. Страна исчезла с карты мира, её земли показаны на вашей карте.`);intlReact(name,'annex')}
+ if(mode==='puppet'){shock=.2;c.value=60;c.power=Math.max(10,Math.round(c.power*.7));if(!S.puppets.includes(name))S.puppets.push(name);ch({approval:3},false);log(`🎭 ${name} стал вассалом (+70 млн/мес). Его ${regCount(name)} обл. показаны на вашей карте светло-синим.`)}
+ aiLossShock(name,shock,w);
  if(!keep){S.wars=S.wars.filter(x=>x.n!==name);S.war=S.wars.length>0||!!S.martial}
 }
 /* Реакция мира на захват: страны одобряют или осуждают (стр. зависит от отношений с жертвой и силы агрессора) */
