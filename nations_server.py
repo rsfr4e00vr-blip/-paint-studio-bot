@@ -112,6 +112,8 @@ class Player:
         self.sanctions_in: list = []  # [{from, end}]
         self.sanctions_out: dict = {} # pid -> month_end
         self.war = None               # id войны
+        self.arsenal = {"missile": 0, "drone": 0, "strategic": 0}  # игровой запас арсенала
+        self.arsenal_cd = 0
         self.vassal_of = None         # id сюзерена
         self.vassal_end = 0
         self.vassal_tax = 10          # процент дохода, который вассал платит сюзерену
@@ -134,7 +136,7 @@ class Player:
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
                 "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
-                "res": round(self.rep.get("res", 70)), "infl": round(self.rep.get("infl", 5), 1), "rate": round(self.rep.get("rate", 5), 1)}
+                "res": round(self.rep.get("res", 70)), "infl": round(self.rep.get("infl", 5), 1), "rate": round(self.rep.get("rate", 5), 1), "arsenal": dict(self.arsenal)}
 
 
 class Room:
@@ -474,6 +476,8 @@ class Room:
                 enemy_orders = w.get("orders", {}).get(d.id if side is a else a.id, {})
                 pressure_plan = 0.0012 if enemy_orders.get("preset") == "pressure" else 0.0
                 q["gdp"] = max(25.0, q["gdp"] * (1.0 - (0.0025 + 0.006 * pressure + pressure_plan)))
+                # Долгосрочные последствия ударов: восстановление медленное, максимум 0.22 п.п. в месяц.
+                q["gdp"] = min(100.0, q["gdp"] + 0.22)
                 q["fx"] = min(500.0, q["fx"] * (1.0 + (0.004 + 0.009 * pressure + pressure_plan * 0.7)))
             # издержки обеим сторонам каждый месяц
             for side, enemy_ratio in ((a, pd / (pa + pd)), (d, pa / (pa + pd))):
@@ -684,6 +688,10 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_war(room, p, msg)
     elif kind == "war_command":
         await on_war_command(room, p, msg)
+    elif kind == "arsenal_buy":
+        await on_arsenal_buy(room, p, msg)
+    elif kind == "arsenal_strike":
+        await on_arsenal_strike(room, p, msg)
     elif kind == "global_response":
         await on_global_response(room, p)
     elif kind == "peace":
@@ -965,6 +973,59 @@ async def on_war(room: Room, p: Player, msg: dict):
     await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True})
     await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False})
     await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}!", "war")
+
+
+async def on_arsenal_buy(room: Room, p: Player, msg: dict):
+    """Закупка игрового арсенала. Сервер проверяет деньги и количество."""
+    kind = msg.get("weapon") if msg.get("weapon") in ("missile", "drone", "strategic") else "missile"
+    qty = int(num(msg.get("qty"), 1, 5, 1))
+    costs = {"missile": 260, "drone": 120, "strategic": 520}
+    cost = costs[kind] * qty
+    if p.rep.get("money", 0) < cost:
+        await room.notice(f"Для закупки нужно {cost} млн.", "warn", p)
+        return
+    p.rep["money"] -= cost
+    p.arsenal[kind] = min(20, p.arsenal.get(kind, 0) + qty)
+    await room.send(p, {"type": "arsenal_stock", "arsenal": p.arsenal, "money": -cost})
+    await room.notice(f"📦 {p.country} пополнил арсенал: {kind} ×{qty}.", "info", p)
+
+
+async def on_arsenal_strike(room: Room, p: Player, msg: dict):
+    """Абстрактный стратегический удар в игровой модели. Только по противнику в активной войне."""
+    w = room.wars.get(p.war or "")
+    if not w:
+        await room.notice("Арсенал можно применять только против противника в активной войне.", "warn", p)
+        return
+    enemy_id = w["d"] if w["a"] == p.id else w["a"]
+    enemy = room.players.get(enemy_id)
+    if not enemy or enemy.eliminated:
+        return
+    weapon = msg.get("weapon") if msg.get("weapon") in ("missile", "drone", "strategic") else "missile"
+    if p.arsenal.get(weapon, 0) < 1:
+        await room.notice("На складе нет выбранного вооружения. Сначала пополните арсенал.", "warn", p)
+        return
+    if room.month < p.arsenal_cd:
+        await room.notice(f"Арсенал перезаряжается: ещё {p.arsenal_cd-room.month} мес.", "warn", p)
+        return
+    p.arsenal[weapon] -= 1
+    p.arsenal_cd = room.month + 2
+    # Условные игровые коэффициенты, не реальные характеристики оружия.
+    damage = {"drone": 0.65, "missile": 1.35, "strategic": 2.15}[weapon]
+    # Защита и устойчивость смягчают ущерб; эффект остаётся в индексе экономики.
+    defense = min(0.65, enemy.rep.get("pvo", 0) * 0.001 + enemy.rep.get("stab", 50) * 0.002)
+    damage *= (1.0 - defense)
+    econ = w.setdefault("econ", {w["a"]: {"gdp": 100.0, "fx": 100.0}, w["d"]: {"gdp": 100.0, "fx": 100.0}})
+    q = econ.setdefault(enemy_id, {"gdp": 100.0, "fx": 100.0})
+    before = q.get("gdp", 100.0)
+    q["gdp"] = max(25.0, before - damage)
+    q["fx"] = min(500.0, q.get("fx", 100.0) * (1.0 + damage * 0.006))
+    # Реальный игровой ВВП игрока также получает удар и не сбрасывается отчётом.
+    enemy.rep["gdp"] = max(1000.0, enemy.rep.get("gdp", START_GDP) * (q["gdp"] / max(1.0, before)))
+    payload = {"type": "arsenal_hit", "war": w["id"], "attacker": p.id, "target": enemy_id,
+               "weapon": weapon, "damage": round(damage, 2), "gdp_index": round(q["gdp"], 1),
+               "fx_index": round(q["fx"], 1), "arsenal": p.arsenal}
+    await room.broadcast(payload)
+    await room.notice(f"📉 Арсенал: {p.country} нанёс экономический ущерб стране {enemy.country} (индекс ВВП −{damage:.1f} п.п.).", "war")
 
 
 async def on_war_command(room: Room, p: Player, msg: dict):
