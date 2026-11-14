@@ -369,6 +369,9 @@ function antiInflationCard(){
 window.H=window.H||{};
 H.cbSet=(k,v,id,suffix)=>{S[k]=Number(v);const e=document.getElementById(id);if(e)e.textContent=Number(v).toFixed(k==='cbRate'?1:0)+suffix;save()};
 H.cbAI=v=>{S.aiEconomicGovernor=!!v;log(v?'🧠 Экономическая политика передана нейросети.':'Экономическая политика снова под контролем правительства.');save();render()};
+H.fxPolicy=v=>{if(blocked()||!['free','managed','peg'].includes(v))return;fxEnsure();fxPolicyEnsure();S.fx.policy=v;log('Центральный банк изменил валютный режим: '+({free:'свободное плавание',managed:'управляемое плавание',peg:'валютный коридор'})[v]+'.');save();render()};
+H.fxReserve=()=>{if(blocked())return;if((S.money||0)<500)return toast('Нужно 500 млн в казне');fxEnsure();fxPolicyEnsure();S.money-=500;S.fx.fxReserves+=500;log('🏦 ЦБ пополнил золотовалютные резервы на 500 млн.');save();render()};
+H.fxTarget=()=>{if(blocked())return;fxEnsure();fxPolicyEnsure();S.fx.fxTarget=S.fx.rate;log('🎯 ЦБ установил текущий рыночный курс как целевой.');save();render()};
 H.cbAction=(a)=>{if(blocked())return;const acts={intervene:[900,()=>{S.antiInflationFund=Math.max(0,(S.antiInflationFund||0)-900);S.inflation=Math.max(0,S.inflation-1.1);S.trust=clamp(S.trust+3);if(S.fx)S.fx.rate*=.985},'ЦБ провёл валютную интервенцию'],food:[650,()=>{S.antiInflationFund=(S.antiInflationFund||0)+650;S.food=clamp(S.food+8);S.inflation=Math.max(0,S.inflation-.5)},'Создан продовольственный стабфонд'],competition:[400,()=>{S.inflation=Math.max(0,S.inflation-.35);S.trust=clamp(S.trust+2);S.gdp+=60},'Начата антимонопольная проверка'],bond:[0,()=>{const amount=Math.min(1800,Math.max(0,S.money-500));if(amount<100)return toast('В казне нет свободных средств');S.money-=amount;S.debt+=amount;S.printed=Math.max(0,(S.printed||0)-4);S.inflation=Math.max(0,S.inflation-.65);S.trust=clamp(S.trust+1.5)},'ЦБ стерилизовал часть денежной массы']};const q=acts[a];if(!q)return;if(S.money<q[0])return toast('Недостаточно средств');S.money-=q[0];q[1]();log(q[2]);save();render();toast(q[2])};
 function aiMonetaryGovernor(){
  if(!S.aiEconomicGovernor)return;
@@ -380,6 +383,12 @@ function aiMonetaryGovernor(){
  if(inf>12&&cash>2600&&!war&&Math.random()<.45){const spend=Math.min(350,cash-1000);S.money-=spend;S.antiInflationFund=(S.antiInflationFund||0)+spend;log('🧠 ИИ пополнил резервный фонд для сдерживания цен.');}
  if(inf>20&&S.food<45&&cash>1200){S.money-=Math.min(500,cash-500);S.food=clamp(S.food+5);S.inflation=Math.max(0,inf-.25);log('🧠 ИИ закупил продовольствие, чтобы сбить дефицит и цены.');}
  if(debtRatio>.45&&S.cbRate>6)S.cbRate=Math.max(5,S.cbRate-1); // не провоцировать долговой кризис
+ try{fxEnsure();fxPolicyEnsure();const F=S.fx,dev=F.rate/F.fxTarget-1;
+  if(Math.abs(dev)>.18&&F.fxReserves>900&&F.policy==='free')F.policy='managed';
+  if(Math.abs(dev)<.06&&inf<9&&trust>58&&F.fxReserves>2200&&F.policy==='managed')F.policy='peg';
+  if(F.policy==='peg'&&(F.fxReserves<520||war&&F.fxReserves<1100))F.policy='managed';
+  if(F.policy==='free'&&Math.abs(dev)<.08&&F.fxReserves>3000&&trust>65)F.policy='managed';
+ }catch(e){}
 }
 function monetaryTick(){
  const rate=Number(S.cbRate??5),reserve=Number(S.cbReserve??8),inf=Number(S.inflation)||0;
@@ -3187,7 +3196,7 @@ function fxEnsure(){
  if(!S.fx||S.fx.me!==me||S.fx.cur!==cur){
   const ref=cur==='USD'?'EUR':'USD',refB=(cur==='EUR'||ref==='EUR')?'GBP':'EUR';
   const b=cur==='NVT'?36:fxReal(cur)/fxReal(ref);
-  S.fx={me,cur,ref,refB,base:b,base0:b,rate:b,mom:0,shock:0,lastAlert:-99};S.fx.start=fxSnapAll();S.econ=null;
+  S.fx={me,cur,ref,refB,base:b,base0:b,rate:b,mom:0,shock:0,lastAlert:-99,policy:'managed',fxReserves:1800,fxTarget:b,fxInterventions:0};S.fx.start=fxSnapAll();S.econ=null;
  }
  if(!S.econ)S.econ={pg:S.gdp,last:S.gdp,tr:.002,loss:0,tax:0,gap:0,lossPct:0,peak:0,drag:0,wm:0,war0:null};
 }
@@ -3295,16 +3304,25 @@ function fxStress(){
  x-=.003*Math.max(0,S.stability-70)+.002*Math.max(0,(S.trust==null?70:S.trust)-75);
  return clamp(x,-.12,1.6,1.6);
 }
+function fxPolicyEnsure(){const F=S.fx;if(!F)return;if(!['free','managed','peg'].includes(F.policy))F.policy='managed';F.fxReserves=Math.max(0,Number(F.fxReserves)||0);F.fxTarget=Number(F.fxTarget)>0?F.fxTarget:F.base0;F.fxInterventions=Math.max(0,Number(F.fxInterventions)||0)}
+function fxPolicyStep(raw){
+ const F=S.fx;fxPolicyEnsure();let r=raw,dev=r/F.fxTarget-1;
+ if(F.policy==='managed'){
+  if(Math.abs(dev)>.12&&F.fxReserves>=120){r*=1-clamp(dev-Math.sign(dev)*.12,-.08,.08)*.22;F.fxReserves-=120;F.fxInterventions++}
+  r=Math.max(F.rate*.965,Math.min(F.rate*1.035,r));
+ }else if(F.policy==='peg'){
+  if(Math.abs(dev)>.025&&F.fxReserves>=260){r=F.fxTarget*(1+Math.sign(dev)*.025*.65);F.fxReserves-=260;F.fxInterventions++}
+  else if(Math.abs(dev)>.025){S.trust=clamp((S.trust??70)-.8);S.inflation=clamp((S.inflation||0)+.18,0,100);r=F.rate*(1+clamp(r/F.rate-1,-.06,.06)*.65)}
+  r=Math.max(F.rate*.99,Math.min(F.rate*1.01,r));
+ }
+ return r;
+}
 function fxTick(){
- fxEnsure();econWarTick();
- const F=S.fx,prev=F.rate,t=S.year*12+S.month;
- const nw=warsAll().length;
- if(F.nw==null)F.nw=nw;
+ fxEnsure();econWarTick();const F=S.fx,prev=F.rate,t=S.year*12+S.month;fxPolicyEnsure();
+ const nw=warsAll().length;if(F.nw==null)F.nw=nw;
  if(nw>F.nw){F.rate*=1.05;F.base*=1.03;log(`💱 Начало войны: рынки в панике, курс ${F.cur} резко ослаб.`)}
- F.nw=nw;
- let r=F.rate+(F.base*Math.exp(fxStress())-F.rate)*(nw?.30:.16);
- r*=Math.exp(rnd(-.006,.006)*(1+(nw?1.2:0)));
- r=Math.max(F.base0*.5,r);
+ F.nw=nw;let r=F.rate+(F.base*Math.exp(fxStress())-F.rate)*(nw?.30:.16);
+ r*=Math.exp(rnd(-.006,.006)*(1+(nw?1.2:0)));r=Math.max(F.base0*.5,r);r=fxPolicyStep(r);
  F.rate=r;F.mom=(r/prev-1)*100;if(Math.abs(r/F.base0-1)>.02)F.moved=1;
  if(F.mom>2)S.inflation=clamp(S.inflation+Math.min(.8,(F.mom-2)*.08),0,100);
  if(F.mom>8&&t-F.lastAlert>=3){F.lastAlert=t;log(`💱 Валютный кризис: 1 ${F.ref} подорожал на ${F.mom.toFixed(1)}% за месяц (теперь ${nf(r)} ${F.cur}).`);say('Курс валюты рушится — цены пересматривают каждый день','💸')}
@@ -3521,7 +3539,12 @@ function drawCharts(){
 if(!window.__chResize){window.__chResize=1;window.addEventListener('resize',()=>{try{if(tab==='charts')drawCharts()}catch(e){}})}
 function fxCard(){
  try{fxEnsure();const F=S.fx,m=fxMarket(),d=(F.rate/F.base0-1)*100;
-  return card('💱 Валюта',`<p>1 ${F.ref} = <b>${fxRate(F.rate)} ${F.cur}</b> <span class="${d>0?'dn':'up'}">${pct(d)} с начала игры</span>${(S.wars||[]).length?' · <span class="dn">война давит на курс</span>':''}</p>${m?`<p class="muted">Реальный рынок: 1 ${F.ref} = ${fxRate(m)} ${F.cur}</p>`:''}<button onclick="chGo('fx')">📈 Графики валюты</button> <button onclick="chGo('war')">⚔️ Потери войны</button>`)}catch(e){return''}
+  fxPolicyEnsure();const modeName={free:'Свободное плавание',managed:'Управляемое плавание',peg:'Валютный коридор'}[F.policy],dev=(F.rate/F.fxTarget-1)*100;
+  return card('💱 Валюта и защита курса',`<p>1 ${F.ref} = <b>${fxRate(F.rate)} ${F.cur}</b> <span class="${d>0?'dn':'up'}">${pct(d)} с начала игры</span>${(S.wars||[]).length?' · <span class="dn">война давит на курс</span>':''}</p>${m?`<p class="muted">Реальный рынок: 1 ${F.ref} = ${fxRate(m)} ${F.cur}</p>`:''}
+  <div class="cards"><div class="mini"><b>Режим курса</b><strong>${modeName}</strong><small>Отклонение от цели: ${pct(dev,2)}</small></div><div class="mini"><b>Золотовалютные резервы</b><strong>${fmt(F.fxReserves)} млн</strong><small>Интервенции оплачиваются из резервов</small></div><div class="mini"><b>Целевой курс</b><strong>${fxRate(F.fxTarget)} ${F.cur}</strong><small>Меняется при ручной настройке</small></div></div>
+  <div class="actions"><button onclick="H.fxPolicy('free')">🌊 Свободный курс</button><button onclick="H.fxPolicy('managed')">⚖️ Управляемый курс</button><button onclick="H.fxPolicy('peg')">📌 Коридор ±2,5%</button><button class="primary" onclick="H.fxReserve()">🏦 Купить резервы · 500 млн</button><button onclick="H.fxTarget()">🎯 Зафиксировать текущий курс как цель</button></div>
+  <p class="muted">Свободный курс лучше переносит кризисы, но сильнее колеблется. Управляемый сглаживает скачки. Коридор почти фиксирует курс, но быстро расходует резервы и при их нехватке теряет доверие.</p>
+  <button onclick="chGo('fx')">📈 Графики валюты</button> <button onclick="chGo('war')">⚔️ Потери войны</button>`)}catch(e){return''}
 }
 /* курсы: онлайн-обновление при запуске */
 try{if(window.FXD)FXD.fetchLive(ok=>{if(ok){fxRebase();if(tab==='charts'||tab==='finance')render(true)}})}catch(e){}
