@@ -702,6 +702,14 @@ def ai_arsenal_js():
 def ai_nations_js():
     return FileResponse(BASE / "ai_nations.js", media_type="application/javascript")
 
+@app.get("/nn_core.js")
+def nn_core_js():
+    return FileResponse(BASE / "nn_core.js", media_type="application/javascript")
+
+@app.get("/population_ai.js")
+def population_ai_js():
+    return FileResponse(BASE / "population_ai.js", media_type="application/javascript")
+
 @app.get("/resources.js")
 def resources_js():
     return FileResponse(BASE / "resources.js", media_type="application/javascript")

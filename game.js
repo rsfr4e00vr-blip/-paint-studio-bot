@@ -125,11 +125,39 @@ function geoBuild(){const T=Datamap.prototype.worldTopo,geoms=T.objects.world.ge
      const key=cp+' '+kind;seen[key]=(seen[key]||0)+1;names[i]=key+(seen[key]>1?' №'+seen[key]:'')+' ('+nm+')'});
     ress=cs.map((c,i)=>resAt(i))}}
   const bb=[x0-60,y0-60,x1+60,y1+60],cells=vcells(cs,bb);
-  C.regs=cs.map((c,i)=>({id:iso+':'+i,n:names[i],s:sh[i],res:ress[i],d:cells[i].length>2?'M'+cells[i].map(f1).join('L')+'Z':'',cx:c[0],cy:c[1]}))});
+  C.regs=cs.map((c,i)=>({id:iso+':'+i,n:names[i],s:sh[i],res:ress[i],d:cells[i].length>2?'M'+cells[i].map(f1).join('L')+'Z':'',cell:cells[i],cx:c[0],cy:c[1]}))});
  GEO.st='ready';try{geoMigrate()}catch(e){}}
 /* v2: регионов стало больше и нумерация изменилась — старые отметки захвата и привязки сбрасываем, показ на карте перестраивается */
 const GEOV=2;
 function geoMigrate(){if(S.geoV===GEOV)return;S.geoV=GEOV;S.taken={};const w=S.me&&wi(S.me),C=w&&w.iso&&GEO.c[w.iso];S.regions.forEach(r=>{delete r.geo;if(C){const m=C.regs.find(x=>x.n&&x.n.replace(/ \(.*\)/,'')===r.name);if(m)r.geo=m.id}});try{save()}catch(e){}}
+
+/* --- Реальная форма области = ячейка Вороного ∩ контур страны ---
+   Ячейка Вороного выходит за границу страны (в море и к соседям). На экране это прячет clip-path,
+   но для расчётов (старт дронов, точка падения, штриховка оккупации) нужна именно обрезанная форма.
+   Иначе дроны «вылетали» из Турции, взрывались в чужих странах, а штриховка вылезала за область. */
+const rbox=ring=>{if(ring._b)return ring._b;let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const q of ring){if(q[0]<a)a=q[0];if(q[0]>c)c=q[0];if(q[1]<b)b=q[1];if(q[1]>d)d=q[1]}return ring._b=[a,b,c,d]};
+function clipRing(sub,cell){
+ let ar=0;for(let i=0,j=cell.length-1;i<cell.length;j=i++)ar+=cell[j][0]*cell[i][1]-cell[i][0]*cell[j][1];
+ const sg=ar>=0?1:-1;let out=sub;
+ for(let i=0;i<cell.length&&out.length;i++){
+  const a=cell[i],b=cell[(i+1)%cell.length],inp=out,side=q=>sg*((b[0]-a[0])*(q[1]-a[1])-(b[1]-a[1])*(q[0]-a[0]));out=[];
+  for(let j=0;j<inp.length;j++){const P=inp[j],Q=inp[(j+1)%inp.length],sp=side(P),sq=side(Q);
+   if(sp>=0)out.push(P);
+   if((sp>=0)!==(sq>=0)){const t=sp/(sp-sq);out.push([P[0]+(Q[0]-P[0])*t,P[1]+(Q[1]-P[1])*t])}}}
+ return out}
+function regClip(C,r){
+ if(r._k)return r._k;
+ let polys=[];
+ if(r.cell&&r.cell.length>2){const cb=rbox(r.cell);
+  C.polys.forEach(p=>p.forEach(ring=>{const b=rbox(ring);if(b[2]<cb[0]||b[0]>cb[2]||b[3]<cb[1]||b[1]>cb[3])return;const o=clipRing(ring,r.cell);if(o.length>2)polys.push(o)}))}
+ if(!polys.length)polys=[].concat(...C.polys);
+ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;polys.forEach(rg=>{const b=rbox(rg);x0=Math.min(x0,b[0]);y0=Math.min(y0,b[1]);x1=Math.max(x1,b[2]);y1=Math.max(y1,b[3])});
+ const w=x1-x0,h=y1-y0,N=14,pts=[];let sx=0,sy=0;
+ for(let i=0;i<N;i++)for(let j=0;j<N;j++){const x=x0+(i+.5)*w/N,y=y0+(j+.5)*h/N;if(inside(x,y,polys)){pts.push([x,y]);sx+=x;sy+=y}}
+ let cx=(x0+x1)/2,cy=(y0+y1)/2;
+ if(pts.length){cx=sx/pts.length;cy=sy/pts.length;if(!inside(cx,cy,polys)){let bd=1e18;pts.forEach(q=>{const d=(q[0]-cx)**2+(q[1]-cy)**2;if(d<bd){bd=d;sx=q[0];sy=q[1]}});cx=sx;cy=sy}}
+ return r._k={polys,d:polys.map(ringD).join(''),x0,y0,x1,y1,w,h,cx,cy}}
+function geoOf(el){const id=el&&el.getAttribute&&el.getAttribute('data-r');if(!id)return null;const i=id.lastIndexOf(':'),C=GEO.c[id.slice(0,i)];if(!C)return null;const r=C.regs[+id.slice(i+1)];return r&&r.id===id?regClip(C,r):null}
 function regsOf(name){const W=wi(name);const C=GEO.c[W.iso];return C&&C.regs.length&&GEO.st==='ready'?C.regs:null}
 /* --- раскраска --- */
 const taken=()=>(S.taken=S.taken||{});
@@ -148,7 +176,7 @@ function drawOcc(svg){
  let g=svg.querySelector('#occl');
  if(!g){const d=document.createElementNS(NS,'defs');d.innerHTML=`<pattern id="occhatch" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.4" height="2.4" fill="${MYC}" opacity=".22"/><line x1="0" y1="0" x2="0" y2="2.4" stroke="${MYC}" stroke-width="1"/></pattern>`;svg.appendChild(d);g=document.createElementNS(NS,'g');g.id='occl';g.setAttribute('pointer-events','none');svg.appendChild(g)}
  g.replaceChildren();
- ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');p.setAttribute('d',e.getAttribute('d')||'');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
+ ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');const gg=geoOf(e);p.setAttribute('d',gg?gg.d:(e.getAttribute('d')||''));p.setAttribute('fill-rule','evenodd');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
 function buildWorldNode(){const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
  const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>r.d?`<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/>`:'').join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
  body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
@@ -502,15 +530,16 @@ function enemyStrikes(w,c){
   const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60*((S.dark&&S.dark[r.name])?.55:1):r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
   const planned=(w.enemyPlan&&w.enemyPlan.region)||'';
   const reg=regs.find(x=>x.name===planned)||regs[0]||{name:'страна',pop:0,industry:0,infra:0,unrest:0};
+  const shf=window.PopAI?PopAI.shelter(S,reg.name):1;   // доля мирных, которые успели укрыться
   const pI=air?Math.min(.92,(S.aa||0)*.09+bcount('aabat')*.12+(w.airDefense||0)*.006):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
   let caught=false;
   if(air){if(pool>0){pool-=act.decoy?1.2:1;caught=Math.random()<pI}}else caught=Math.random()<pI;
-  if(caught){stopped++;log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
-  hits++;shows.push({w:act.w,reg,down:false,f});
+  if(caught){stopped++;if(window.PopAI)PopAI.hit(S,reg.name,t,.3*f);log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
+  hits++;shows.push({w:act.w,reg,down:false,f});if(window.PopAI)PopAI.hit(S,reg.name,t,f);
   let shift=0,r=0;
   if(t==='mil'){
    shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f*myLS());S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
-   const cd=popLoss(rnd(30,160)*f*myLS());S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
+   const cd=popLoss(rnd(30,160)*f*myLS()*shf);S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    S.morale=clamp(S.morale-.8*f);S.equipment=clamp(S.equipment-.8*f);S.ammo=clamp(S.ammo-.5*f);S.approval=clamp(S.approval+.4*f*Math.max(.15,(100-S.approval)/50));
    let extra='';if(Math.random()<.05*f&&S.mil>1){S.mil--;extra=' Уничтожен военный завод!'}
    r=shift/3+kills/2500;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по военным целям (${reg.name}). Погибло ${fmt(kills)} солдат, ${fmt(cd)} мирных.${extra}`);
@@ -518,12 +547,12 @@ function enemyStrikes(w,c){
   else if(t==='infra'){
    shift=1.5*f*.5;const di=Math.min(reg.infra,2.2*f),dn=Math.min(reg.industry,1.5*f);reg.infra=clamp(reg.infra-di);reg.industry=clamp(reg.industry-dn);
    S.energy=clamp(S.energy-1.2*f);S.fuel=clamp(S.fuel-.8*f);S.gdp*=1-.0008*f;
-   const cd=popLoss(rnd(120,520)*f*myLS());S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
+   const cd=popLoss(rnd(120,520)*f*myLS()*shf);S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    let extra='';if(Math.random()<.04*f&&S.civ>2){S.civ--;extra=' Разрушен гражданский завод!'}
    r=shift/3+(di+dn)*.05;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по инфраструктуре (${reg.name}): дороги, энергосеть, склады. Погибло ${fmt(cd)} мирных.${extra}`);
    infraNews(w,reg.name,false,AIARS.WN[act.w])}
   else{
-   shift=.5*f*.5;const dead=Math.round(rnd(3000,9000)*f*myLS()),d=popLoss(dead);S.warCiv=(S.warCiv||0)+d;w.civDead=(w.civDead||0)+d;
+   shift=.5*f*.5;const dead=Math.round(rnd(3000,9000)*f*myLS()*shf),d=popLoss(dead);S.warCiv=(S.warCiv||0)+d;w.civDead=(w.civDead||0)+d;
    reg.unrest=clamp(reg.unrest+2*f);S.approval=clamp(S.approval+.6*f*Math.max(.15,(100-S.approval)/50));S.stability=clamp(S.stability-.8*f);
    r=shift/3+(d/9000)*.25+(S.stability<42?.6:.2)*f*.5-.5;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по гражданским (${reg.name}). Погибло ${fmt(d)} мирных жителей. Мир осуждает противника.`);
    warNews(w,'🏘',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага ударила по жилым кварталам — погибло ${fmt(d)} мирных жителей`)}
@@ -637,7 +666,7 @@ if(k=='bomb'){if(S.war){S.threat=clamp(S.threat-18);S.approval=clamp(S.approval-
 if(k=='petard'){S.approval=clamp(S.approval+.5);if(Math.random()<.12){S.stability=clamp(S.stability-2);log('Петарда подожгла ларёк на параде');say('Горит ларёк! Ха-ха… и ужас','😂')}else{log('Петарды на празднике подняли настроение');say('Классный салют на параде!','😂')}}
 save();render()};
 window.dep=(i,a)=>{if(blocked())return;let d=S.deps[i];if(a=='bribe'){if(S.money<200)return toast('Недостаточно средств');S.money-=200;d.l=clamp(d.l+15);S.legitimacy=clamp(S.legitimacy-1);log(`Депутат ${d.n} получил «поддержку» 200 млн`)}if(a=='meet'){d.l=clamp(d.l+5);log(`Встреча с депутатом ${d.n}`)}if(a=='expel'){d.l=0;S.legitimacy=clamp(S.legitimacy-2);S.deps[i]=Object.assign(d,{n:pick(DN)+' мл.',l:50});log(`Депутат ${d.n} заменён`);say('Депутата выгнали — скандал!','🤨')}save();render()};
-function addonTick(){ensure();cdTick();aiTick();if(window.NationsAI)NationsAI.tick(S);people();if(!S.out){econTick();polTick();hoiTick();mfgTick()}S.deps.forEach(d=>{d.l=clamp(d.l+(S.approval-50)*.03+(55-d.l)*.03+rnd(-1.5,1.5));if(d.l<20&&Math.random()<.1)log(`Депутат ${d.n} интригует против правительства`)});
+function addonTick(){ensure();cdTick();aiTick();if(window.NationsAI)NationsAI.tick(S);people();if(window.PopAI)try{PopAI.tick(S,{atWar:atWar(),aa:(S.aa||0)+bcount('aabat')*1.5,bunkers:bcount('bunker')})}catch(e){console.warn('PopAI',e)}if(!S.out){econTick();polTick();hoiTick();mfgTick()}S.deps.forEach(d=>{d.l=clamp(d.l+(S.approval-50)*.03+(55-d.l)*.03+rnd(-1.5,1.5));if(d.l<20&&Math.random()<.1)log(`Депутат ${d.n} интригует против правительства`)});
 if(S.out){S.out.months++;let my=S.parties.find(p=>p.name===S.playerParty);S.fund+=Math.round((my?my.support:0)*2);if(S.out.months>=72){S.campaignOver=true;log('Вы не вернулись к власти за 6 лет.')}return}
 if(S.grace>0)S.grace--;
 let hit=OUST.findIndex(o=>o[0]());
@@ -664,7 +693,7 @@ function tacticsCard(){
  const sm=window.AIARS?AIARS.summary(S):null;
  let h=`<div class="cards"><div class="mini">Погибло солдат за все войны<b>${fmt(S.warSold||0)}</b></div><div class="mini">Погибло мирных жителей<b>${fmt(S.warCiv||0)}</b></div><div class="mini">Мирные жители врага<b>${fmt(S.warECiv||0)}</b></div><div class="mini">Население сейчас<b>${fmt(S.pop)}</b></div></div>`;
  if(atWar())h+=S.wars.map(w=>{const c=rel(w.n)||{},ars=c.ars||{};return`<div class="mini"><b>⚔️ ${w.n}</b><small>ПВО врага: ${Math.round(c.aa==null?(c.power||0)/25:c.aa)} · арсенал врага (разведка): пушки ${Math.floor(ars.cannon||0)}, дроны ${Math.floor(ars.drone||0)}, танки ${Math.floor(ars.tank||0)}, ракеты ${Math.floor(ars.rocket||0)}${ars.bomb>=1?', бомба есть':''}</small><small>Потери войны: ${fmt(w.soldDead||0)} солдат, ${fmt(w.civDead||0)} мирных (наших) · у врага мирных: ${fmt(w.eCiv||0)}</small></div>`}).join('');
- if(sm)h+=`<p class="muted">🧠 <b>ИИ-тактик врага учится.</b> Изучено ударов: <b>${sm.steps}</b> · результативных: ${sm.skill}% · любопытство ${Math.round(sm.eps*100)}%.${sm.best.length?`<br>Лучшее по опыту: ${sm.best.join('; ')}.`:' Пока копит опыт.'}<br>Он учитывает ваши ПВО и укрепления, бьёт туда, где больнее, и меняет тактику, если вы её закрываете. Свою ПВО и бункеры стройте заранее.</p>`;
+ if(sm)h+=`<p class="muted">🧠 <b>ИИ-тактик врага учится.</b> Изучено ударов: <b>${sm.steps}</b> · нейросеть: ${sm.nnSteps} шагов обучения · освоено оружия: ${sm.weaponsUsed}/${sm.weaponsTotal} · опробовано сочетаний оружие×цель: ${sm.coverage}% · результативных: ${sm.skill}% · любопытство ${Math.round(sm.eps*100)}%.${sm.best.length?`<br>Лучшее по опыту: ${sm.best.join('; ')}.`:' Пока копит опыт.'}<br>Он учитывает ваши ПВО и укрепления, бьёт туда, где больнее, и меняет тактику, если вы её закрываете. Свою ПВО и бункеры стройте заранее.</p>`;
  return card('🧠 Потери и тактика врага',h)}
 /* ------------------------ АНИМАЦИЯ БОЁВ НА КАРТЕ ------------------------ */
 const SVGNS='http://www.w3.org/2000/svg';
@@ -675,29 +704,23 @@ function strikeScene(o){
 /* Точки пуска СТРОГО на территории стороны-атакующего: берём реальную границу ближайших к цели областей
    и сдвигаем точку внутрь (isPointInFill проверяет, что она действительно внутри страны). */
 function launchSites(els,T,bb){
- const out={pts:[],wide:[],el:null};
- const cand=els.map(e=>({e,c:bb(e)})).filter(x=>x.c&&x.c.w*x.c.h>0).sort((a,b)=>Math.hypot(a.c.x-T.x,a.c.y-T.y)-Math.hypot(b.c.x-T.x,b.c.y-T.y)).slice(0,5);
+ const out={pts:[],wide:[],el:null,g:null};
+ const cand=els.map(e=>{const g=geoOf(e);return {e,g,c:g?{x:g.cx,y:g.cy,w:g.w,h:g.h}:bb(e)}}).filter(x=>x.c&&x.c.w*x.c.h>0).sort((a,b)=>Math.hypot(a.c.x-T.x,a.c.y-T.y)-Math.hypot(b.c.x-T.x,b.c.y-T.y)).slice(0,5);
  const all=[];
- cand.forEach(({e,c})=>{
-  let len=0;try{len=e.getTotalLength()}catch(_){}
-  if(!len)return;
-  const inset=Math.max(.5,Math.min(3,Math.min(c.w,c.h)*.12)),N=110;
-  for(let i=0;i<N;i++){
-   const p=e.getPointAtLength(len*i/N),dx=c.x-p.x,dy=c.y-p.y,dl=Math.hypot(dx,dy)||1;let q=null;
-   for(const m of [1,1.8,3]){
-    const x=p.x+dx/dl*inset*m,y=p.y+dy/dl*inset*m;let ok=true;
-    try{if(typeof e.isPointInFill==='function')ok=e.isPointInFill(new DOMPoint(x,y))}catch(_){}
-    if(ok){q={x,y};break}
-   }
-   if(q)all.push({x:q.x,y:q.y,d:Math.hypot(q.x-T.x,q.y-T.y),e});
-  }
+ cand.forEach(({e,g,c})=>{
+  const inset=Math.max(.5,Math.min(3,Math.min(c.w,c.h)*.12));
+  const isIn=(x,y)=>{if(g)return inside(x,y,g.polys);try{return typeof e.isPointInFill!=='function'||e.isPointInFill(new DOMPoint(x,y))}catch(_){return true}};
+  const push=p=>{const dx=c.x-p[0],dy=c.y-p[1],dl=Math.hypot(dx,dy)||1;
+   for(const m of [1,1.8,3]){const x=p[0]+dx/dl*inset*m,y=p[1]+dy/dl*inset*m;if(isIn(x,y)){all.push({x,y,d:Math.hypot(x-T.x,y-T.y),e,g});break}}};
+  if(g){g.polys.forEach(ring=>{const n=ring.length,st=Math.max(1,Math.floor(n/110));for(let i=0;i<n;i+=st)push(ring[i])})}
+  else{let len=0;try{len=e.getTotalLength()}catch(_){}if(!len)return;for(let i=0;i<110;i++){const q=e.getPointAtLength(len*i/110);push([q.x,q.y])}}
  });
  if(!all.length)return out;
  all.sort((a,b)=>a.d-b.d);
  const d0=all[0].d;
  out.pts=all.filter(p=>p.d<=d0+Math.max(8,d0*.12)).slice(0,40);
  out.wide=all.filter(p=>p.d<=d0+Math.max(20,d0*.3)).slice(0,120);
- out.el=all[0].e;
+ out.el=all[0].e;out.g=all[0].g;
  return out;
 }
 function runScene(o){
@@ -712,7 +735,8 @@ function runScene(o){
  host.appendChild(svg);document.body.appendChild(ov);
  const hostW=host.getBoundingClientRect().width||340;
  const meIso=wi(S.me||'').iso,enIso=wi(o.enemy).iso;
- const bb=el=>{try{const b=el.getBBox();return{x:b.x+b.width/2,y:b.y+b.height/2,w:b.width,h:b.height}}catch(e){return null}};
+ const bb=el=>{const g=geoOf(el);if(g)return{x:g.cx,y:g.cy,w:g.w,h:g.h};try{const b=el.getBBox();return{x:b.x+b.width/2,y:b.y+b.height/2,w:b.width,h:b.height}}catch(e){return null}};
+ const dOf=el=>{const g=geoOf(el);return g?g.d:(el.getAttribute('d')||'')};
  const all=[...svg.querySelectorAll('[data-r]')];
  const shotsIn=(o.shots&&o.shots.length)?o.shots:[{regId:o.regId,down:o.down}];const shots=[];shotsIn.forEach(s=>{let el=s.regId?all.find(e=>e.getAttribute('data-r')===s.regId):null;if(!el)el=svg.querySelector('[data-o="'+enIso+'"]');const c=el&&bb(el);if(c)shots.push({el,c,down:!!s.down})});let tEl=shots.length?shots[0].el:null;
  if(!tEl)tEl=svg.querySelector('[data-o="'+enIso+'"]');
@@ -736,21 +760,24 @@ function runScene(o){
  svg.setAttribute('viewBox',`${cx-w/2} ${cy-h/2} ${w} ${h}`);
  const px=n=>n*w/hostW;
  const L=document.createElementNS(SVGNS,'g');L.id='fxl';svg.appendChild(L);
- if(LP.el&&(()=>{const b=bb(LP.el);return !b||b.w*b.h<w*h*.3})()){const hl=document.createElementNS(SVGNS,'path');hl.setAttribute('d',LP.el.getAttribute('d')||'');hl.setAttribute('fill',o.rev?'#ff5c66':'#d6b25e');hl.setAttribute('opacity','.32');hl.setAttribute('pointer-events','none');L.appendChild(hl)}
+ if(LP.el&&(()=>{const b=bb(LP.el);return !b||b.w*b.h<w*h*.3})()){const hl=document.createElementNS(SVGNS,'path');hl.setAttribute('d',LP.g?LP.g.d:(LP.el.getAttribute('d')||''));hl.setAttribute('fill-rule','evenodd');hl.setAttribute('fill',o.rev?'#ff5c66':'#d6b25e');hl.setAttribute('opacity','.32');hl.setAttribute('pointer-events','none');L.appendChild(hl)}
  const mk=(tag,at,par)=>{const e=document.createElementNS(SVGNS,tag);for(const k in at)e.setAttribute(k,at[k]);(par||L).appendChild(e);return e};
  const bez=(a,c,b,t)=>({x:(1-t)*(1-t)*a.x+2*(1-t)*t*c.x+t*t*b.x,y:(1-t)*(1-t)*a.y+2*(1-t)*t*c.y+t*t*b.y});
  const acts=[];const add=(t0,dur,init,upd,end)=>acts.push({t0,dur,init,upd,end,st:null,fin:false});
  /* маркеры: откуда и куда */
  add(0,6,()=>({a:mk('circle',{cx:St.x,cy:St.y,r:px(4),fill:'#d6b25e',stroke:'#0b1218','stroke-width':px(.8)}),b:shots.filter((s,i)=>shots.findIndex(z=>z.el===s.el)===i).map(s=>mk('circle',{cx:s.c.x,cy:s.c.y,r:px(4),fill:'none',stroke:'#ff5c66','stroke-width':px(1.2)}))}),
   (st,p)=>{const k=(p*acts[0].dur)%1;st.b.forEach(e=>{e.setAttribute('r',px(4+9*k));e.setAttribute('opacity',1-k)})},st=>{st.a.remove();st.b.forEach(e=>e.remove())});
- const hit=(t0,pow,el0)=>add(t0,.9,()=>({e:mk('path',{d:(el0||tEl).getAttribute('d')||'',fill:'#ff2d2d',stroke:'#ffd7a0','stroke-width':px(.8),opacity:0})}),
+ const hit=(t0,pow,el0)=>add(t0,.9,()=>({e:mk('path',{d:dOf(el0||tEl),'fill-rule':'evenodd',fill:'#ff2d2d',stroke:'#ffd7a0','stroke-width':px(.8),opacity:0})}),
   (st,p)=>st.e.setAttribute('opacity',(p<.2?p/.2:1-(p-.2)/.8)*(.55*(pow||1))),st=>st.e.remove());
  const boom=(x,y,R,t0,nh,el0)=>{add(t0,.8,()=>({a:mk('circle',{cx:x,cy:y,r:0,fill:'#ffb347',opacity:.9}),b:mk('circle',{cx:x,cy:y,r:0,fill:'none',stroke:'#ff5c3a','stroke-width':px(1.6)}),c:mk('circle',{cx:x,cy:y,r:0,fill:'#fff6d0'})}),
   (st,p)=>{const r=px(R)*Math.sqrt(p);st.a.setAttribute('r',r);st.a.setAttribute('opacity',(1-p)*.9);st.b.setAttribute('r',px(R*1.7)*p);st.b.setAttribute('opacity',1-p);st.c.setAttribute('r',r*.45*(1-p));},st=>{st.a.remove();st.b.remove();st.c.remove()});
   for(let i=0;i<7;i++){const a=Math.random()*6.28,d=px(R*(.8+Math.random()*.9));add(t0,.7,()=>({e:mk('circle',{cx:x,cy:y,r:px(1.2),fill:'#ffd37a'})}),(st,p)=>{st.e.setAttribute('cx',x+Math.cos(a)*d*p);st.e.setAttribute('cy',y+Math.sin(a)*d*p-px(6)*Math.sin(p*3.14));st.e.setAttribute('opacity',1-p)},st=>st.e.remove())}
   if(!nh)hit(t0,R>40?1.4:1,el0)};
  const muzzle=(P,t0)=>add(t0,.25,()=>({e:mk('circle',{cx:P.x,cy:P.y,r:0,fill:'#fff2b0'})}),(st,p)=>{st.e.setAttribute('r',px(7)*Math.sin(p*3.14));},st=>st.e.remove());
- const aimIn=sh=>{const c=sh.c;for(let n=0;n<30;n++){const x=c.x+(Math.random()-.5)*c.w*.8,y=c.y+(Math.random()-.5)*c.h*.8;let ok=true;try{if(typeof sh.el.isPointInFill==='function')ok=sh.el.isPointInFill(new DOMPoint(x,y))}catch(_){}if(ok)return{x,y}}return{x:c.x,y:c.y}};
+ const aimIn=sh=>{const c=sh.c,g=geoOf(sh.el);for(let n=0;n<60;n++){const x=c.x+(Math.random()-.5)*c.w*.9,y=c.y+(Math.random()-.5)*c.h*.9;let ok=true;if(g)ok=inside(x,y,g.polys);else try{if(typeof sh.el.isPointInFill==='function')ok=sh.el.isPointInFill(new DOMPoint(x,y))}catch(_){}if(ok)return{x,y}}return{x:c.x,y:c.y}};
+  const defRings=(GEO.c[o.rev?meIso:enIso]||{}).rings;
+  /* сбитый снаряд обрывается над территорией того, кто его сбил (над страной-обороняющейся), а не над чужой землёй */
+  const downAt=(P0,Cc,Aim)=>{const ok=[];if(defRings)for(let u=.45;u<=.95;u+=.05){const q=bez(P0,Cc,Aim,u);if(inside(q.x,q.y,defRings))ok.push(u)}return ok.length?ok[Math.floor(Math.random()*ok.length)]:.4+Math.random()*.3};
   const flak=(x,y,t0)=>{add(t0,.55,()=>({a:mk('circle',{cx:x,cy:y,r:0,fill:'#cfe9ff',opacity:.9}),b:mk('circle',{cx:x,cy:y,r:0,fill:'none',stroke:'#7fc4ff','stroke-width':px(1.2)})}),(st,p)=>{st.a.setAttribute('r',px(6)*Math.sqrt(p));st.a.setAttribute('opacity',(1-p)*.9);st.b.setAttribute('r',px(12)*p);st.b.setAttribute('opacity',1-p)},st=>{st.a.remove();st.b.remove()});
    for(let i=0;i<6;i++){const a=Math.random()*6.28,d=px(7+Math.random()*6);add(t0,.6,()=>({e:mk('circle',{cx:x,cy:y,r:px(.9),fill:'#9fd4ff'})}),(st,p)=>{st.e.setAttribute('cx',x+Math.cos(a)*d*p);st.e.setAttribute('cy',y+Math.sin(a)*d*p+px(5)*p*p);st.e.setAttribute('opacity',1-p)},st=>st.e.remove())}};
   /* Один и тот же изгиб кривой от старта до точки падения. Сбитая ракета/дрон летит по ТОЙ ЖЕ кривой и просто обрывается раньше.
@@ -759,7 +786,7 @@ function runScene(o){
    sh=sh||shots[0];const Aim=aimIn(sh),sc=shots.length>6?.75:1;
    const dx=Aim.x-P0.x,dy=Aim.y-P0.y,d=Math.hypot(dx,dy)||1,nx=-dy/d,ny=dx/d,side=(i%2?1:-1)*arc*d*(.55+Math.random()*.45);
    const C={x:(P0.x+Aim.x)/2+nx*side,y:(P0.y+Aim.y)/2+ny*side};
-   const pe=sh.down?.4+Math.random()*.3:1,dd=dur*pe,E=bez(P0,C,Aim,pe);
+   const pe=sh.down?downAt(P0,C,Aim):1,dd=dur*pe,E=bez(P0,C,Aim,pe);
    muzzle(P0,t0);
    add(t0,dd,()=>({tr:mk('polyline',{fill:'none',stroke:rk?'#ffb06a':'#fff3c4','stroke-width':px((rk?2:1.3)*sc),opacity:.85,'stroke-linecap':'round','stroke-linejoin':'round'}),b:mk('path',{fill:rk?'#ff6a3d':'#e8eef5',stroke:'#0b1218','stroke-width':px(.5)}),pts:[]}),
     (st,p)=>{const u=p*pe,q=bez(P0,C,Aim,u),vx=2*(1-u)*(C.x-P0.x)+2*u*(Aim.x-C.x),vy=2*(1-u)*(C.y-P0.y)+2*u*(Aim.y-C.y),a=Math.atan2(vy,vx),c=Math.cos(a),s2=Math.sin(a),L1=px((big?10:7)*sc),W=px((big?5:3.6)*sc);
@@ -2380,7 +2407,7 @@ function billsTab(){
  return `<div class="grid">${card('✅ Принятые законы ('+ad.length+')',ad.length?`<div class="cards">${ad.map(B=>cardB(B,'ad')).join('')}</div>`:'<p class="muted">Пока ни одного.</p>')}${card('❌ Отклонённые и отменённые ('+rj.length+')',rj.length?`<div class="cards">${rj.map(B=>cardB(B,'rj')).join('')}</div>`:'<p class="muted">Нет.</p>')}${card('📜 Не вносились ('+av.length+')',`<div class="cards">${av.map(B=>cardB(B,'av')).join('')}</div>`)}</div>`;
 }
 function peopleTab(){
- return `<div class="grid">${card('👥 Настроение групп',`<div class="cards">${Object.keys(GR).map(k=>`<div class="mini"><b>${GR[k][1]} ${GR[k][0]}</b>${bar('Довольны',S.gr[k])}</div>`).join('')}</div><p class="muted">Группы реагируют на экономику, законы, бюджет и решения. Ниже 25% — протесты, выше 75% — легитимность растёт.</p>`)}${card('💬 Что говорят люди',feedHtml())}${card('Настроение страны',bar('Одобрение',S.approval)+bar('Стабильность',S.stability)+`<p class="muted">Недовольство регионов: ${S.regions.map(r=>`${r.name} ${Math.round(r.unrest)}%`).join(' · ')}</p>`)}</div>`;
+ return `<div class="grid">${card('👥 Настроение групп',`<div class="cards">${Object.keys(GR).map(k=>`<div class="mini"><b>${GR[k][1]} ${GR[k][0]}</b>${bar('Довольны',S.gr[k])}</div>`).join('')}</div><p class="muted">Группы реагируют на экономику, законы, бюджет и решения. Ниже 25% — протесты, выше 75% — легитимность растёт.</p>`)}${window.PopAI?card('🧠 Население учится',PopAI.panel(S)):''}${card('💬 Что говорят люди',feedHtml())}${card('Настроение страны',bar('Одобрение',S.approval)+bar('Стабильность',S.stability)+`<p class="muted">Недовольство регионов: ${S.regions.map(r=>`${r.name} ${Math.round(r.unrest)}%`).join(' · ')}</p>`)}</div>`;
 }
 
 /* ------------------------ РЫНОК ------------------------ */
