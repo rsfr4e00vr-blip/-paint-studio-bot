@@ -79,8 +79,11 @@ function recov(n){
  return gap>.002?Math.min(.0035,gap*.025)*fr:0;
 }
 function economy(n){
+ n.inflation??=4.5;n.cbRate??=5;n.priceStability??=50;
  const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>byNameCur[x]&&byNameCur[x].war).length/tp.length:0;
- const growth=C(n.growth+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-(n.war?.0022+n.exhaustion*.00003+(n.dmg||0)*.00015:0)+recov(n)-R(.001,.0016),-.012,.024);
+ const inflationPressure=(n.fx||100)>125?.00045:(n.fx||100)<90?-.00012:0;
+ const growth=C(n.growth-(n.inflation>12?.00018:0)+(n.stability-55)*.000025+n.research*.00008+n.tradePartners.length*.00015-tpWar*Math.min(.0016,tp.length*.0003)-worldDrag-(n.war?.0022+n.exhaustion*.00003+(n.dmg||0)*.00015:0)+recov(n)-R(.001,.0016),-.012,.024);
+ n.inflation=C(n.inflation+inflationPressure+(n.war?.12:0)+(n.foodShortage?.18:0)-(n.cbRate-5)*.012,-2,60);n.priceStability=C(n.priceStability+(n.inflation<7?.6:-.35),0,100);
  n.gdp=Math.max(1,n.gdp*(1+growth));n.pop=Math.max(.01,n.pop*(1+C(.00015+(n.stability-55)*.000006-R(0,.00025),-.001,.0008)));
  const income=n.gdp*(.0015+n.industry*.00012),upkeep=n.power*.035+n.gdp*.00045+n.manpower*.018;
  /* Разрешаем уходить в минус (бюджетный дефицит до -5% ВВП) при тяжёлых расходах */
@@ -197,9 +200,9 @@ function peace(W,w,a,b,A){
    инфраструктура, наука, армия, ПВО, производство оружия, стабилизация, союз, торговля, мобилизация, мир.
    Сеть общая для всех стран (у каждой своё состояние на входе) и учится по настоящему результату: рост «оценки состояния»
    страны (ВВП, стабильность, мощь, казна, потери войны). Так страны со временем сами находят, что работает. */
-const ACTS=['economy','industry','infra','research','army','aa','arsenal','stabilize','ally','trade','mobilize','peace','borrow','repay'];
-const ACT_RU={economy:'бизнес-климат',industry:'промышленность',infra:'инфраструктура',research:'наука',army:'армия',aa:'ПВО',arsenal:'оружие',stabilize:'стабилизация',ally:'союзы',trade:'торговля',mobilize:'мобилизация',peace:'мир',borrow:'заём',repay:'погашение долга'};
-const SIN=23,SNH=28,SOUT=ACTS.length,SPRIOR=[.3,.25,.2,.2,.15,.1,.1,.1,.1,.2,0,0,0,0];
+const ACTS=['economy','industry','infra','research','army','aa','arsenal','stabilize','ally','trade','mobilize','peace','borrow','repay','rate','reserves','stabilizePrices'];
+const ACT_RU={economy:'бизнес-климат',industry:'промышленность',infra:'инфраструктура',research:'наука',army:'армия',aa:'ПВО',arsenal:'оружие',stabilize:'стабилизация',ally:'союзы',trade:'торговля',mobilize:'мобилизация',peace:'мир',borrow:'заём',repay:'погашение долга',rate:'борьба с инфляцией',reserves:'банковские резервы',stabilizePrices:'стабилизация цен'};
+const SIN=25,SNH=30,SOUT=ACTS.length,SPRIOR=[.3,.25,.2,.2,.15,.1,.1,.1,.1,.2,0,0,0,0,.12,.08,.1];
 const med=a=>{const v=a.map(n=>n.gdp).sort((x,y)=>x-y);return v[v.length>>1]||1};
 /* Оценка состояния страны. Главный вес — ВВП: нейросеть получает награду прежде всего за рост экономики. */
 function value(n){return Math.log(Math.max(1,n.gdp))*7+n.stability/25+n.power/50+C(n.treasury/Math.max(1,n.gdp),0,.3)*10+Math.log(Math.max(.01,n.pop))*.5-n.exhaustion/40-(n.dmg||0)/8-C((n.debt||0)/Math.max(1,n.gdp),0,1.5)*12}
@@ -226,7 +229,7 @@ function sfeat(W,n,A,m,wv){
   C(wv.growth*12,-1,1),                                                 // мировой рост
   rank,                                                                 // место среди экономик
   C(tp.length/8,0,1),tpWar+alWar*.5,                                    // торговля и «война у партнёров»
-  C((n.debt||0)/Math.max(1,n.gdp)/.8,0,1),C(1-(n.debt||0)/Math.max(1,debtLimit(n)),0,1)   // долг и запас кредита
+  C((n.debt||0)/Math.max(1,n.gdp)/.8,0,1),C(1-(n.debt||0)/Math.max(1,debtLimit(n)),0,1),C((n.inflation||0)/30,0,1),C((n.cbRate||5)/18,0,1)   // долг, инфляция и ставка ЦБ
  ].map(v=>+v.toFixed(3));
 }
 function epsS(b){return Math.max(.05,.3*Math.exp(-b.steps/30000))}
@@ -243,6 +246,9 @@ function think(W,n,A,m,wv){
   if(a==='borrow')return(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.95&&n.treasury<n.gdp*.18;
   if(a==='repay')return n.debt>0&&n.treasury>n.gdp*.004;
   if(a==='mobilize'||a==='peace')return !!peaceW&&(a==='mobilize'?n.manpower>.05:peaceW.months>=2&&!peaceW.peaceReq);
+  if(a==='rate')return (n.inflation||0)>8&&n.cbRate<15;
+  if(a==='reserves')return (n.inflation||0)>12&&n.cbRate>=8;
+  if(a==='stabilizePrices')return (n.inflation||0)>9&&n.treasury>n.gdp*.012;
   if(a==='ally')return !n.war&&n.allies.length<4;
   if(a==='trade')return !n.war&&n.tradePartners.length<8;
   return rich};
@@ -251,6 +257,9 @@ function think(W,n,A,m,wv){
  const a=ACTS[k];n.intent=({borrow:'Берёт заём',repay:'Гасит долг',economy:'Экономическое развитие',industry:'Наращивает промышленность',infra:'Строит инфраструктуру',research:'Вкладывается в науку',army:'Усиливает армию',aa:'Строит ПВО',arsenal:'Производит оружие',stabilize:'Внутренняя стабилизация',ally:'Ищет союзников',trade:'Расширяет торговлю',mobilize:'Мобилизация',peace:'Добивается мира'})[a];
  const g=Math.max(100,n.gdp);
  switch(a){
+  case'rate':n.cbRate=C(n.cbRate+1,2,16);n.inflation=C(n.inflation-.45,0,60);n.growth=C(n.growth-.00008,-.01,.014);n.intent='Повышает ставку для борьбы с инфляцией';break;
+  case'reserves':n.cbRate=C(n.cbRate+.5,2,16);n.inflation=C(n.inflation-.3,0,60);n.treasury-=s*.35;n.intent='Ужесточает банковские резервы';break;
+  case'stabilizePrices':n.treasury-=Math.min(s,g*.001);n.inflation=C(n.inflation-.65,0,60);n.priceStability=C(n.priceStability+4,0,100);n.intent='Стабилизирует цены и снабжение';break;
   case'economy':n.treasury-=s*.6;n.growth=C(n.growth+.00006,.001,.014);n.stability=C(n.stability+.15,10,96);break;
   case'industry':n.treasury-=s;n.industry=C(n.industry+s/g*.45,.5,3);n.growth=C(n.growth+.000025,.001,.014);break;
   case'infra':n.treasury-=s;n.infrastructure=C(n.infrastructure+s/g*.5,.5,3);break;

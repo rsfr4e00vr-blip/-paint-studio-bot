@@ -32,7 +32,7 @@ assert.ok(state.aiWorld.nations.every(n=>Number.isFinite(n.gdp)&&n.gdp>0&&Number
 assert.ok(state.aiWorld.events.length<=80);
 const b=NationsAI.brainStats(state.aiWorld);
 assert.ok(b.steps>10000,'страны должны накопить опыт');
-assert.ok(b.coverage>=80,'страны должны освоить почти все 12 действий');
+assert.ok(b.coverage>=70,'страны должны освоить большинство из 17 действий, включая денежную политику');
 /* таблица экономик: у каждой страны есть стартовый ВВП и процент изменения */
 state.history=[{gdp:900}];const er=NationsAI.econRows(state);
 assert.equal(er.length,195,'194 страны ИИ + игрок');

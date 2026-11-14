@@ -99,7 +99,7 @@ class Player:
         # публичные показатели (ограничены сервером)
         self.rep = {"gdp": START_GDP, "money": 18000.0, "debt": 0.0, "stab": 68.0,
                     "appr": 61.0, "legit": 70.0, "power": START_POWER, "pop": 8200000.0,
-                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0}
+                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0, "infl": 5.0, "rate": 5.0}
         self.score_gdp = START_GDP    # «зачётный» ВВП: растёт не быстрее лимита
         self.score = 0.0
         self.comp = {}
@@ -134,7 +134,7 @@ class Player:
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
                 "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
-                "res": round(self.rep.get("res", 70))}
+                "res": round(self.rep.get("res", 70)), "infl": round(self.rep.get("infl", 5), 1), "rate": round(self.rep.get("rate", 5), 1)}
 
 
 class Room:
@@ -731,6 +731,8 @@ async def on_report(room: Room, p: Player, msg: dict):
         "gdp": num(r.get("gdp"), 1000, 2_000_000, old["gdp"]),
         "money": num(r.get("money"), 0, 5_000_000, old["money"]),
         "debt": num(r.get("debt"), 0, 5_000_000, old["debt"]),
+        "infl": num(r.get("infl"), 0, 100, old.get("infl", 5.0)),
+        "rate": num(r.get("rate"), 0, 18, old.get("rate", 5.0)),
         "stab": num(r.get("stab"), 0, 100, old["stab"]),
         "appr": num(r.get("appr"), 0, 100, old["appr"]),
         "legit": num(r.get("legit"), 0, 100, old["legit"]),
