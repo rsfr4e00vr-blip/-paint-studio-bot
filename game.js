@@ -225,6 +225,22 @@ const CC={iso:null,pick:false,war:null};
 const hcc=iso=>{CC.iso=iso;CC.pick=false;CC.war=null;CC.sel={};ccDraw()};
 const hpick=n=>{CC.iso=wi(n).iso;CC.pick=true;CC.war=n;CC.sel={};ccDraw()};
 const hccClose=()=>{const m=document.getElementById('ccm');if(m)m.remove()};
+const warCauseOptions=r=>{
+ const out=[['territorial','🗺 Территориальные претензии']];
+ if(nearTo(r.name)&&(+r.value||0)<=15)out.push(['border','🚧 Пограничный конфликт']);
+ const mine=S.ideology||'прагматизм',theirs=r.ideology||(window.GrandDiplomacy?GrandDiplomacy.orientation(r):'прагматизм');
+ if(mine!==theirs&&(+r.value||0)<=-15)out.push(['ideology','⚖️ Идеологический конфликт']);
+ if(S.sanc&&S.sanc[r.name]&&S.sanc[r.name].left>0)out.push(['economic','📉 Экономический конфликт']);
+ return out;
+};
+function warCauseControl(i,r,atWar,j){
+ if(atWar)return '<span class="muted">⚔️ Идёт война</span>';
+ const cause=S.justCause&&S.justCause[r.name],label=window.GrandDiplomacy&&GrandDiplomacy.CAUSES[cause]?GrandDiplomacy.CAUSES[cause].label:'';
+ if(j!=null&&cause){return j>0?`<span class="muted">🌐 ${label}: ${(['','протест','требования','ультиматум'])[S.justStage&&S.justStage[r.name]||0]||'кризис'} · ещё ${j} мес.</span>`:`<button class="danger" onclick="H.declare(${i})">⚔️ Объявить войну · ${label}</button>`}
+ const opts=warCauseOptions(r);
+ return `<select id="warcause-${i}">${opts.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('')}</select><button class="primary" onclick="H.justify(${i},document.getElementById('warcause-${i}').value)">🌐 Начать дипломатический кризис</button>`;
+}
+
 const htake=rid=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;CC.sel=CC.sel||{};const Q=quota(CC.war,w);if(CC.sel[rid])delete CC.sel[rid];else{if(Object.keys(CC.sel).length>=Q.q)return toast(`При фронте ${Math.round(Q.p)}% можно взять не больше ${Q.q} обл.`);CC.sel[rid]=1}ccDraw()};
 const hauto=()=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;const Q=quota(CC.war,w);CC.sel={};[...(regsOf(CC.war)||[])].filter(x=>!taken()[x.id]).sort((a,b)=>(((w.occ||[]).includes(b.id)?1:0)-((w.occ||[]).includes(a.id)?1:0))||b.s-a.s).slice(0,Q.q).forEach(x=>CC.sel[x.id]=1);ccDraw()};
 const hconfirm=()=>{const n=CC.war,ids=Object.keys(CC.sel||{});if(!ids.length)return toast('Выберите хотя бы одну область');H.ccClose();H.dictate(n,'region',ids)};
@@ -234,7 +250,7 @@ function ccDraw(){const C=GEO.c[CC.iso];if(!C||!C.name){return}const nm=C.name,i
  const reg=C.regs.some(x=>x.d)?C.regs:[{id:C.iso+':0',n:nm,s:100,res:W.res,d:C.d,cx:(C.bb[0]+C.bb[2])/2,cy:(C.bb[1]+C.bb[3])/2}];
  const svg=`<svg viewBox="${vb}" style="width:100%;max-height:46vh;background:#0c1a26;border-radius:12px"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=tk[x.id]||r.annexed,free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id];return `<path d="${x.d}" fill="${sel?'#ffd34d':mine?MYC:isVas(nm)?VAS:baseCol(C.iso,k)}" stroke="#0b1218" stroke-width="${fs/14}" ${free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:''}><title>${x.n}</title></path>`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${fs/9}" stroke-linejoin="round" style="pointer-events:none"/>${reg.length>1?reg.filter(x=>bigR.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px;pointer-events:none">${x.n.replace(/ \(.*\)/,'').slice(0,22)}</text>`).join(''):''}</svg>`;
  const rows=reg.map(x=>{const mine=tk[x.id]||r.annexed,pop=(W.pop||0)*x.s/100,ps=pop>=1?pop.toFixed(1):(pop*1000).toFixed(0)+' тыс.';return `<div class="mini"><b>${mine?'🏴':'🗺'} ${x.n}</b><br>${x.s.toFixed(0)}% страны · ${pop>=1?ps+' млн':ps} · ${resIcons(x.res)}<br>${mine?'<small class="muted">Под вашим контролем</small>':CC.pick?`<button class="${CC.sel&&CC.sel[x.id]?'good':'danger'}" onclick="H.take('${x.id}')">${CC.sel&&CC.sel[x.id]?'✔ Выбрана (снять)':'Выбрать область'}</button>`:'<small class="muted">Свободен</small>'}</div>`}).join('');
- let acts='';if(r.self)acts='<span class="muted">🏠 Это ваше государство</span>';else if(!CC.pick){const prog=(S.relPrograms||{})[nm];acts=(prog?`<span class="muted">🤝 Программа активна: ещё ${prog.monthsLeft} мес.</span>`:`<button class="primary" onclick="H.relProgram(${i});ccDraw()">🤝 Улучшать отношения 4 года · 40 ⭐</button> `)+(atWar?'<span class="muted">⚔️ Идёт война — условия мира выбираются во вкладке «Штаб»</span>':j==null?`<button onclick="H.justify(${i});ccDraw()">Обосновать войну · 30 ⭐</button>`:j>0?`<span class="muted">⏳ Обоснование: ${j} мес.</span>`:`<button class="danger" onclick="H.declare(${i});H.ccClose()">Объявить войну · 20 ⭐</button>`);}
+ let acts='';if(r.self)acts='<span class="muted">🏠 Это ваше государство</span>';else if(!CC.pick){const prog=(S.relPrograms||{})[nm];acts=(prog?`<span class="muted">🤝 Программа активна: ещё ${prog.monthsLeft} мес.</span>`:`<button class="primary" onclick="H.relProgram(${i});ccDraw()">🤝 Улучшать отношения 4 года · 40 ⭐</button> `)+warCauseControl(i,r,atWar,j);}
  const html=`<div class="ccbox"><button class="ccx" onclick="H.ccClose()">✕</button><h3>${nm}</h3><p class="muted">${CONTN[W.cont]||''} · ${r.trait||''}${r.annexed?' · <b>аннексирована</b>':''}</p>${CC.pick?pickHead():`<p>${mood(r.value||0)} · мощь ${r.power||'—'} · население ${W.pop>=1?W.pop.toFixed(W.pop>=10?0:1)+' млн':Math.round((W.pop||0)*1000)+' тыс.'}</p>`}${svg}<div class="actions" style="margin:8px 0">${acts}</div><div class="cards">${rows}</div></div>`;
  let m=document.getElementById('ccm');if(!m){m=document.createElement('div');m.id='ccm';m.className='ccm';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)H.ccClose()})}m.innerHTML=html}
 /* --- карта страны игрока (настоящий контур Украины, области от центров) --- */
@@ -753,7 +769,7 @@ function enemyStrikes(w,c){
 }
 const WP0={cannon:{air:false},drone:{air:true},tank:{air:false},rocket:{air:true},bomb:{air:true},howitzer:{air:false},heli:{air:true},mlrs:{air:false},cruise:{air:true},bomber:{air:true}};
 const TG0={cannon:1,drone:1,tank:1,rocket:1,bomb:1,howitzer:1,heli:1,mlrs:1,cruise:1,bomber:1};
-function ensure(){ensureHoi();if(!S.aiCfg)S.aiCfg={aggr:'normal',nn:'std',ars:'none'};if(!S.pacts)S.pacts={};if(window.AIARS)AIARS.applyCfg(S);if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
+function ensure(){ensureHoi();S.just=S.just||{};S.justCause=S.justCause||{};S.justStage=S.justStage||{};if(window.GrandDiplomacy){S.ideology=S.ideology||'прагматизм';(S.relations||[]).forEach(r=>{if(!r.self&&!r.ideology)r.ideology=GrandDiplomacy.orientation(r)})}if(!S.aiCfg)S.aiCfg={aggr:'normal',nn:'std',ars:'none'};if(!S.pacts)S.pacts={};if(window.AIARS)AIARS.applyCfg(S);if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
 C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}});ARMK.forEach(k=>{if(S[k]==null)S[k]=0})}
 function say(t,m){if(window.__salv)return;ensure();S.feed.unshift({t,m:m||'🙂',d:`${months[S.month]} ${S.year}`});S.feed=S.feed.slice(0,40)}
 const blocked=()=>{if(S.campaignOver){toast('Кампания завершена. Начни новую игру.');return true}if(S.out){toast('Вы в оппозиции — вернуться к власти можно во вкладке «Возврат»');return true}return false};
@@ -761,14 +777,14 @@ const myPower=()=>S.army/1000+S.air*1.5+S.navy*2+ARMK.reduce((a,k)=>a+(S[k]||0)*
 /* ИИ не нападает на игрока без повода, из страха и из состояния кризиса (долги, слабая валюта, истощение) */
 function aiMayAttackPlayer(c,me){
  const now=S.year*12+S.month,n=aiNationOf(c.name);
- if(n){
-  if(n.war||(n.exhaustion||0)>30||(n.debt||0)>n.gdp*.4||(n.fx||100)>160||(n.cooldown||0)>0)return false;
- }
- /* эффект устрашения после победы игрока над крупным противником */
+ if(!window.GrandDiplomacy||!n)return false;
+ if(n.war||(n.exhaustion||0)>30||(n.debt||0)>n.gdp*.4||(n.fx||100)>160||(n.cooldown||0)>0)return false;
+ /* У ИИ нет права начинать войну только из-за плохих отношений: нужна конкретная причина,
+    предвоенная стадия кризиса и достаточная военная/экономическая готовность. */
  if((S.deterUntil||0)>now&&c.power<me*1.8)return false;
- /* без повода (враждебные отношения) нападает только заметно более сильная страна */
- if(c.power<me*1.4&&c.value>-60)return false;
- return true;
+ S._gdNearPlayer=!!nearTo(c.name);
+ const d=GrandDiplomacy.aiPlayerDecision(S,c,n,me);c._gdDecision=d;
+ return !!d.canWar;
 }
 /* Последствия потери земель для побеждённой ИИ-страны: ВВП, промышленность, стабильность, курс, перемирие */
 function aiLossShock(name,share,w){
@@ -785,7 +801,7 @@ function aiLossShock(name,share,w){
  n.dmg=(n.dmg||0)+share*25;
  n.fx=clamp((n.fx||100)*(1.35+Math.min(1,share/.3)*.55),45,950);
  n.treasury=(n.treasury||0)*(1-share*.5);
- n.war=null;n.cooldown=24;
+ n.war=null;n.cooldown=24;n.claims=n.claims||{};n.claims[S.name||S.me||'Игрок']={severity:78,expires:(S.year||0)*12+(S.month||0)+48,detail:'Требование пересмотра территориальных потерь'};
  if(w&&w.eco)w.eco.g=n.gdp;
  /* игрок: послевоенное восстановление и эффект устрашения */
  S.deterUntil=now+12+Math.round(share*10);
@@ -811,7 +827,7 @@ function aiTick(){let me=myPower(),trade=0,help=0,sanc=0,thr=0,cand=[];
  cand=cand.filter(c=>aiMayAttackPlayer(c,me));
  /* Отношения даже −100 не запускают войну автоматически. ИИ может напасть только отдельным решением по своим военным условиям ниже. */
  const now=S.year*12+S.month;
- if(cand.length&&(!S.war||(S.wars.length===1&&weakness()>=45))&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=18){const c=pick(cand);S.aiWarLast=now;c.value=Math.max(-30,c.value-30);startWar(c.name,true);log(`⚔️ ${c.name} объявил вам войну!`);say(`${c.name} напал на нас!`,'😱');pause()}}
+ if(cand.length&&(!S.war||(S.wars.length===1&&weakness()>=45))&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=18){cand.sort((a,b)=>(b._gdDecision?.score||0)-(a._gdDecision?.score||0));const c=cand[0],d=c._gdDecision;if(d&&d.cause){S.aiWarLast=now;c.value=Math.max(-30,c.value-30);startWar(c.name,true,d.cause.id);log(`⚔️ ${c.name} объявил вам войну. Основание: ${GrandDiplomacy.CAUSES[d.cause.id].label}. Причина: ${d.cause.detail}.`);say(`${c.name} напал на нас!`,'😱');pause()}}}
 function people(){let L=[],h=S.history,p=h[h.length-2];if(S.approval<35)L.push(['Правительству пора уходить!','😡']);if(S.inflation>12)L.push(['Цены растут каждый месяц','😟']);if(S.employment<85)L.push(['Работы нет, заводы закрываются','😞']);if(S.war)L.push(['Сыновья на фронте, когда это кончится?','😢']);if(S.approval>65)L.push(['Жить стало лучше, спасибо!','😊']);if(S.tax>35)L.push(['Налоги душат малый бизнес','😠']);if(S.food<35)L.push(['Полки пусты, не хватает еды','😰']);if(S.stability<40)L.push(['На улицах неспокойно — выходим на протест','✊']);if(p&&S.gdp>p.gdp*1.003)L.push(['Экономика растёт, ура!','😃']);if(S.out)L.push(['Новая власть — посмотрим, что она сделает','🤔']);if(!L.length)L.push(['Всё спокойно, живём','🙂']);let a=pick(L);say(a[0],a[1]);if(a[1]=='✊'||a[1]=='😡')S.regions.forEach(r=>r.unrest=clamp(r.unrest+1))}
 const depLoyal=()=>S.deps.reduce((a,d)=>a+d.l,0)/S.deps.length;
 const OUST=[
@@ -2256,10 +2272,11 @@ function advTab(){
 
 /* ------------------------ ВОЙНЫ ------------------------ */
 const rel=n=>S.relations.find(r=>r.name===n);
-function startWar(name,def){
+function startWar(name,def,cause){
  if(S.wars.some(w=>w.n===name))return;
- S.wars.push({n:name,p:def?40:50,m:0,won:false,def:!!def});S.war=true;
- S.threat=clamp(S.threat+5);log(`⚔️ Начата война: ${name}${def?' (нападение на нас)':''}.`);
+ const label=window.GrandDiplomacy&&GrandDiplomacy.CAUSES[cause||'']?GrandDiplomacy.CAUSES[cause].label:(def?'Оборона от нападения':'Военная операция');
+ S.wars.push({n:name,p:def?40:50,m:0,won:false,def:!!def,cause:cause||'territorial',causeLabel:label});S.war=true;
+ S.threat=clamp(S.threat+5);log(`⚔️ Начата война: ${name}${def?' (нападение на нас)':''}. Основание: ${label}.`);
 }
 /* ------------------------ РЕАКЦИЯ МИРА НА АГРЕССИЮ ------------------------ */
 // Друзья жертвы осуждают вас и вводят санкции, её враги — поддерживают вас.
@@ -2630,8 +2647,9 @@ function allies(){S.allies=(S.allies||[]).filter(n=>{const c=rel(n);return c&&!c
 function weakness(){let w=0;if(S.stability<45)w+=20;if(S.approval<40)w+=15;if(S.money<1500)w+=15;if(S.wars.length)w+=12*S.wars.length;if(S.army<20000)w+=10;if(S.food<30||S.ammo<25)w+=8;return clamp(w)}
 function vassalAid(){return (S.puppets||[]).reduce((s,n)=>{const c=rel(n),d=(S.puppetData||{})[n];return s+(c&&d?c.power*d.loyalty/100*.15:0)},0)}
 function ultRefuse(c){c.value=clamp(c.value-8,-100,100);
- if(S.wars.length<2&&Math.random()<Math.min(.7,.25+c.aggr*.5)){startWar(c.name,true);log(`⚔️ ${c.name} объявил войну после отказа выполнить ультиматум!`);say(`${c.name} напал на нас!`,'😱')}
- else{log(`😤 ${c.name} угрожает, но не решился на войну.`);ch({approval:2},false)}}
+ const can=S.wars.length<2&&aiMayAttackPlayer(c,myPower()),d=c._gdDecision;
+ if(can&&d){startWar(c.name,true,d.cause.id);log(`⚔️ ${c.name} начал войну после отказа от ультиматума. Основание: ${GrandDiplomacy.CAUSES[d.cause.id].label}.`);say(`${c.name} напал на нас!`,'😱')}
+ else{log(`😤 ${c.name} получил отказ, но не нашёл достаточного основания или ресурсов для войны.`);ch({approval:2},false)}}
 function aiBrain(cand,me){
  if(window.__NG_MP||S.out||S.campaignOver)return;
  const A=AIS(),now=nowM(),AL=allies(),weak=weakness(),pup=S.puppets||[],al=alive().filter(r=>!pup.includes(r.name));
@@ -2647,10 +2665,9 @@ function aiBrain(cand,me){
   if(mem.length>=3){A.coal=mem;A.coalUntil=now+18;mem.forEach(n=>{const c=rel(n);c.value=clamp(c.value-12,-100,100);c.intent='Участвует в коалиции против вас'});S.threat=clamp(S.threat+4);
    log(`🛡 Против вас сформировалась коалиция: ${mem.join(', ')}.`);say('Мир объединяется против нас!','😰');toast('🛡 Против вас сформировалась коалиция')}}
  if(A.coal.length){const mem=A.coal.map(rel).filter(c=>c&&!c.annexed);mem.forEach(c=>{c.value=clamp(c.value-.6,-100,100);c.intent='Участвует в коалиции против вас'});
-  if(!S.wars.length&&mem.length&&Math.random()<.05&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=12){
-   S.aiWarLast=now;const lead=[...mem].sort((a,b)=>b.power-a.power)[0];startWar(lead.name,true);
-   const hp=mem.find(c=>c!==lead);if(hp)startWar(hp.name,true);
-   log(`⚔️ Коалиция начала войну: ${lead.name}${hp?' и '+hp.name:''} атакуют вас!`);say('Коалиция напала на нас!','😱');pause()}}
+  if(!S.wars.length&&mem.length&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=12){
+   const eligible=mem.filter(c=>aiMayAttackPlayer(c,me)).sort((a,b)=>(b._gdDecision?.score||0)-(a._gdDecision?.score||0));
+   if(eligible.length){const lead=eligible[0],d=lead._gdDecision;S.aiWarLast=now;startWar(lead.name,true,d.cause.id);log(`🛡 Коалиция поддержала ${lead.name}; основание войны: ${GrandDiplomacy.CAUSES[d.cause.id].label}.`);say(`${lead.name} начал войну по конкретному основанию!`,'⚔️');pause()}}}
  /* 3. Союзники и друзья присылают войска */
  S.wars.forEach(w=>{if(w.won)return;w.allies=w.allies||[];if(w.allies.length>=3)return;const en=rel(w.n);
   al.forEach(c=>{if(w.allies.length>=3||c.name===w.n||w.allies.includes(c.name))return;
@@ -2680,7 +2697,7 @@ function vassalEvents(){
   if(dialog(`👑 Вассал ${n} просит снизить дань с ${d.tax}% до ${d.tax-5}%: казна пуста, народ бедствует. Согласиться?`,'Согласиться','Отказать',()=>{d.tax-=5;d.loyalty=clamp(d.loyalty+10);d.unrest=clamp(d.unrest-6);log(`👑 Дань для ${n} снижена до ${d.tax}%.`)},()=>{d.loyalty=clamp(d.loyalty-6);d.unrest=clamp(d.unrest+5);log(`😒 ${n} недоволен отказом снизить дань.`)}))A.vev=nowM()}
  else if(r<.11&&S.wars.length<2){
   const atk=pick(alive().filter(x=>x.name!==n&&!S.puppets.includes(x.name)&&x.aggr>.4&&x.value<10&&x.power<=myPower()*1.5&&!S.wars.some(w=>w.n===x.name)&&nearTo(x.name))||[]);
-  if(atk&&dialog(`⚔️ Агрессия против вашего вассала ${n}: ${atk.name} начинает против него войну. Защитить вассала? Если бросить его на произвол, он потеряет доверие к вам.`,'Защитить','Бросить',()=>{startWar(atk.name,false);d.loyalty=clamp(d.loyalty+12);log(`🛡 Вы вступились за вассала ${n} и вступили в войну с ${atk.name}.`)},()=>{d.loyalty=clamp(d.loyalty-15);d.unrest=clamp(d.unrest+8);log(`💔 Вы бросили вассала ${n} без защиты. Его лояльность упала.`)}))A.vev=nowM()}
+  if(atk&&dialog(`⚔️ Агрессия против вашего вассала ${n}: ${atk.name} начинает против него войну. Защитить вассала? Если бросить его на произвол, он потеряет доверие к вам.`,'Защитить','Бросить',()=>{startWar(atk.name,false,'territorial');d.loyalty=clamp(d.loyalty+12);log(`🛡 Вы вступились за вассала ${n} и вступили в войну с ${atk.name}.`)},()=>{d.loyalty=clamp(d.loyalty-15);d.unrest=clamp(d.unrest+8);log(`💔 Вы бросили вассала ${n} без защиты. Его лояльность упала.`)}))A.vev=nowM()}
 }
 const BEV=[
  [d=>d>2,w=>{w.p=clamp(w.p+3);return `🚀 Танковый прорыв на участке «${w.frontLine}»: линия фронта продвинулась`}],
@@ -2708,7 +2725,7 @@ function warCard(w){
   nm=qn(w.n),sup=Math.round(w.supply??75),ord=w.order||'balanced',allyL=(w.allies||[]);
  const tile=(i,l,v)=>`<div class="wt"><span>${i}</span><small>${l}</small><b>${v}</b></div>`;
  return `<article class="wcard st-${st[2]}"><header class="whead"><div class="wsides"><span class="wside us">🛡 ${S.name}</span><span class="wvsx">⚔</span><span class="wside them">${w.n} 🏴</span></div><div class="wbadge">${st[0]} ${st[1]}</div></header>
- <div class="wmeta">${w.frontLine||'Центральный фронт'} · месяц войны: ${w.m}${w.def?' · на нас напали':''}</div>
+ <div class="wmeta">${w.frontLine||'Центральный фронт'} · месяц войны: ${w.m}${w.def?' · на нас напали':''}${w.causeLabel?` · основание: ${w.causeLabel}`:''}</div>
  <div class="wforce"><div class="fs us"><small>Наша сила</small><b>${fmt(mine)}</b></div><div class="fbar"><i style="width:${Math.round(mine/sum*100)}%"></i></div><div class="fs them"><small>Сила врага</small><b>${fmt(theirs)}</b></div></div>
  <div class="wtrack"><div class="wfill" style="width:${p}%"></div><div class="wmark" style="left:${p}%"></div></div><div class="wscale"><span>Поражение</span><b>Фронт ${p}%</b><span>Победа</span></div>
  <div class="wtiles">${tile('🚚','Снабжение',sup+'%')}${tile('⭕','Окружение',(w.encirclement||0)+'/5')}${tile('👑','Вассалы','+'+fmt(w.aid||vassalAid()))}${tile('🤝','Союзники',allyL.length?allyL.length:'—')}${tile('🪦','Наши потери',fmt(w.lost||0))}${tile('☠','Потери врага',fmt(w.kills||0))}${tile('🚩','Занято областей',(w.occ||[]).length+'/'+regCount(w.n))}${tile('🏘','Мирные у нас',fmt(w.civDead||0))}${tile('🏚','Мирные у врага',fmt(w.eCiv||0))}${tile('📉','ВВП врага','−'+(w.eco?w.eco.loss:0).toFixed(1)+'%')}${tile('💱','Валюта врага',w.eco?pct((w.eco.r/w.eco.r0-1)*100,0):'—')}${tile('💥','Ударов по экономике',(w.eco&&w.eco.hits)||0)}${tile('💔','Ударов по нам',(w.myHit&&w.myHit.n)||0)}${tile('📉','ВВП от ударов врага','−'+((w.myHit&&w.myHit.pct)||0).toFixed(1)+'%')}${tile('📡','Разведка',Math.round(w.recon||0)+'%')}</div>${topEcoHtml(w)}${myHitHtml(w)}
@@ -2759,7 +2776,7 @@ H.dip=(i,k)=>{
  else if(k==='embargo'){if(!pw(15))return;c.embargo=nowM()+12;c.value=clamp(c.value-12,-100,100);cdSet(key,6);log(`🚫 Эмбарго на поставки оружия в ${c.name} на год: заводы работают медленнее, закупки за границей закрыты.`)}
  toast('Готово');save();render()};
 H.allyBreak=i=>{const c=S.relations[i];if(!c)return;S.allies=allies().filter(n=>n!==c.name);c.value=clamp(c.value-10,-100,100);log(`💔 Союз с ${c.name} расторгнут.`);save();render()};
-function justTick(){for(const k in S.just)if(S.just[k]>0)S.just[k]--}
+function justTick(){for(const k in S.just){const before=S.just[k];if(S.just[k]>0)S.just[k]--;const stage=S.just[k]===0?3:3-S.just[k];if(stage>(S.justStage[k]||0)){S.justStage[k]=stage;const text=stage===1?'дипломатический протест и запрос объяснений':stage===2?'официальные требования и предупреждение об ультиматуме':'срок ультиматума истёк — теперь возможно объявление войны';log(`🌐 Кризис с ${k}: ${text}.`)}if(S.just[k]===0&&S.justCause&&S.justCause[k]&&!((S.grandDiplomacy&&S.grandDiplomacy.claims&&S.grandDiplomacy.claims[k]&&S.grandDiplomacy.claims[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.borderCases&&S.grandDiplomacy.borderCases[k]&&S.grandDiplomacy.borderCases[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.ideologyDisputes&&S.grandDiplomacy.ideologyDisputes[k]&&S.grandDiplomacy.ideologyDisputes[k].expires>nowM())||(S.grandDiplomacy&&S.grandDiplomacy.economicGrievances&&S.grandDiplomacy.economicGrievances[k]&&S.grandDiplomacy.economicGrievances[k].expires>nowM()))){delete S.just[k];delete S.justCause[k];delete S.justStage[k]}}}
 function relationProgramTick(){
  const programs=S.relPrograms||(S.relPrograms={});
  Object.keys(programs).forEach(name=>{const c=rel(name),p=programs[name];if(!c||c.annexed){delete programs[name];return}
@@ -2779,22 +2796,30 @@ function embassyTick(){
   if(e.monthsLeft<=0){delete E[name];log(`🏛 Дипломатическая миссия в ${name} завершила работу.`)}
  });
 }
-H.justify=i=>{
- if(blocked())return;const c=S.relations[i];if(S.just[c.name]!=null)return;
- if(S.pp<30)return toast('Не хватает политической власти');
- S.pp-=30;S.just[c.name]=3;log(`Начато обоснование войны против ${c.name}.`);save();render();
+H.justify=(i,cause)=>{
+ if(blocked())return;const c=S.relations[i];if(!c||c.self||c.annexed)return;
+ if(S.just[c.name]!=null&&S.justCause&&S.justCause[c.name])return toast('Кризис с этой страной уже развивается');if(S.just[c.name]!=null)delete S.just[c.name];
+ if(!window.GrandDiplomacy||!GrandDiplomacy.CAUSES[cause])return toast('Выберите конкретное основание войны');
+ const cost={territorial:20,border:15,ideology:10,economic:12}[cause]||15;
+ if(S.pp<cost)return toast(`Нужно ${cost} политической власти`);
+ if(cause==='border'&&!nearTo(c.name))return toast('Пограничный кризис возможен только с близкой страной');
+ const prep=GrandDiplomacy.preparePlayerCase(S,c,cause);if(!prep.ok)return toast(prep.error);
+ S.pp-=cost;const GDState=S.grandDiplomacy||{};const severe=(cause==='border'&&GDState.borderCases&&GDState.borderCases[c.name]?.severity>=85)||(cause==='ideology'&&GDState.ideologyDisputes&&GDState.ideologyDisputes[c.name]?.severity>=85)||(cause==='economic'&&GDState.economicGrievances&&GDState.economicGrievances[c.name]?.severity>=85);S.just[c.name]=severe?0:3;S.justCause=S.justCause||{};S.justCause[c.name]=cause;S.justStage=S.justStage||{};S.justStage[c.name]=severe?3:0;
+ c.ideology=c.ideology||GrandDiplomacy.orientation(c);
+ c.value=clamp(c.value-(cause==='territorial'?5:cause==='border'?7:cause==='ideology'?4:6),-100,100);
+ log(severe?`🚨 Серьёзная провокация против ${c.name}: основание «${GrandDiplomacy.CAUSES[cause].label}» позволяет внезапную войну.`:`🌐 Начат международный кризис с ${c.name}. Основание: ${GrandDiplomacy.CAUSES[cause].label}. Протест, требования и ультиматум займут 3 месяца.`);save();render();
 };
 H.declare=i=>{
- if(blocked())return;const c=S.relations[i];
+ if(blocked())return;const c=S.relations[i];if(!c)return;
  if(S.wars.some(w=>w.n===c.name))return;
- if(pactOn(c.name)){delete S.pacts[c.name];ch({legitimacy:-8,approval:-4},false);c.value=clamp(c.value-25,-100,100);log(`📜 Вы нарушили пакт о ненападении с ${c.name}: легитимность −8, отношения −25.`)}
  if(S.wars.length>=2)return toast('Нельзя вести больше двух войн');
- if(S.pp<20)return toast('Нужно 20 политической власти');
- S.pp-=20;
- const jus=S.just[c.name]===0;
- if(jus)delete S.just[c.name];
- else{ch({approval:-8,legitimacy:-6,rel:-2},false);log('Война без обоснования вызвала возмущение.')}
- startWar(c.name,false);worldReact(c.name,jus?'just':'unj');save();render();
+ const cause=S.justCause&&S.justCause[c.name],valid=cause&&GrandDiplomacy.playerCauses(S,c).includes(cause);
+ if(!valid)return toast('Нет действующего основания. Сначала создайте дипломатический кризис.');
+ const crisisData=S.grandDiplomacy||{},severe=(cause==='border'&&crisisData.borderCases&&crisisData.borderCases[c.name]?.severity>=85)||(cause==='ideology'&&crisisData.ideologyDisputes&&crisisData.ideologyDisputes[c.name]?.severity>=85)||(cause==='economic'&&crisisData.economicGrievances&&crisisData.economicGrievances[c.name]?.severity>=85);if(S.just[c.name]>0&&!severe)return toast(`Кризис ещё развивается: осталось ${S.just[c.name]} мес.`);
+ if(pactOn(c.name)){delete S.pacts[c.name];ch({legitimacy:-8,approval:-4},false);c.value=clamp(c.value-25,-100,100);log(`📜 Вы нарушили пакт о ненападении с ${c.name}: легитимность −8, отношения −25.`)}
+ if(S.pp<20)return toast('Нужно 20 политической власти');S.pp-=20;
+ delete S.just[c.name];delete S.justCause[c.name];delete S.justStage[c.name];
+ startWar(c.name,false,cause);worldReact(c.name,'just');save();render();
 };
 H.peace=()=>{if(blocked())return;peaceAll(false);save();render()};
 H.spoils=(n,m)=>{spoils(n,m);save();render()};
@@ -2924,8 +2949,7 @@ function wlFilter(){let a=S.relations.map((r,i)=>[r,i]).filter(x=>!x[0].annexed&
 function dipCard(r,i){const W=wi(r.name),n=r.name,ally=(S.allies||[]).includes(n),pact=pactOn(n),emb=(r.embargo||0)>nowM(),prog=(S.relPrograms||{})[n],b=(k,t)=>{const cd=cdLeft('dp'+k+i);return `<button onclick="H.dip(${i},'${k}')">${cd>0?'⏳ '+cd+' мес.':t}</button>`};
  return `<div class="mini"><b>${r.name}</b> <span class="muted">${CONTN[W.cont]||''}</span><br><span class="muted">${r.trait||''}</span><br>${mood(r.value)} (${Math.round(r.value)})<div class="bar"><i style="width:${clamp((r.value+100)/2)}%"></i></div>Мощь: ${r.power} · Нас.: ${W.pop>=1?W.pop.toFixed(W.pop>=10?0:1):W.pop} млн · ${resIcons(W.res)}<br><small class="muted">🧠 ${r.intent||''}</small>${r.rs&&window.AIRES?`<br><small class="muted">Запасы: ${AIRES.line(r)}${r.rs.shortM>2?' · ⚠️ нехватка':''}</small>`:''}${pact?'<br><small>📜 Пакт о ненападении до '+Math.ceil(((S.pacts||{})[n]-nowM())/12*10)/10+' лет</small>':''}${emb?'<br><small>🚫 Эмбарго на оружие</small>':''}${ally?'<br><small>🤝 Союзник</small>':''}${prog?`<br><small>🤝 Долгосрочная программа: ещё ${prog.monthsLeft} мес.</small>`:''}${(S.embassies||{})[n]?`<br><small>🏛 Посольство: ${(S.embassies||{})[n].paused?'на паузе':'работает'} · ещё ${(S.embassies||{})[n].monthsLeft} активных мес. · содержание 20 млн/мес.</small>`:''}<div class="actions"><button onclick="diplomacy(${i},'talk')">🤝 Переговоры · 150</button><button onclick="diplomacy(${i},'trade')">📦 Торговля · 350</button>${b('gift','🎁 Государственный подарок · 450')}${b('visit','🎭 Культурный обмен · 180')}</div><div class="actions">${b('summit','🏛 Саммит · 260')}${b('aid','🧰 Гуманитарная помощь · 500')}${b('culture','🎓 Образовательный обмен · 320')}${b('arms','🛒 Оружие · 400')}${r.rs?b('sellres','📦 Продать ресурсы'):''}</div><div class="actions">${pact?'':b('pact','📜 Пакт · 20 ⭐')}${emb?'':b('embargo','🚫 Эмбарго · 15 ⭐')}${(S.embassies||{})[n]?'':b('embassy','🏛 Посольство · 500')}${ally?'':`<button onclick="H.allyAsk(${i})">🤝 Союз · 25 ⭐</button>`}${prog?'':`<button class="primary" onclick="H.relProgram(${i})">🤝 Программа на 4 года · 40 ⭐</button>`}</div></div>`}
 function staffCard(r,i){const W=wi(r.name),atWar=S.wars.some(w=>w.n===r.name),j=S.just[r.name],prog=(S.relPrograms||{})[r.name];
- let wb=atWar?'<span class="muted">⚔️ Идёт война</span>':j==null?`<button onclick="H.justify(${i})">Обосновать войну · 30 ⭐</button>`:j>0?`<span class="muted">⏳ Обоснование: ${j} мес.</span>`:`<button class="danger" onclick="H.declare(${i})">Объявить войну · 20 ⭐</button>`;
- if(!atWar&&j==null)wb+=` <button class="danger" onclick="H.declare(${i})">Без обоснования (штрафы)</button>`;
+ let wb=warCauseControl(i,r,atWar,j);
  const ib=['prop','sab','steal'].map(k=>{const nm={prop:'Влияние · 220',sab:'Ослабить · 450',steal:'Технологии · 550'}[k],cd=cdLeft('in'+k+i);return `<button onclick="H.intel(${i},'${k}')">${cd>0?'⏳ '+cd+' мес.':nm}</button>`}).join('');
  return `<div class="mini"><b>${r.name}</b> <span class="muted">${CONTN[W.cont]||''}</span><br><span class="muted">${r.trait||''}</span><br>${moodT(r.value)} · мощь ${r.power} · ${resIcons(W.res)}<br><small class="muted">🧠 ${r.intent||''}</small>${S.puppets.includes(r.name)?'<br><small>👑 Вассал</small>':''}${prog?`<br><small>🤝 Дипломатическая программа: ещё ${prog.monthsLeft} мес. · следующее улучшение через ${prog.nextIn} мес.</small>`:''}${(r.regLost||0)?`<br><small>🗺 Отобрано областей: ${r.regLost}</small>`:''}<div class="actions">${wb}</div><div class="actions">${ib}</div><div class="actions">${prog?'':`<button class="primary" onclick="H.relProgram(${i})">🤝 Улучшать отношения 4 года · 40 ⭐</button>`}</div></div>`}
 function wlCards(kind){const l=wlFilter(),sh=l.slice(0,WF.n);return (sh.length?sh.map(x=>kind==='dip'?dipCard(x[0],x[1]):staffCard(x[0],x[1])).join(''):'<p class="muted">Никого не найдено</p>')+(l.length>sh.length?`<div class="mini" style="display:flex;align-items:center;justify-content:center"><button onclick="H.wf('n',${WF.n+30},'${kind}')">Показать ещё (${l.length-sh.length})</button></div>`:'')}

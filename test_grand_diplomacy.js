@@ -1,0 +1,30 @@
+// Run: node test_grand_diplomacy.js
+const assert=require('node:assert/strict');
+global.window=global;
+global.WORLD={map:{}};
+global.WORLD_DATA={countries:[{ru:'Альфа',i:'AA',lat:10,lon:10},{ru:'Бета',i:'BB',lat:11,lon:11}]};
+require('./nn_core.js');require('./grand_diplomacy.js');
+const a={name:'Альфа',iso:'AA',relations:-45,power:80,gdp:100,stability:70,treasury:10,ideology:'либеральный курс',allies:[],tradePartners:[],imports:20,exports:10};
+const b={name:'Бета',iso:'BB',relations:-45,power:40,gdp:70,stability:65,treasury:8,ideology:'традиционализм',allies:[],tradePartners:[],imports:10,exports:20};
+const W={nations:[a,b],brain:{}};
+GrandDiplomacy.monthly(W,[a,b],12,()=>{});
+a.ideologyDisputes={Бета:{severity:55,expires:30,detail:'Идеологическое противостояние'}};
+assert.ok(GrandDiplomacy.causes(a,b,12).some(x=>x.id==='ideology'));
+a.claims={Бета:{severity:70,expires:50,detail:'Территориальная претензия'}};
+assert.ok(GrandDiplomacy.causes(a,b,12).some(x=>x.id==='territorial'));
+const S={name:'Альфа',year:1,month:0,ideology:'либеральный курс',grandDiplomacy:{claims:{},borderCases:{}}};
+const r=GrandDiplomacy.preparePlayerCase(S,{name:'Бета',value:-40,ideology:'традиционализм'},'border');
+assert.equal(r.ok,true);assert.ok(GrandDiplomacy.playerCauses(S,{name:'Бета',value:-40,ideology:'традиционализм'}).includes('border'));
+const n={...a,claims:{Альфа:{severity:78,expires:60,detail:'Claim'}},rivals:{Альфа:45}};
+const d=GrandDiplomacy.aiPlayerDecision({brain:{},nations:[n]},{name:'Бета',value:-45},n,30);
+assert.ok(['negotiate','protest','ultimatum','prepare','war'].includes(d.action));
+console.log('OK: territorial, border and ideological causes; AI diplomatic decision uses neural network');
+// A high-severity crisis and a clear strategic advantage let the neural diplomat choose war.
+const forcedBrain={};const forcedNet=NN.get(forcedBrain,'dipNN',10,14,5,[.15,.05,-.05,-.1,-.55]);
+forcedNet.W1.fill(0);forcedNet.W2.fill(0);forcedNet.b1.fill(0);
+const strong={name:'Сильная',relations:-60,power:120,gdp:200,stability:85,treasury:30,ideology:'либеральный курс',allies:[],rivals:{}};
+const weak={name:'Слабая',relations:-60,power:25,gdp:40,stability:45,treasury:3,ideology:'традиционализм',allies:[],rivals:{}};
+const oldRandom=Math.random;Math.random=()=>.99;
+const action=GrandDiplomacy.neuralAction({brain:forcedBrain},strong,weak,{id:'border',severity:90,detail:'Серьёзный пограничный инцидент'},{stage:3,warScore:98});
+Math.random=oldRandom;assert.equal(action,'war');
+console.log('OK: neural diplomat can select a legally available high-severity war');

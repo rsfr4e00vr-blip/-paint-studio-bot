@@ -26,6 +26,8 @@ AI_AGGR = {"calm", "normal", "high", "extreme"}
 AI_NN = {"off", "std", "fast"}
 AI_ARS = {"none", "small"}
 AI_DEFAULT = {"aggr": "normal", "nn": "std", "ars": "none"}
+IDEOLOGIES = {"прагматизм", "либеральный курс", "государственный курс", "национальный курс", "традиционализм", "религиозный курс"}
+WAR_CAUSES = {"territorial": "Территориальные претензии", "border": "Пограничный конфликт", "ideology": "Религиозный / идеологический конфликт", "economic": "Экономический конфликт"}
 
 NEWBIE_SHIELD = 24        # первые 24 мес. нельзя объявлять войну
 WAR_COOLDOWN = 18         # агрессор ждёт 18 мес. после своей войны
@@ -86,11 +88,16 @@ def clean_name(v, default="Игрок", n=24) -> str:
 
 
 class Player:
-    def __init__(self, ws: WebSocket, pid: str, name: str, country: str):
+    def __init__(self, ws: WebSocket, pid: str, name: str, country: str, ideology: str = "прагматизм"):
         self.ws = ws
         self.id = pid
         self.name = name
         self.country = country
+        self.ideology = ideology if ideology in IDEOLOGIES else "прагматизм"
+        self.claims: dict = {}             # target id -> {created, expires, detail}
+        self.border_cases: dict = {}       # target id -> {created, expires, severity, detail}
+        self.ideology_cases: dict = {}     # target id -> {created, expires, detail}
+        self.ultimatums: dict = {}         # target id -> {cause, created, deadline, expires}
         self.connected = True
         self.ready = False
         self.eliminated = False       # campaignOver на клиенте
@@ -111,6 +118,7 @@ class Player:
         self.pacts: dict = {}         # pid -> month_end
         self.sanctions_in: list = []  # [{from, end}]
         self.sanctions_out: dict = {} # pid -> month_end
+        self.sanctions_started: dict = {} # pid -> month_start
         self.war = None               # id войны
         self.vassal_of = None         # id сюзерена
         self.vassal_end = 0
@@ -126,7 +134,7 @@ class Player:
         self.crisis_response: str | None = None
 
     def pub(self) -> dict:
-        return {"id": self.id, "name": self.name, "country": self.country,
+        return {"id": self.id, "name": self.name, "country": self.country, "ideology": self.ideology,
                 "connected": self.connected, "ready": self.ready,
                 "eliminated": self.eliminated, "out": self.out,
                 "score": round(self.score, 1), "comp": self.comp,
@@ -159,6 +167,7 @@ class Room:
         self.final: list = []
         self.global_crisis: dict | None = None
         self.global_next = 12
+        self.diplomacy_events: list = []
 
     # ---- рассылка
     async def send(self, p: Player, payload: dict):
@@ -189,6 +198,62 @@ class Room:
 
     def embassies_for(self, p: Player) -> dict:
         return {qid: dict(v) for qid, v in p.embassies.items()}
+
+    def claims_for(self, p: Player) -> dict:
+        return {qid: dict(v) for qid, v in p.claims.items() if v.get("expires", 0) > self.month}
+
+    def border_cases_for(self, p: Player) -> dict:
+        return {qid: dict(v) for qid, v in p.border_cases.items() if v.get("expires", 0) > self.month}
+
+    def ideology_cases_for(self, p: Player) -> dict:
+        return {qid: dict(v) for qid, v in p.ideology_cases.items() if v.get("expires", 0) > self.month}
+
+    def diplomacy_grounds(self, p: Player, q: Player) -> dict:
+        grounds = {}
+        claim = p.claims.get(q.id)
+        if claim and claim.get("expires", 0) > self.month and self.month - claim.get("created", self.month) >= 2:
+            grounds["territorial"] = dict(claim)
+        border = p.border_cases.get(q.id)
+        if border and border.get("expires", 0) > self.month and (self.month - border.get("created", self.month) >= 2 or border.get("severity", 0) >= 85):
+            grounds["border"] = dict(border)
+        ideology = p.ideology_cases.get(q.id)
+        if p.ideology != q.ideology and ideology and ideology.get("expires", 0) > self.month and (self.month - ideology.get("created", self.month) >= 2 or ideology.get("severity", 0) >= 85):
+            grounds["ideology"] = dict(ideology)
+        sanctioned = q.sanctions_out.get(p.id, 0) > self.month or any(x.get("from") == q.id and x.get("end", 0) > self.month for x in p.sanctions_in)
+        sanction_start = q.sanctions_started.get(p.id, self.month)
+        if sanctioned and self.month - sanction_start >= 2:
+            grounds["economic"] = {"created": sanction_start, "expires": self.month + 6, "detail": "Санкции и экономическое давление", "severity": 86 if self.month - sanction_start >= 4 else 72}
+        ultimatum = p.ultimatums.get(q.id)
+        if ultimatum and ultimatum.get("expires", 0) > self.month:
+            entry = grounds.get(ultimatum.get("cause"))
+            if entry:
+                entry["ultimatum"] = dict(ultimatum)
+        return grounds
+
+    def grounds_for(self, p: Player) -> dict:
+        return {q.id: self.diplomacy_grounds(p, q) for q in self.players.values()
+                if q.id != p.id and not q.eliminated}
+
+    async def push_diplomacy_state(self):
+        for p in self.players.values():
+            await self.send(p, {"type": "diplomacy_state", "claims": self.claims_for(p),
+                "border_cases": self.border_cases_for(p), "ideology_cases": self.ideology_cases_for(p),
+                "war_grounds": self.grounds_for(p)})
+
+    def process_ideology_crises(self):
+        for p in self.players.values():
+            for q in self.players.values():
+                if p.id == q.id or p.eliminated or q.eliminated or p.war or q.war:
+                    continue
+                if p.ideology != q.ideology and p.relations.get(q.id, 0) <= -30:
+                    old = p.ideology_cases.get(q.id)
+                    if not old or old.get("expires", 0) <= self.month:
+                        p.ideology_cases[q.id] = {"created": self.month, "expires": self.month + 24,
+                            "detail": f"Идеологическое противостояние: {p.ideology} — {q.ideology}", "severity": 86 if p.relations.get(q.id, 0) <= -75 else 55}
+            p.claims = {k: v for k, v in p.claims.items() if v.get("expires", 0) > self.month}
+            p.border_cases = {k: v for k, v in p.border_cases.items() if v.get("expires", 0) > self.month}
+            p.ideology_cases = {k: v for k, v in p.ideology_cases.items() if v.get("expires", 0) > self.month}
+            p.ultimatums = {k: v for k, v in p.ultimatums.items() if v.get("expires", 0) > self.month}
 
     def lobby_info(self) -> dict:
         return {"code": self.code, "state": self.state, "host": self.host,
@@ -297,6 +362,7 @@ class Room:
     async def tick(self):
         self.month += 1
         self.process_global_crisis()
+        self.process_ideology_crises()
         await self.process_wars()
         self.process_relation_programs()
         await self.process_embassies()
@@ -314,6 +380,10 @@ class Room:
             "relations": {q.id: self.relations_for(q) for q in self.players.values()},
             "relation_programs": {q.id: self.programs_for(q) for q in self.players.values()},
             "embassies": {q.id: self.embassies_for(q) for q in self.players.values()},
+            "claims": {q.id: self.claims_for(q) for q in self.players.values()},
+            "border_cases": {q.id: self.border_cases_for(q) for q in self.players.values()},
+            "ideology_cases": {q.id: self.ideology_cases_for(q) for q in self.players.values()},
+            "war_grounds": {q.id: self.grounds_for(q) for q in self.players.values()},
             "global_crisis": dict(self.global_crisis) if self.global_crisis else None,
             "global_next": self.global_next,
             "crisis_responses": {q.id: bool(self.global_crisis and q.crisis_response == self.global_crisis.get("id")) for q in self.players.values()},
@@ -408,7 +478,7 @@ class Room:
     # ---- войны
     def war_pub(self, w: dict) -> dict:
         return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"],
-                "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {})}
+                "cause": w.get("cause"), "cause_label": WAR_CAUSES.get(w.get("cause"), ""), "reason": w.get("reason", ""), "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {})}
 
     async def process_embassies(self):
         """Посольства: 20 млн ежемесячно, +2 к отношениям каждые 4 активных месяца."""
@@ -664,7 +734,7 @@ async def handle(room: Room, p: Player, msg: dict):
         await room.send(p, {"type": "state", **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
                             "mods": {q.id: room.income_mod(q) for q in room.players.values()},
                             "relations": room.relations_for(p), "relation_programs": room.programs_for(p),
-                            "embassies": room.embassies_for(p), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
+                            "embassies": room.embassies_for(p), "claims": room.claims_for(p), "border_cases": room.border_cases_for(p), "ideology_cases": room.ideology_cases_for(p), "war_grounds": room.grounds_for(p), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
                             "crisis_response": bool(room.global_crisis and p.crisis_response == room.global_crisis.get("id"))})
         return
 
@@ -696,6 +766,12 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_sanction(room, p, msg)
     elif kind == "diplomacy":
         await on_diplomacy(room, p, msg)
+    elif kind == "claim":
+        await on_claim(room, p, msg)
+    elif kind == "border_case":
+        await on_border_case(room, p, msg)
+    elif kind == "ultimatum":
+        await on_ultimatum(room, p, msg)
     elif kind == "war":
         await on_war(room, p, msg)
     elif kind == "war_command":
@@ -931,9 +1007,11 @@ async def on_sanction(room: Room, p: Player, msg: dict):
     if p.sanctions_out.get(q.id, 0) > room.month:
         return
     p.sanction_cd[q.id] = room.month
+    p.sanctions_started[q.id] = room.month
     end = room.month + SANCTION_MONTHS
     p.sanctions_out[q.id] = end
     q.sanctions_in.append({"from": p.id, "end": end})
+    q.rep["trust"] = max(0, q.rep.get("trust", 70) - 1.5)
     # Sanctions have a limited diplomatic impact: they can push neutral relations
     # down to -30, but cannot by themselves drag an already worse relationship
     # upward or trigger a war. Other events (e.g. declaring war) have their own
@@ -945,11 +1023,99 @@ async def on_sanction(room: Room, p: Player, msg: dict):
     if current_q > -30:
         q.relations[p.id] = max(-30, current_q - 18)
     await room.notice(f"⛔ {p.country} ввёл санкции против {q.country} на {SANCTION_MONTHS} мес. Отношения из-за санкций не опустятся ниже −30.", "dip")
+    await room.push_diplomacy_state()
+
+
+async def on_claim(room: Room, p: Player, msg: dict):
+    q = partner(room, p, msg)
+    if not q:
+        return
+    if p.war or q.war or p.pacts.get(q.id, 0) > room.month:
+        await room.notice("Нельзя предъявить территориальную претензию во время войны или действующего пакта.", "warn", p)
+        return
+    if p.claims.get(q.id, {}).get("expires", 0) > room.month:
+        await room.notice("Территориальная претензия уже действует.", "warn", p)
+        return
+    cost = 15
+    if p.rep.get("pp", 0) < cost:
+        await room.notice(f"Для официальной претензии нужно {cost} политической власти.", "warn", p)
+        return
+    p.rep["pp"] -= cost
+    p.claims[q.id] = {"created": room.month, "expires": room.month + 36,
+                      "detail": "Официальное требование пересмотра территориального статуса", "severity": 68}
+    p.ultimatums.pop(q.id, None)
+    p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 6, -100, 100, 0))
+    q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 6, -100, 100, 0))
+    await room.send(p, {"type": "pp_update", "pp": p.rep["pp"]})
+    await room.notice(f"🗺 {p.country} предъявила {q.country} территориальную претензию. У сторон есть время для переговоров.", "dip")
+    await room.broadcast({"type": "relations", "relations": {x.id: room.relations_for(x) for x in room.players.values()}})
+    await room.push_diplomacy_state()
+
+
+async def on_border_case(room: Room, p: Player, msg: dict):
+    q = partner(room, p, msg)
+    if not q:
+        return
+    if p.war or q.war or p.pacts.get(q.id, 0) > room.month:
+        await room.notice("Пограничный кризис нельзя открыть во время войны или пакта.", "warn", p)
+        return
+    if p.relations.get(q.id, 0) > 10:
+        await room.notice("Для пограничного протеста нужны уже напряжённые отношения (не выше +10).", "warn", p)
+        return
+    if p.border_cases.get(q.id, {}).get("expires", 0) > room.month:
+        await room.notice("Пограничный инцидент уже зарегистрирован.", "warn", p)
+        return
+    cost = 8
+    if p.rep.get("pp", 0) < cost:
+        await room.notice(f"Для расследования пограничного инцидента нужно {cost} политической власти.", "warn", p)
+        return
+    p.rep["pp"] -= cost
+    p.border_cases[q.id] = {"created": room.month, "expires": room.month + 24,
+                            "detail": "Зарегистрированное нарушение пограничного режима", "severity": 88 if p.relations.get(q.id, 0) <= -50 else 62}
+    p.ultimatums.pop(q.id, None)
+    p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 5, -100, 100, 0))
+    q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 5, -100, 100, 0))
+    await room.send(p, {"type": "pp_update", "pp": p.rep["pp"]})
+    await room.notice(f"🚧 {p.country} зарегистрировала пограничный инцидент с {q.country}. Началось дипломатическое расследование.", "dip")
+    await room.broadcast({"type": "relations", "relations": {x.id: room.relations_for(x) for x in room.players.values()}})
+    await room.push_diplomacy_state()
+
+
+async def on_ultimatum(room: Room, p: Player, msg: dict):
+    q = partner(room, p, msg)
+    if not q:
+        return
+    cause = str(msg.get("cause", ""))
+    grounds = room.diplomacy_grounds(p, q)
+    ground = grounds.get(cause)
+    if not ground:
+        await room.notice("Для ультиматума нет действующего дипломатического основания.", "warn", p)
+        return
+    if ground.get("severity", 0) >= 85:
+        await room.notice("Провокация настолько серьёзная, что ультиматум не обязателен — можно объявить войну сразу.", "warn", p)
+        return
+    if p.war or q.war or p.pacts.get(q.id, 0) > room.month:
+        await room.notice("Нельзя выдвинуть ультиматум во время войны или действующего пакта.", "warn", p)
+        return
+    old = p.ultimatums.get(q.id)
+    if old and old.get("expires", 0) > room.month and old.get("cause") == cause:
+        await room.notice(f"Ультиматум уже действует. Осталось {max(0, old.get('deadline', room.month) - room.month)} мес.", "warn", p)
+        return
+    p.ultimatums[q.id] = {"cause": cause, "created": room.month, "deadline": room.month + 2,
+                          "expires": room.month + 8, "detail": ground.get("detail", WAR_CAUSES[cause])}
+    await room.notice(f"⚠️ {p.country} выдвинула {q.country} ультиматум по вопросу «{WAR_CAUSES[cause]}». На выполнение требований — 2 месяца.", "dip")
+    await room.push_diplomacy_state()
 
 
 async def on_war(room: Room, p: Player, msg: dict):
     q = partner(room, p, msg)
     if not q:
+        return
+    cause = str(msg.get("cause", ""))
+    grounds = room.diplomacy_grounds(p, q)
+    if cause not in WAR_CAUSES or cause not in grounds:
+        available = ", ".join(WAR_CAUSES[k] for k in grounds) or "нет действующих оснований"
+        await room.notice(f"Нельзя объявить войну без конкретного основания. Доступно: {available}.", "warn", p)
         return
     if room.month < p.shield_until and room.month < NEWBIE_SHIELD:
         await room.notice(f"Война запрещена до {NEWBIE_SHIELD}-го месяца (защита новичков).", "warn", p)
@@ -967,20 +1133,26 @@ async def on_war(room: Room, p: Player, msg: dict):
         await room.notice(f"{q.country} под защитой ещё {q.shield_until - room.month} мес.", "warn", p)
         return
     if p.pacts.get(q.id, 0) > room.month:
-        await room.notice("Сначала нужно разорвать торговый пакт (дождаться конца).", "warn", p)
+        await room.notice("Сначала нужно расторгнуть действующий торговый пакт.", "warn", p)
+        return
+    ground = grounds[cause]
+    ultimatum = p.ultimatums.get(q.id)
+    sudden = ground.get("severity", 0) >= 85
+    if not sudden and not (ultimatum and ultimatum.get("cause") == cause and ultimatum.get("deadline", room.month + 1) <= room.month):
+        await room.notice("Сначала выдвиньте ультиматум и дождитесь срока его выполнения. При серьёзной провокации (85/100) война возможна сразу.", "warn", p)
         return
     wid = "w" + "".join(random.choices(string.digits, k=5))
-    room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {}}
+    room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {},
+                      "cause": cause, "reason": ground.get("detail", WAR_CAUSES[cause])}
     p.war = q.war = wid
-    # An attack can worsen bilateral relations only as far as -30.
-    # The attack itself never starts any additional/automatic wars.
+    p.claims.pop(q.id, None); p.border_cases.pop(q.id, None); p.ideology_cases.pop(q.id, None); p.ultimatums.pop(q.id, None)
     current_p = int(num(p.relations.get(q.id, 0), -100, 100, 0))
     current_q = int(num(q.relations.get(p.id, 0), -100, 100, 0))
-    p.relations[q.id] = max(-30, current_p - 30)
-    q.relations[p.id] = max(-30, current_q - 30)
-    await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True})
-    await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False})
-    await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}!", "war")
+    p.relations[q.id] = max(-45, current_p - 25)
+    q.relations[p.id] = max(-45, current_q - 25)
+    await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", "")})
+    await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", "")})
+    await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}. Основание: {WAR_CAUSES[cause]}. Причина: {ground.get('detail', '')}.", "war")
 
 
 async def on_war_command(room: Room, p: Player, msg: dict):
@@ -1145,14 +1317,14 @@ async def nations_socket(ws: WebSocket, code: str):
                     return
                 else:
                     pid = "".join(random.choices(string.ascii_lowercase + string.digits, k=16))
-                    me = Player(ws, pid, name, country)
+                    me = Player(ws, pid, name, country, str(msg.get("ideology", "прагматизм")))
                     me.joined_month = room.month
                     room.players[pid] = me
                     if room.host is None:
                         room.host = pid
                 await ws.send_json({"type": "joined", "id": me.id, "host": room.host == me.id,
                                     **room.lobby_info(),
-                                    "wars": [room.war_pub(w) for w in room.wars.values()], "relations": room.relations_for(me), "relation_programs": room.programs_for(me), "embassies": room.embassies_for(me), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
+                                    "wars": [room.war_pub(w) for w in room.wars.values()], "relations": room.relations_for(me), "relation_programs": room.programs_for(me), "embassies": room.embassies_for(me), "claims": room.claims_for(me), "border_cases": room.border_cases_for(me), "ideology_cases": room.ideology_cases_for(me), "war_grounds": room.grounds_for(me), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
                                     "crisis_response": bool(room.global_crisis and me.crisis_response == room.global_crisis.get("id"))})
                 if room.state == "paused" and room.auto_paused:
                     room.auto_paused = False

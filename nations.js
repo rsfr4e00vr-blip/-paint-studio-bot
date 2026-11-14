@@ -9,12 +9,13 @@ const fmt=n=>Math.round(n).toLocaleString('ru-RU');
 const SPEEDS={slow:['Медленно · 10 с/мес',10],normal:['Обычно · 6 с/мес',6],fast:['Быстро · 3,5 с/мес',3.5]};
 const LENGTHS={short:'Короткая · 10 лет',normal:'Обычная · 15 лет',long:'Долгая · 20 лет'};
 const DIFFS={story:'История',easy:'Лёгкая',normal:'Нормальная',hard:'Сложная',expert:'Эксперт'};
+const IDEOLOGIES={'прагматизм':'Прагматизм','либеральный курс':'Либеральный курс','государственный курс':'Государственный курс','национальный курс':'Национальный курс','традиционализм':'Традиционализм','религиозный курс':'Религиозный курс'};
 const LKEY=(c)=>'novariaMP:'+c, SKEY='novariaMPSession';
 
 const AIO={aggr:{calm:'спокойный',normal:'обычный',high:'агрессивный',extreme:'беспощадный'},nn:{off:'выключена',std:'обычная',fast:'быстро учится'},ars:{none:'нет (страны вырабатывают и покупают сами)',small:'небольшой запас'}};
 const aiv=()=>Object.assign({aggr:'normal',nn:'std',ars:'none'},room.ai||{});
 let ws=null,me={id:null,host:false},room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
-let standings=[],mods={},wars=[],relations={},relationPrograms={},embassies={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
+let standings=[],mods={},wars=[],relations={},relationPrograms={},embassies={},claims={},borderCases={},ideologyCases={},warGrounds={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
 const orig={};
 let tg=window.Telegram&&Telegram.WebApp;if(tg){try{tg.ready();tg.expand()}catch(e){}}
 
@@ -36,7 +37,7 @@ function connect(code,opts){
   const proto=location.protocol==='https:'?'wss':'ws';
   ws=new WebSocket(`${proto}://${location.host}/ws/nations/${encodeURIComponent(code)}`);
   const sess=opts.rejoin?JSON.parse(localStorage.getItem(SKEY)||'null'):null;
-  ws.onopen=()=>{retry=0;send({type:'join',name:val('#mpName')||(sess&&sess.name)||'Игрок',country:val('#mpCountry')||(sess&&sess.country)||'Новария',token:sess?sess.token:'',rejoin:!!opts.rejoin})};
+  ws.onopen=()=>{retry=0;send({type:'join',name:val('#mpName')||(sess&&sess.name)||'Игрок',country:val('#mpCountry')||(sess&&sess.country)||'Новария',ideology:val('#mpIdeology')||(sess&&sess.ideology)||'прагматизм',token:sess?sess.token:'',rejoin:!!opts.rejoin})};
   ws.onmessage=e=>{try{on(JSON.parse(e.data))}catch(err){console.error(err)}};
   ws.onclose=()=>{if(leaving||!room.code)return;if(active||room.state==='lobby'){setBar();if(retry<6){retry++;setTimeout(()=>{if(!leaving)connect(room.code,{rejoin:true})},1500*retry)}else note('Соединение потеряно. Обновите страницу.','warn')}};
   ws.onerror=()=>{};
@@ -48,18 +49,19 @@ setInterval(()=>send({type:'ping',t:Date.now()}),25000);
 function on(m){
   switch(m.type){
   case'joined':
-    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};
-    localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария'}));
+    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};claims=m.claims||{};borderCases=m.border_cases||{};ideologyCases=m.ideology_cases||{};warGrounds=m.war_grounds||{};
+    localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария',ideology:val('#mpIdeology')||(JSON.parse(localStorage.getItem(SKEY)||'{}').ideology)||'прагматизм'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
     setBar();break;
   case'lobby':Object.assign(room,pick(m));me.host=room.host===me.id;
     if(room.state==='lobby'&&modal.classList.contains('open'))paintModal();setBar();paintAll();break;
-  case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;embassies=m.embassies||embassies;if(NG.S)NG.S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_response?1:null}:null;if(m.global_next!=null)NG.S.globalNext=m.global_next;catchUp();setBar();paintAll();break;
+  case'state':Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;embassies=m.embassies||embassies;claims=m.claims||claims;borderCases=m.border_cases||borderCases;ideologyCases=m.ideology_cases||ideologyCases;warGrounds=m.war_grounds||warGrounds;if(NG.S)NG.S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_response?1:null}:null;if(m.global_next!=null)NG.S.globalNext=m.global_next;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
   case'war_orders':wars=m.wars||wars;syncMpWars();paintAll();break;
   case'mp_adjust':if(NG.S){NG.S.money=Math.max(0,NG.S.money+(Number(m.money)||0));NG.S.approval=NG.clamp(NG.S.approval+(Number(m.approval)||0));NG.S.tech=NG.clamp((NG.S.tech||0)+(Number(m.tech)||0));['fuel','inflation','trust','stability','food','health','steel','gdp'].forEach(k=>{if(Number.isFinite(Number(m[k]))&&m[k]!==undefined)NG.S[k]=k==='gdp'?Math.max(100,NG.S[k]+Number(m[k])):k==='health'?Math.min(35,Math.max(0,(Number(NG.S[k])||0)+Number(m[k]))):NG.clamp((Number(NG.S[k])||0)+Number(m[k]))});if(m.crisis_response&&NG.S.globalCrisis)NG.S.globalCrisis.response=1;saveLocal();NG.render(true);paintAll()}break;
-  case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;embassies=m.embassies&&m.embassies[me.id]||embassies;paintAll();break;
+  case'tick':onTick(m);relations=m.relations&&m.relations[me.id]||relations;relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;embassies=m.embassies&&m.embassies[me.id]||embassies;claims=m.claims&&m.claims[me.id]||claims;borderCases=m.border_cases&&m.border_cases[me.id]||borderCases;ideologyCases=m.ideology_cases&&m.ideology_cases[me.id]||ideologyCases;warGrounds=m.war_grounds&&m.war_grounds[me.id]||warGrounds;paintAll();break;
+  case'diplomacy_state':claims=m.claims||claims;borderCases=m.border_cases||borderCases;ideologyCases=m.ideology_cases||ideologyCases;warGrounds=m.war_grounds||warGrounds;paintDip();break;
   case'relations':relations=m.relations&&m.relations[me.id]||relations;paintDip();break;
   case'embassies':embassies=m.embassies&&m.embassies[me.id]||embassies;paintDip();break;
   case'relation_programs':relationPrograms=m.relation_programs&&m.relation_programs[me.id]||relationPrograms;paintDip();break;
@@ -70,7 +72,7 @@ function on(m){
   case'proposal':showProposal(m);break;
   case'aid_out':addMoney(-m.amount);NG.log(`Помощь стране ${m.to}: −${fmt(m.amount)} млн`);note(`💸 Отправлено ${fmt(m.amount)} млн → ${m.to}`,'dip');afterEffect();break;
   case'aid_in':addMoney(m.amount);NG.log(`Помощь от ${m.from}: +${fmt(m.amount)} млн`);NG.say(`${m.from} прислал нам помощь!`,'🤝');note(`💰 Получено ${fmt(m.amount)} млн от ${m.from}`,'dip');afterEffect();break;
-  case'war_start':NG.log(`⚔️ Война с ${m.enemy}${m.aggressor?'':' (на нас напали)'}`);NG.say(m.aggressor?`Мы объявили войну: ${m.enemy}`:`${m.enemy} напал на нас!`,m.aggressor?'⚔️':'😱');if(!m.aggressor){const S=NG.S;S.approval=NG.clamp(S.approval+2)}afterEffect();break;
+  case'war_start':NG.log(`⚔️ Война с ${m.enemy}${m.aggressor?'':' (на нас напали)'}${m.cause_label?` · основание: ${m.cause_label}`:''}${m.reason?` · ${m.reason}`:''}`);NG.say(m.aggressor?`Мы объявили войну: ${m.enemy}`:`${m.enemy} напал на нас!`,m.aggressor?'⚔️':'😱');if(!m.aggressor){const S=NG.S;S.approval=NG.clamp(S.approval+2)}afterEffect();break;
   case'war_cost':{const S=NG.S;S.army=Math.max(5000,S.army-m.army_loss);addMoney(-m.money);S.approval=NG.clamp(S.approval-m.approval);S.morale=NG.clamp(S.morale-.4);S.threat=NG.clamp(S.threat+1);break}
   case'war_end':if(NG.S)NG.S.mpWars=[];endWar(m);break;
   case'dictate_open':NG.toast(`💪 Перевес на фронте против ${m.enemy}! Выберите условия во вкладке «Мультиплеер»`);note(`💪 Можно диктовать условия: ${m.enemy}`,'war');paintAll();break;
@@ -116,7 +118,7 @@ function leaveMP(){
   if(room.code)localStorage.removeItem(LKEY(room.code));
   localStorage.removeItem(SKEY);closeWs();
   room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
-  standings=[];mods={};wars=[];relations={};relationPrograms={};embassies={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
+  standings=[];mods={};wars=[];relations={};relationPrograms={};embassies={};claims={};borderCases={};ideologyCases={};warGrounds={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
   NG.end();setBar();closeModal();prop.classList.remove('open');
 }
 /* Мои войны из данных сервера → экономика клиента: ВВП падает, курс валюты слабеет (логика в game.js: S.mpWars) */
@@ -206,6 +208,7 @@ function paintModal(){
     modal.innerHTML=`<div class="mpbox"><h2>🌍 Мультиплеер</h2><p class="muted2">2–6 игроков. У каждого своя страна и одинаковые стартовые условия. Время идёт одновременно, побеждает тот, у кого больше очков в конце.</p>
 <label>Ваше имя</label><input id="mpName" maxlength="24" value="${esc(sess.name||tgName()||'')}" placeholder="Имя игрока">
 <label>Название вашей страны</label><input id="mpCountry" maxlength="28" value="${esc(sess.country||'')}" placeholder="Например, Республика Новария">
+<label>Идеология государства</label><select id="mpIdeology">${Object.entries(IDEOLOGIES).map(([k,v])=>`<option value="${k}" ${(sess.ideology||'прагматизм')===k?'selected':''}>${v}</option>`).join('')}</select>
 <div class="mprow"><button class="primary" id="mpCreate">Создать комнату</button></div>
 <label>Или войти по коду</label><div class="mprow"><input id="mpCode" maxlength="8" value="${esc(pre)}" placeholder="КОД"><button id="mpJoin">Войти</button></div>
 <div class="mprow"><button id="mpClose">Закрыть</button></div></div>`;
@@ -215,7 +218,7 @@ function paintModal(){
     const host=me.host,link=`${location.origin}/game?room=${room.code}`;
     modal.innerHTML=`<div class="mpbox"><h2>Комната</h2><div class="mpcode" id="mpCodeBig">${esc(room.code)}</div>
 <div class="mprow"><button id="mpCopy">📋 Скопировать ссылку</button>${navigator.share?'<button id="mpShare">Поделиться</button>':''}</div>
-<h3>Игроки (${room.players.length}/6)</h3>${room.players.map(p=>`<div class="mpplayer"><span>${p.id===room.host?'👑':'👤'}</span><span class="nm"><b>${esc(p.country)}</b><br><small>${esc(p.name)}${p.id===me.id?' · это вы':''}</small></span><span>${p.ready?'✅':'⏳'}</span></div>`).join('')}
+<h3>Игроки (${room.players.length}/6)</h3>${room.players.map(p=>`<div class="mpplayer"><span>${p.id===room.host?'👑':'👤'}</span><span class="nm"><b>${esc(p.country)}</b><br><small>${esc(p.name)}${p.id===me.id?' · это вы':''} · ${IDEOLOGIES[p.ideology]||'Прагматизм'}</small></span><span>${p.ready?'✅':'⏳'}</span></div>`).join('')}
 ${host?`<label>Скорость времени</label><select id="mpSpeed">${Object.keys(SPEEDS).map(k=>`<option value="${k}" ${room.speed===k?'selected':''}>${SPEEDS[k][0]}</option>`).join('')}</select>
 <label>Длительность</label><select id="mpLen">${Object.keys(LENGTHS).map(k=>`<option value="${k}" ${room.length===({short:120,normal:180,long:240})[k]?'selected':''}>${LENGTHS[k]}</option>`).join('')}</select>
 <label>Сложность (одинакова для всех)</label><select id="mpDiff">${Object.keys(DIFFS).map(k=>`<option value="${k}" ${room.diff===k?'selected':''}>${DIFFS[k]}</option>`).join('')}</select><label>Агрессия ИИ-стран (одинакова для всех)</label><select id="mpAiA">${Object.keys(AIO.aggr).map(k=>`<option value="${k}" ${aiv().aggr===k?'selected':''}>${AIO.aggr[k]}</option>`).join('')}</select><label>Нейросеть ИИ</label><select id="mpAiN">${Object.keys(AIO.nn).map(k=>`<option value="${k}" ${aiv().nn===k?'selected':''}>${AIO.nn[k]}</option>`).join('')}</select><label>Стартовый арсенал ИИ</label><select id="mpAiR">${Object.keys(AIO.ars).map(k=>`<option value="${k}" ${aiv().ars===k?'selected':''}>${AIO.ars[k]}</option>`).join('')}</select>`
@@ -239,7 +242,7 @@ function go(code){
   const n=val('#mpName'),c=val('#mpCountry');
   if(!n){note('Введите имя','warn');return}
   if(!c){note('Введите название страны','warn');return}
-  localStorage.setItem('nmpProfile',JSON.stringify({name:n,country:c}));connect(code);
+  const ideology=val('#mpIdeology')||'прагматизм';localStorage.setItem('nmpProfile',JSON.stringify({name:n,country:c,ideology}));connect(code);
 }
 function copy(t){try{navigator.clipboard.writeText(t)}catch(e){const i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();document.execCommand('copy');i.remove()}}
 
@@ -295,13 +298,13 @@ function paintDip(){
   const myWar=wars.find(x=>x.a===me.id||x.d===me.id);
   const cap=Math.floor(S.money*.25/100)*100,amts=[300,500,1000,2000].filter(a=>a<=cap);
   e.innerHTML=list.map(p=>{
-    const atWar=myWar&&(myWar.a===p.id||myWar.d===p.id),dead=p.eliminated,rel=Number(relations[p.id]||0),program=relationPrograms[p.id];
-    return `<div class="mini"><b>${esc(p.country)}</b> ${dead?'💀':atWar?'⚔️':rel<=-60?'🟠':rel>=40?'🤝':'⚖️'}<br><span class="muted2">${esc(p.name)} · очки ${p.score} · ВВП ${fmt(p.gdp)} · мощь ${p.power}</span><br><b>Отношения: ${rel>0?'+':''}${rel}/100</b> · ${relationTier(rel)}
+    const atWar=myWar&&(myWar.a===p.id||myWar.d===p.id),dead=p.eliminated,rel=Number(relations[p.id]||0),program=relationPrograms[p.id],grounds=(warGrounds[me.id]||warGrounds)[p.id]||{},entries=Object.entries(grounds),causeName=k=>({territorial:'🗺 Территориальные претензии',border:'🚧 Пограничный конфликт',ideology:'⚖️ Идеологический конфликт',economic:'📉 Экономический конфликт'})[k]||k,ready=entries.filter(([k,v])=>Number(v.severity||0)>=85||(v.ultimatum&&v.ultimatum.cause===k&&Number(v.ultimatum.deadline)<=room.month)),toUlt=entries.filter(([k,v])=>Number(v.severity||0)<85&&(!v.ultimatum||v.ultimatum.cause!==k)),waiting=entries.filter(([k,v])=>Number(v.severity||0)<85&&v.ultimatum&&v.ultimatum.cause===k&&Number(v.ultimatum.deadline)>room.month),activeEntries=ready.length?ready:toUlt,causeOptions=activeEntries.map(([k])=>`<option value="${k}">${causeName(k)}</option>`).join(''),causeUI=ready.length?`<select data-cause="${p.id}">${causeOptions}</select><button class="danger" data-act="war" data-to="${p.id}">⚔️ Объявить войну</button>`:toUlt.length?`<select data-cause="${p.id}">${causeOptions}</select><button data-act="ultimatum" data-to="${p.id}">⚠️ Выдвинуть ультиматум · 2 мес.</button>`:waiting.length?`<span class="muted2">⚠️ Ультиматум: ${causeName(waiting[0][0])} · осталось ${Math.max(0,Number(waiting[0][1].ultimatum.deadline)-room.month)} мес.</span>`:'<span class="muted2">Нет действующего основания для войны. Сначала предъявите претензию или дождитесь кризиса.</span>';
+    return `<div class="mini"><b>${esc(p.country)}</b> ${dead?'💀':atWar?'⚔️':rel<=-60?'🟠':rel>=40?'🤝':'⚖️'}<br><span class="muted2">${esc(p.name)} · ${IDEOLOGIES[p.ideology]||'Прагматизм'} · очки ${p.score} · ВВП ${fmt(p.gdp)} · мощь ${p.power}</span><br><b>Отношения: ${rel>0?'+':''}${rel}/100</b> · ${relationTier(rel)}
 ${dead||S.campaignOver?'':`<div class="actions">
 ${amts.length?`<select data-amt="${p.id}">${amts.map(a=>`<option>${a}</option>`).join('')}</select><button data-act="aid" data-to="${p.id}">💸 Помощь</button>`:'<span class="muted2">Для помощи нужна казна от 1 200 млн</span>'}
 ${program?`<span class="muted2">🤝 Программа активна: ещё ${program.months_left} мес. · улучшение через ${program.next_in} мес.</span>`:`<button data-act="program" data-to="${p.id}">🤝 Улучшать отношения 4 года · 40 ⭐</button>`}${embassies[p.id]?`<span class="muted2">🏛 Посольство: ${embassies[p.id].paused?'пауза':'работает'} · ${embassies[p.id].months_left} мес. осталось</span>`:''}<button data-act="meeting" data-to="${p.id}">Разовая встреча (+12)</button><button data-act="neutral" data-to="${p.id}">⚖️ Нейтралитет</button><button data-act="pact" data-to="${p.id}">📜 Торг. пакт</button>
-<button data-act="sanction" data-to="${p.id}">⛔ Санкции</button><button data-act="gift" data-to="${p.id}">🎁 Подарок · 450</button><button data-act="visit" data-to="${p.id}">🎭 Культурный обмен · 180</button><button data-act="summit" data-to="${p.id}">🏛 Саммит · 260</button><button data-act="humanitarian" data-to="${p.id}">🧰 Гуманитарная помощь · 500</button><button data-act="education" data-to="${p.id}">🎓 Образовательный обмен · 320</button>${embassies[p.id]?'':`<button data-act="embassy" data-to="${p.id}">🏛 Посольство · 500</button>`}
-${atWar?`<button class="good" data-act="peace" data-to="${p.id}">🕊 Мир</button>`:`<button class="danger" data-act="war" data-to="${p.id}">${warArm===p.id?'Точно? ⚔️':'⚔️ Война'}</button>`}</div>`}</div>`}).join('')||'<p class="muted2">Других игроков нет.</p>';
+<button data-act="sanction" data-to="${p.id}">⛔ Санкции</button>${claims[p.id]?'':`<button data-act="claim" data-to="${p.id}">🗺 Предъявить территориальную претензию · 15 ⭐</button>`}${borderCases[p.id]?'':`<button data-act="border_case" data-to="${p.id}">🚧 Зарегистрировать пограничный инцидент · 8 ⭐</button>`}<button data-act="gift" data-to="${p.id}">🎁 Подарок · 450</button><button data-act="visit" data-to="${p.id}">🎭 Культурный обмен · 180</button><button data-act="summit" data-to="${p.id}">🏛 Саммит · 260</button><button data-act="humanitarian" data-to="${p.id}">🧰 Гуманитарная помощь · 500</button><button data-act="education" data-to="${p.id}">🎓 Образовательный обмен · 320</button>${embassies[p.id]?'':`<button data-act="embassy" data-to="${p.id}">🏛 Посольство · 500</button>`}
+${atWar?`<button class="good" data-act="peace" data-to="${p.id}">🕊 Мир</button>`:causeUI}</div>`}</div>`}).join('')||'<p class="muted2">Других игроков нет.</p>';
 }
 function dipClick(ev){
   const b=ev.target.closest('button[data-act]');if(!b)return;const to=b.dataset.to,a=b.dataset.act;
@@ -312,8 +315,11 @@ function dipClick(ev){
   else if(a==='program'){if(NG.S.pp<40)return NG.toast('Нужно 40 ⭐ политической власти');report();send({type:'diplomacy',action:'program',to})}
   else if(a==='neutral')send({type:'diplomacy',action:'neutral',to});
   else if(a==='sanction')send({type:'sanction',to});
+  else if(a==='claim')send({type:'claim',to});
+  else if(a==='border_case')send({type:'border_case',to});
+  else if(a==='ultimatum'){const sel=document.querySelector(`select[data-cause="${to}"]`);const cause=sel&&sel.value||'';if(!cause)return NG.toast('Выберите основание ультиматума');send({type:'ultimatum',to,cause})}
   else if(a==='peace')send({type:'peace'});
-  else if(a==='war'){if(warArm===to){warArm=null;send({type:'war',to})}else{warArm=to;paintDip();clearTimeout(dipClick.t);dipClick.t=setTimeout(()=>{warArm=null;paintDip()},3000)}}
+  else if(a==='war'){const sel=document.querySelector(`select[data-cause="${to}"]`);const cause=sel&&sel.value||'';if(!cause)return NG.toast('Сначала выберите основание войны');if(window.confirm('Объявить войну по выбранному основанию?'))send({type:'war',to,cause})}
 }
 function paintChat(){const e=$('#mpChatLog');if(!e)return;e.innerHTML=chat.map(c=>`<div><b>${esc(c.name)}</b> <span class="muted2">(${esc(c.country)})</span>: ${esc(c.text)}</div>`).join('')||'<div class="muted2">Пока тихо</div>';e.scrollTop=e.scrollHeight}
 function paintFeed(){const e=$('#mpFeed');if(!e)return;e.innerHTML=feed.map(f=>`<div><span class="muted2">мес. ${f.m}</span> ${esc(f.t)}</div>`).join('')||'<div class="muted2">Пока ничего</div>'}

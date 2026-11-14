@@ -1,7 +1,9 @@
 // Run: node test_ai_nations.js
 const assert=require('node:assert/strict');
 global.window=global;
-global.WORLD={list:Array.from({length:195},(_,i)=>({name:`Страна ${i+1}`,pop:5+i,power:20+i%80,inc:2,iso:`X${i}`}))};
+let testSeed=12345;Math.random=()=>{testSeed=(1664525*testSeed+1013904223)>>>0;return testSeed/4294967296};
+global.WORLD={list:Array.from({length:195},(_,i)=>({name:`Страна ${i+1}`,pop:5+i,power:20+i%80,inc:2,iso:`X${i}`})),map:{}};
+require('./grand_diplomacy.js');
 
 /* 1) без нейросети (запасной режим) — как раньше */
 {
