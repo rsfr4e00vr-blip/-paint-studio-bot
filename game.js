@@ -1394,6 +1394,9 @@ default:[0,()=>{S.debt=0;S.trust=5;S.gdp*=.95;S.stability=clamp(S.stability-10);
 window.fin=k=>{if(blocked())return;let e=ECO[k];if(S.money<e[0])return toast('Недостаточно средств');S.money-=e[0];e[1]();clampFix();log(e[2]);doc0(e[2]);save();render();toast(e[2])};
 const doc0=t=>{S.documents.unshift({name:t,type:'Бюджет',text:'Решение правительства.',date:`${months[S.month]} ${S.year}, год`});S.documents=S.documents.slice(0,60)};
 const clampFix=()=>{['stability','approval','legitimacy','food','fuel','steel','coupRisk'].forEach(k=>S[k]=clamp(S[k]))};
+/* Давление политики на ВВП как УРОВЕНЬ, а не ежемесячный вычет: меняется только разница с прошлым месяцем
+   (раньше высокие налоги, национализация и низкое доверие срезали ВВП каждый месяц без конца). */
+function gdpLevel(key,p){const L=S._lvl=S._lvl||{},prev=L[key]||0;p=Math.max(0,Math.min(.4,p));if(Math.abs(p-prev)<1e-9)return;S.gdp=Math.max(100,S.gdp*(1-p)/(1-prev));L[key]=p}
 function econTick(){aiMonetaryGovernor();let t=S.trust,pr=S.printed=(S.printed||0)*.93;monetaryTick();
 if(S.tax>35){S.gdp*=1-(S.tax-35)*.0006;S.employment=clamp(S.employment-(S.tax-35)*.03,60,100);S.approval=clamp(S.approval-(S.tax-35)*.04);t-=.3}
 if(S.health<5){S.approval=clamp(S.approval-.4);if(Math.random()<.05){S.pop=Math.round(S.pop*.995);log('Вспышка болезни: нет денег на медицину');say('В больницах нет лекарств','😢')}}
@@ -1403,7 +1406,7 @@ S.inflation=clamp(S.inflation+pr*.01,0,100);if(pr>15)t-=1;
 if(S.debt>S.gdp*.35)t-=.7;if(S.inflation>20)t-=.5;if(S.stability<30)t-=.3;if(S.inflation<8&&S.debt<S.gdp*.2)t+=.4;
 S.money+=(S.nat||0)*60-(S.priv||0)*30-(S.mega||0)*80;S.gdp*=1-(S.nat||0)*.0005;
 S.trust=clamp(t);
-if(S.trust<25){S.gdp*=.99;S.money-=200;if(Math.random()<.15){S.money*=.7;S.approval=clamp(S.approval-8);log('🏦 Банковская паника: вкладчики забирают деньги');say('Деньги из банков не выдают!','😱')}}
+if(S.trust<25){S.gdp*=1-(25-S.trust)*.0007;S.money-=200;if(Math.random()<.15){S.money*=.7;S.approval=clamp(S.approval-8);log('🏦 Банковская паника: вкладчики забирают деньги');say('Деньги из банков не выдают!','😱')}}
 if(S.money<0&&S.debt>S.gdp*.5)S.trust=clamp(S.trust-2)}
 const finTab0=()=>{let pr=Math.round(S.printed||0),it=Math.round(S.debt*(.003+Math.max(0,60-S.trust)*.0002));return card('🏦 Финансы и риски',`<div class="cards"><div class="mini">${bar('Доверие рынков',S.trust)}</div><div class="mini">Долг: <b>${fmt(S.debt)}</b><br>Проценты: <b>${fmt(it)} млн/мес</b></div><div class="mini">Напечатанные деньги: <b>${pr}</b><br>Инфляция: <b>${Math.round(S.inflation)}%</b></div><div class="mini">Нац.: ${S.nat||0} · Прив.: ${S.priv||0} · Мегапроекты: ${S.mega||0}<br>Присвоено: ${fmt(S.stolen||0)}</div></div><p class="muted">Глупые решения могут обрушить страну: гиперинфляция, дефолт, банковская паника, голод — и вас сместят.</p><div class="cards">${Object.keys(ECO).map(k=>`<div class="mini"><b>${ECO[k][2]}</b><span class="muted">${ECO[k][3]}</span><div class="actions"><button class="${['print','steal','gamble','default','sell'].includes(k)?'danger':'primary'}" onclick="fin('${k}')">Сделать</button></div></div>`).join('')}</div>`)};
 

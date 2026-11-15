@@ -5,6 +5,7 @@
  const C=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(+v)?+v:0));
  const N=(v,d=0)=>Number.isFinite(+v)?+v:d;
  const avg=(xs,d)=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:d;
+ const DRAG=.0020, CYC_SD=.0009, EMP_MAX=95.5;
  function player(S){
   const pop=Math.max(1,N(S.pop,1)), war=!!S.war || (Array.isArray(S.wars)&&S.wars.some(w=>w&&!w.ended));
   const regions=Array.isArray(S.regions)?S.regions:[];
@@ -42,9 +43,18 @@
   const regionalProductivity=weight?weighted/weight:.75;
   const deficit=Math.max(0,N(S.lastExp,0)+militaryCost-taxRevenue);
   const debtPressure=C(N(S.debt,0)/Math.max(1,baseGDP*12),0,3);
-  const growth=C((output/baseGDP)*.55-0.006-resourcePenalty*.0007-(war?.004:0)-debtPressure*.0005+(regionalProductivity-.75)*.006,-.035,.025);
-  S.gdp=Math.max(100,baseGDP*(1+growth));
-  S.employment=C(employment+(outputFactor-1)*1.4-(war?1.0:0)+(resourceFactor-.8)*.35,35,99);
+  // Запущенная экономика: дефицит еды/топлива/энергии/стали и огромный долг тянут ВВП вниз, пока игрок не исправит
+  const lowest=Math.min(N(S.food,50),N(S.fuel,50),N(S.energy,50),N(S.steel,50));
+  const neglect=Math.max(0,(28-lowest)/28)*.007+Math.max(0,N(S.debt,0)/baseGDP-1)*.004;
+  const growth=C((output/baseGDP)*.55-0.006-resourcePenalty*.0007-(war?.004:0)-debtPressure*.0005+(regionalProductivity-.75)*.006-neglect,-.035,.025);
+  // Деловой цикл: затухающий случайный процесс (AR(1)) — бумы и рецессии, как в реальной экономике.
+  // Постоянный «вычет зрелости» (-DRAG) не даёт ВВП расти без предела; результат: в среднем +2.5–3.5% в год,
+  // случайные рецессии в ~1 году из 6–8, безработица около естественной (4–8%), а плохая политика уводит ниже.
+  const gauss=()=>{let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
+  S._cyc=C(.93*N(S._cyc,0)+gauss()*CYC_SD,-.012,.012);
+  const cyc=S._cyc;
+  S.gdp=Math.max(100,baseGDP*(1+growth-DRAG+cyc));
+  S.employment=C(employment+(outputFactor-1)*1.4-(war?1.0:0)+(resourceFactor-.8)*.35+Math.min(0,cyc)*25,35,EMP_MAX);
   S.food=C(N(S.food,50)-foodUse*.025+(N(S.food,50)<35?.3:0),0,100);
   S.fuel=C(N(S.fuel,50)-fuelUse*.03+(N(S.fuel,50)<30?.2:0),0,100);
   S.energy=C(N(S.energy,50)-energyUse*.025,0,100);
