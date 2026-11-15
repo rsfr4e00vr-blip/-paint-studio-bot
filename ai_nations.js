@@ -175,9 +175,11 @@ function declare(W,A){
   // Даже решение нейросети не может обойти минимальную правовую и военную проверку.
   if(action!=='war'||(cr.stage<3&&cr.severity<85)||warScore<64)continue;
   const id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;
-  W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal:b.gdp>a.gdp?'cripple':'territory',cause:cause.id,causeLabel:GrandDiplomacy.CAUSES[cause.id].label,reason:cause.detail,joinedA:[],joinedB:[]});
+  const goal=GrandDiplomacy.chooseGoal(W,a,b,cause,{relations:a.relations,warScore});
+  const claim=a.claims&&a.claims[b.name],claimRegion=goal==='territory'?((claim&&claim.region)||(()=>{const rg=(window.WORLD_SEEDS&&WORLD_SEEDS[b.name])||[];return rg.length?(rg[Math.floor(Math.random()*rg.length)].n||''):''})()):'';
+  W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal,goalLabel:GrandDiplomacy.GOALS[goal].label,claimRegion,cause:cause.id,causeLabel:GrandDiplomacy.CAUSES[cause.id].label,reason:cause.detail,joinedA:[],joinedB:[]});
   cr.expires=W.month; a.rivals[b.name]=Math.max(a.rivals[b.name]||0,45);b.rivals[a.name]=Math.max(b.rivals[a.name]||0,45);
-  ev(W,`⚔️ ${a.name} объявила войну ${b.name}. Основание: ${GrandDiplomacy.CAUSES[cause.id].label}. Причина: ${cause.detail}. Оценка готовности: ${Math.round(warScore)}/100.`);
+  ev(W,`⚔️ ${a.name} объявила войну ${b.name}. Основание: ${GrandDiplomacy.CAUSES[cause.id].label}. Причина: ${cause.detail}. Цель войны: ${GrandDiplomacy.GOALS[goal].label}${claimRegion?` («${claimRegion}»)`:''}. Оценка готовности: ${Math.round(warScore)}/100.`);
  }
 }
 function fight(W,w,a,b,A){
@@ -194,9 +196,17 @@ function fight(W,w,a,b,A){
 function peace(W,w,a,b,A){
  let win=w.score>=0?a:b,lose=win===a?b:a,margin=Math.abs(w.score),share=C(.06+margin/500+R(0,.04),.05,.28);
  if(margin>18){let g=lose.gdp*share;win.gdp+=g*.72;lose.gdp-=g;lose.gpeak=Math.max(lose.gdp,(lose.gpeak||lose.gdp)*(1-share));win.gpeak=Math.max(win.gpeak||0,win.gdp);win.treasury+=Math.min(lose.treasury*.18,win.gdp*.025);lose.treasury*=.82;lose.pop*=1-share*.12;lose.stability=C(lose.stability-8-margin*.08,5,95);lose.relations-=12;win.relations+=5;lose.dmg=(lose.dmg||0)+share*40;lose.industry=C(lose.industry*(1-share*.5),.3,3);lose.infrastructure=C(lose.infrastructure*(1-share*.4),.3,3);lose.fx=C((lose.fx||100)*(1.25+share*2),45,950);lose.exhaustion=C(lose.exhaustion+share*50,0,100);win.deterUntil=W.month+(margin>40?18:12);
-  if(margin>65&&win.power>lose.power*1.45&&Math.random()<.28){lose.annexed=true;lose.owner=win.name;W.owners[lose.name]=win.name;win.pop+=lose.pop;win.gdp+=lose.gdp;ev(W,`🏴 ${win.name} полностью аннексировала ${lose.name}`)}
-  else{W.owners[lose.name+':occupied']=win.name;ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки`)}
+  const goalHit=win===a&&(w.goal==='regime'||w.goal==='territory');
+  if(goalHit&&w.goal==='regime'&&margin>=30){
+   const prev=GrandDiplomacy.applyRegimeChange(W,lose,win,W.month);
+   ev(W,`🏛 В ${lose.name} сменилась власть: ${win.name} привела к власти дружественное правительство (${prev} → ${lose.ideology}).`);
+  }else if(margin>65&&win.power>lose.power*1.45&&Math.random()<(goalHit&&w.goal==='territory'?.42:.28)){lose.annexed=true;lose.owner=win.name;W.owners[lose.name]=win.name;win.pop+=lose.pop;win.gdp+=lose.gdp;ev(W,`🏴 ${win.name} полностью аннексировала ${lose.name}`)}
+  else{W.owners[lose.name+':occupied']=win.name;
+   if(goalHit&&w.goal==='territory'&&w.claimRegion){lose.lostRegions=(lose.lostRegions||[]);lose.lostRegions.push({region:w.claimRegion,to:win.name,month:W.month});ev(W,`🗺 ${win.name} захватила область «${w.claimRegion}» страны ${lose.name}`)}
+   else ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки`)}
  }else ev(W,`🕊 ${a.name} и ${b.name} подписали мир без решающей победы`);
+ try{GrandDiplomacy.goalOutcome(W,a,win===a&&margin>18?(w.goal==='tribute'?.6:1)+margin/150:-1)}catch(e){}
+ if(w.goal==='regime'&&win===a&&margin<30)ev(W,`🏛 ${a.name} не смогла сменить власть в ${b.name}: перевес слишком мал`);
  if(margin>18){lose.claims=lose.claims||{};lose.claims[win.name]={severity:C(68+margin*.15,68,90),expires:W.month+48,detail:'Требование пересмотра территориальных уступок'};ev(W,`🗺 ${lose.name} сохраняет территориальную претензию к ${win.name} после мирного договора`)}
  [a,b,...w.joinedA.map(x=>A.find(n=>n.name===x)),...w.joinedB.map(x=>A.find(n=>n.name===x))].filter(Boolean).forEach(n=>{n.war=null;n.cooldown=n===lose&&margin>18?24:10;n.exhaustion=C(n.exhaustion-18,0,100);n.morale=C(n.morale+(n===win?8:-8),15,100)});
  ev(W,`📜 Мирный договор: ${win.name} получила преимущество, ${lose.name} принимает условия капитуляции/уступок. Потери армий: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}`);

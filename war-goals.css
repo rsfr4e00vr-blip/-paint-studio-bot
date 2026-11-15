@@ -1,0 +1,6 @@
+/* Цели войны: выбор основания, цели и области без обрезания на телефоне */
+.wg-box{display:flex;flex-direction:column;gap:8px;width:100%;margin-top:6px}
+.wg-box select,.wg-box input{width:100%;max-width:100%;min-width:0;box-sizing:border-box;white-space:normal;text-overflow:ellipsis}
+.wg-box button{width:100%}
+.wg-hint{display:block;line-height:1.35;opacity:.85}
+[data-goal]{width:100%;max-width:100%;min-width:0;box-sizing:border-box}

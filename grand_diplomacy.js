@@ -48,6 +48,7 @@
  function relation(a,b){return C((a.rivals&&a.rivals[b.name])?-(a.rivals[b.name]):(+a.relations||0),-100,100)}
  function monthly(W,A,month,ev){
   const D=ensureWorld(W);D.crises=D.crises.filter(x=>x.expires>month);
+  regimeTick(W,A,month,ev);
   // Durable disputes arise from actual policy differences, trade disruption or recorded claims.
   for(let i=0;i<A.length;i++)for(let j=i+1;j<A.length;j++){
    const a=A[i],b=A[j];if(a.annexed||b.annexed||a.war||b.war)continue;
@@ -108,6 +109,78 @@
   if(n.dipLast&&n.dipLast.x){const reward=C(((+n.stability||50)-n.dipLast.stability)/18+((+n.gdp||1)-n.dipLast.gdp)/Math.max(1,n.dipLast.gdp)*5,-1.5,1.5);root.NN.train(net,n.dipLast.x,n.dipLast.k,reward+.82*Math.max(...q),.012)}
   n.dipLast={x,k,stability:+n.stability||50,gdp:+n.gdp||1};return names[k]||'negotiate';
  }
+
+ /* ================= ЦЕЛИ ВОЙНЫ: захват территории и смена власти ================= */
+ const GOALS={
+  tribute:{label:'Давление и контрибуция',icon:'💰',short:'контрибуция'},
+  territory:{label:'Захват территории',icon:'🗺',short:'территория'},
+  regime:{label:'Смена власти',icon:'🏛',short:'смена власти'}
+ };
+ const GOAL_IDS=['tribute','territory','regime'];
+ function defaultGoal(cause){return cause==='territorial'||cause==='border'?'territory':cause==='ideology'?'regime':'tribute'}
+ /* Сменить власть можно только в стране с другим курсом или при очень враждебных отношениях. */
+ function goalAllowed(goal,att,def,cause,relations){
+  if(!GOALS[goal])return false;
+  if(goal!=='regime')return true;
+  const a=(att&&att.ideology)||orientation(att||{}),d=(def&&def.ideology)||orientation(def||{});
+  return a!==d||(+relations||0)<=-30;
+ }
+ /* Нейросеть целей: выбирает, чего именно добиваться войной. Правила (goalAllowed) ограничивают допустимое. */
+ function chooseGoal(W,n,target,cause,ctx){
+  ctx=ctx||{};cause=cause||{};const cid=cause.id||cause;
+  const rel=+((ctx.relations!=null)?ctx.relations:(n.relations||0));
+  const legal=[true,true,goalAllowed('regime',n,target,cid,rel)];
+  const fallback=()=>{const g=defaultGoal(cid);return legal[GOAL_IDS.indexOf(g)]?g:'tribute'};
+  if(ctx.nnEnabled===false||!root.NN||!root.NN.get||root.NN.off||!W)return fallback();
+  const B=W.brain||(W.brain={}),net=root.NN.get(B,'goalNN',9,12,3,[.05,.12,-.05]);
+  const ratio=(+n.power||1)/Math.max(1,+target.power||1),sev=C((cause.severity||60)/100,0,1);
+  const diff=((n.ideology||orientation(n))!==(target.ideology||orientation(target)))?1:0;
+  const x=[C(rel/100,-1,1),C(ratio/2,0,1.5),diff,sev,cid==='territorial'||cid==='border'?1:0,cid==='ideology'||cid==='security'?1:0,C((+n.stability||50)/100,0,1),C((+target.stability||50)/100,0,1),C((+ctx.warScore||60)/100,0,1)];
+  net.b2[1]=C(.12+(cid==='territorial'?.25:0)+(cid==='border'?.12:0),-.3,.5);
+  net.b2[2]=C(-.05+(cid==='ideology'?.3:0)+diff*.1+(cid==='security'?.1:0),-.4,.6);
+  const q=root.NN.predict(net,x),k=root.NN.choose(q,i=>legal[i],.07);
+  n.goalLast={x,k};
+  return GOAL_IDS[k]||fallback();
+ }
+ /* Обучение: цель оценивается по итогу войны (победа с достигнутой целью — награда, поражение — штраф). */
+ function goalOutcome(W,n,reward){
+  try{
+   if(!W||!n||!n.goalLast||!n.goalLast.x||!root.NN)return;
+   const net=W.brain&&W.brain.goalNN;if(net)root.NN.train(net,n.goalLast.x,n.goalLast.k,C(reward,-1.5,1.5),.02);
+  }catch(e){}
+  if(n)n.goalLast=null;
+ }
+ /* Смена власти в стране-жертве: меняется курс, страна дружит с победителем, но режим держится на лояльности. */
+ function applyRegimeChange(W,n,by,month){
+  const prev=n.ideology||orientation(n);
+  n.regime={by:by.name,month:month,prev:prev,loyalty:62,until:month+60};
+  n.ideology=by.ideology||orientation(by);
+  n.stability=C((+n.stability||50)-12,5,95);
+  n.exhaustion=C((+n.exhaustion||0)-10,0,100);
+  n.rivals=n.rivals||{};n.rivals[by.name]=0;
+  if(by.rivals)by.rivals[n.name]=0;
+  [n.claims,n.borderCases,n.economicGrievances,n.ideologyDisputes,n.securityCases].forEach(m=>{if(m)delete m[by.name]});
+  n.cooldown=Math.max(+n.cooldown||0,18);
+  if(by.allies&&n.allies&&!n.allies.includes(by.name)&&by.allies.length<5&&n.allies.length<5){n.allies.push(by.name);by.allies.push(n.name)}
+  return prev;
+ }
+ /* Раз в месяц: новый режим может закрепиться или быть свергнут (контрпереворот). */
+ function regimeTick(W,A,month,ev){
+  (A||[]).forEach(n=>{
+   const g=n.regime;if(!g)return;
+   const by=A.find(x=>x.name===g.by);
+   if(!by||by.annexed||n.annexed){delete n.regime;return}
+   const drift=(n.stability>45?.28:-.5)+(by.power>=n.power?.1:-.1)-(n.exhaustion>40?.2:0)-(by.war?.2:0)+(Math.random()*1.1-.6);
+   g.loyalty=C(g.loyalty+drift,0,100);
+   if(g.loyalty<=8){
+    n.ideology=g.prev;n.rivals=n.rivals||{};n.rivals[by.name]=Math.max(n.rivals[by.name]||0,55);if(by.rivals)by.rivals[n.name]=Math.max(by.rivals[n.name]||0,40);
+    n.allies=(n.allies||[]).filter(x=>x!==by.name);by.allies=(by.allies||[]).filter(x=>x!==n.name);
+    n.stability=C((+n.stability||50)-6,5,95);delete n.regime;
+    if(ev)ev(W,`🔥 В ${n.name} свергли правительство, поставленное ${by.name}. Прежний курс восстановлен.`);
+  }else if(month>=g.until){delete n.regime;if(ev)ev(W,`🏛 Правительство ${n.name} закрепилось и стало самостоятельным.`)}
+  });
+ }
+
  function playerCauses(S,c){
   const G=S.grandDiplomacy||{},out=[];const month=(S.year||0)*12+(S.month||0);
   if(G.claims&&active(G.claims[c.name],month))out.push('territorial');
@@ -167,5 +240,5 @@
   return{canWar:action==='war'&&score0>=64&&(cr.stage>=3||cause.severity>=85),action,cause,score:score0,stage:cr.stage};
  }
 
- root.GrandDiplomacy={CAUSES,orientation,ensureWorld,causes,monthly,score,neuralAction,playerCauses,preparePlayerCase,aiPlayerDecision};
+ root.GrandDiplomacy={CAUSES,GOALS,GOAL_IDS,orientation,ensureWorld,causes,monthly,score,neuralAction,playerCauses,preparePlayerCase,aiPlayerDecision,defaultGoal,goalAllowed,chooseGoal,goalOutcome,applyRegimeChange,regimeTick};
 })(typeof window!=='undefined'?window:globalThis);

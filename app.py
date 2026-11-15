@@ -751,6 +751,26 @@ def game_js():
     return FileResponse(BASE / "game.js", media_type="application/javascript")
 
 
+@app.get("/grand_diplomacy.js")
+def grand_diplomacy_js():
+    return FileResponse(BASE / "grand_diplomacy.js", media_type="application/javascript")
+
+
+@app.get("/systemic_sim.js")
+def systemic_sim_js():
+    return FileResponse(BASE / "systemic_sim.js", media_type="application/javascript")
+
+
+@app.get("/economy_diplomacy.js")
+def economy_diplomacy_js():
+    return FileResponse(BASE / "economy_diplomacy.js", media_type="application/javascript")
+
+
+@app.get("/war-goals.css")
+def war_goals_css():
+    return FileResponse(BASE / "war-goals.css", media_type="text/css")
+
+
 @app.get("/health")
 def health():
     return PlainTextResponse("ok")

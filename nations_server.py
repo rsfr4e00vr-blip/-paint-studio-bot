@@ -52,6 +52,10 @@ AI_DEFAULT = {"aggr": "normal", "nn": "std", "ars": "none"}
 IDEOLOGIES = {"прагматизм", "либеральный курс", "государственный курс", "национальный курс", "традиционализм", "религиозный курс"}
 WAR_CAUSES = {"territorial": "Территориальные претензии", "border": "Пограничный конфликт", "ideology": "Религиозный / идеологический конфликт", "economic": "Экономический конфликт", "security": "Кризис защиты граждан и дипломатической миссии"}
 
+WAR_GOALS = {"tribute": "Давление и контрибуция", "territory": "Захват территории", "regime": "Смена власти"}
+REGIME_MONTHS = 24        # срок опеки победителя над новым правительством
+REGION_FRONT_GOAL = 60    # при цели «захват территории» область можно взять уже при перевесе 60%
+REGIME_FRONT = 60         # смена власти — от этого перевеса (или при полной победе)
 NEWBIE_SHIELD = 24        # первые 24 мес. нельзя объявлять войну
 WAR_COOLDOWN = 18         # агрессор ждёт 18 мес. после своей войны
 PEACE_SHIELD = 12         # после войны защитника 12 мес. не трогают
@@ -148,6 +152,9 @@ class Player:
         self.vassal_end = 0
         self.vassal_tax = 10          # процент дохода, который вассал платит сюзерену
         self.vassals: dict = {}       # id вассала -> конец срока
+        self.regime_by = None         # id победителя, поставившего правительство
+        self.regime_end = 0           # до какого месяца действует опека
+        self.regime_prev = None       # прежний политический курс
         self.regions_lost = 0
         # Двусторонние отношения между игроками: 0 = нейтралитет.
         self.relations: dict = {}
@@ -163,6 +170,7 @@ class Player:
                 "eliminated": self.eliminated, "out": self.out,
                 "score": round(self.score, 1), "comp": self.comp,
                 "vassal_of": self.vassal_of, "vassal_tax": self.vassal_tax,
+                "regime_by": self.regime_by if self.regime_end > 0 else None, "regime_end": self.regime_end,
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
                 "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
@@ -399,6 +407,7 @@ class Room:
         await self.process_embassies()
         self.expire()
         await self.check_vassal_rebellions()
+        await self.check_regime_coups()
         for p in self.players.values():
             self.compute_score(p)
         order = self.ranking()
@@ -496,6 +505,31 @@ class Room:
             p.vassals = {k: v for k, v in p.vassals.items() if v > self.month}
             if p.vassal_of and p.vassal_end <= self.month:
                 p.vassal_of = None
+            if p.regime_by and p.regime_end <= self.month:
+                p.regime_by = None
+                p.regime_end = 0
+
+    async def check_regime_coups(self):
+        """Поставленное правительство может быть свергнуто: шанс растёт при низкой стабильности и одобрении."""
+        for v in list(self.players.values()):
+            if not v.regime_by or v.regime_end <= self.month or v.eliminated:
+                continue
+            lord = self.players.get(v.regime_by)
+            if not lord or lord.eliminated:
+                v.regime_by, v.regime_end = None, 0
+                continue
+            stab = float(v.rep.get("stab", 60))
+            appr = float(v.rep.get("appr", 60))
+            chance = min(0.06, max(0.0, 50 - stab) * 0.0012 + max(0.0, 45 - appr) * 0.0008)
+            if random.random() < chance:
+                prev = v.regime_prev or v.ideology
+                v.ideology = prev
+                v.regime_by, v.regime_end = None, 0
+                v.relations[lord.id] = int(num(min(v.relations.get(lord.id, 0), -25), -100, 100, 0))
+                lord.relations[v.id] = int(num(min(lord.relations.get(v.id, 0), -25), -100, 100, 0))
+                await self.send(v, {"type": "regime_change", "country": v.country, "by": lord.country, "ideology": prev, "prev": lord.ideology, "side": "coup"})
+                await self.send(lord, {"type": "regime_change", "country": v.country, "by": lord.country, "ideology": prev, "prev": lord.ideology, "side": "coup_lord"})
+                await self.notice(f"🔥 В {v.country} свергли правительство, поставленное страной {lord.country}. Прежний курс восстановлен.", "war")
 
     async def finish(self):
         self.state = "finished"
@@ -510,7 +544,8 @@ class Room:
     # ---- войны
     def war_pub(self, w: dict) -> dict:
         return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"],
-                "cause": w.get("cause"), "cause_label": WAR_CAUSES.get(w.get("cause"), ""), "reason": w.get("reason", ""), "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {})}
+                "cause": w.get("cause"), "cause_label": WAR_CAUSES.get(w.get("cause"), ""), "reason": w.get("reason", ""), "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {}),
+                "goal": w.get("goal", "tribute"), "goal_label": WAR_GOALS.get(w.get("goal", "tribute"), ""), "claim_region": w.get("claim_region", "")}
 
     async def process_embassies(self):
         """Посольства: 20 млн ежемесячно, +2 к отношениям каждые 4 активных месяца."""
@@ -648,6 +683,22 @@ class Room:
             await self.send(lose, {"type": "war_end", "result": "lose", "enemy": win.country, "money": 0, "approval": -2, "stability": 0})
             await self.send(lose, {"type": "cede_request", "to": win.id, "kind": "region", "country": win.country})
             await self.notice(f"🗺 {win.country} отторгает область у страны {lose.country}.", "war")
+        elif mode == "regime":
+            prev = lose.ideology
+            lose.regime_prev, lose.regime_by, lose.regime_end = prev, win.id, self.month + REGIME_MONTHS
+            lose.ideology = win.ideology
+            amount = int(min(900, (300 + lose.rep["gdp"] * 0.006) * k, max(0, lose.rep["money"]) * 0.15))
+            for src, dst in ((win, lose), (lose, win)):
+                src.relations[dst.id] = int(num(max(src.relations.get(dst.id, 0), 0) + 30, -100, 100, 0))
+            for case_map in (lose.claims, lose.border_cases, lose.ideology_cases, lose.security_cases, lose.ultimatums):
+                case_map.pop(win.id, None)
+            for case_map in (win.claims, win.border_cases, win.ideology_cases, win.security_cases, win.ultimatums):
+                case_map.pop(lose.id, None)
+            await self.send(win, {"type": "war_end", "result": "win", "enemy": lose.country, "money": amount, "approval": 4, "stability": 0})
+            await self.send(lose, {"type": "war_end", "result": "lose", "enemy": win.country, "money": -amount, "approval": -5, "stability": -8})
+            for side, other_p in ((win, lose), (lose, win)):
+                await self.send(side, {"type": "regime_change", "country": lose.country, "by": win.country, "ideology": win.ideology, "prev": prev, "until": lose.regime_end, "side": "winner" if side is win else "loser"})
+            await self.notice(f"🏛 В {lose.country} сменилась власть: {win.country} поставила дружественное правительство ({prev} → {win.ideology}).", "war")
         elif mode == "annex":
             pop = int(lose.rep["pop"] * 0.5)
             gdp = int(lose.rep["gdp"] * 0.4)
@@ -1209,6 +1260,19 @@ async def on_war(room: Room, p: Player, msg: dict):
         await room.notice("Сначала нужно расторгнуть действующий торговый пакт.", "warn", p)
         return
     ground = grounds[cause]
+    default_goal = "territory" if cause in ("territorial", "border") else "regime" if cause == "ideology" else "tribute"
+    goal = str(msg.get("goal") or default_goal)
+    if goal not in WAR_GOALS:
+        goal = default_goal
+    if goal == "regime" and p.ideology == q.ideology and p.relations.get(q.id, 0) > -30:
+        await room.notice("Сменить власть можно только в стране с другим политическим курсом или при отношениях −30 и ниже.", "warn", p)
+        return
+    claim_region = ""
+    if goal == "territory":
+        claim_region = clean_name(msg.get("region") or (p.claims.get(q.id, {}) or {}).get("region") or ground.get("region"), default="", n=80)
+    if p.regime_by == q.id and p.regime_end > room.month:
+        await room.notice("Правительство, поставленное этой страной, не может воевать с ней.", "warn", p)
+        return
     ultimatum = p.ultimatums.get(q.id)
     sudden = ground.get("severity", 0) >= 85
     if not sudden and not (ultimatum and ultimatum.get("cause") == cause and ultimatum.get("deadline", room.month + 1) <= room.month):
@@ -1216,16 +1280,17 @@ async def on_war(room: Room, p: Player, msg: dict):
         return
     wid = "w" + "".join(random.choices(string.digits, k=5))
     room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {},
-                      "cause": cause, "reason": ground.get("detail", WAR_CAUSES[cause])}
+                      "cause": cause, "reason": ground.get("detail", WAR_CAUSES[cause]),
+                      "goal": goal, "claim_region": claim_region}
     p.war = q.war = wid
     p.claims.pop(q.id, None); p.border_cases.pop(q.id, None); p.ideology_cases.pop(q.id, None); p.security_cases.pop(q.id, None); p.ultimatums.pop(q.id, None)
     current_p = int(num(p.relations.get(q.id, 0), -100, 100, 0))
     current_q = int(num(q.relations.get(p.id, 0), -100, 100, 0))
     p.relations[q.id] = max(-45, current_p - 25)
     q.relations[p.id] = max(-45, current_q - 25)
-    await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", "")})
-    await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", "")})
-    await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}. Основание: {WAR_CAUSES[cause]}. Причина: {ground.get('detail', '')}.", "war")
+    await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
+    await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
+    await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}. Основание: {WAR_CAUSES[cause]}. Причина: {ground.get('detail', '')}. Цель войны: {WAR_GOALS[goal]}{(' («' + claim_region + '»)') if claim_region else ''}.", "war")
 
 
 async def on_war_command(room: Room, p: Player, msg: dict):
@@ -1274,7 +1339,7 @@ async def on_dictate(room: Room, p: Player, msg: dict):
     if not other:
         return
     mode = msg.get("mode")
-    if mode not in ("tribute", "vassal", "region", "annex"):
+    if mode not in ("tribute", "vassal", "region", "annex", "regime"):
         return
     front = w["p"] if w["a"] == p.id else 100 - w["p"]
     won = w.get("won") == p.id
@@ -1284,9 +1349,20 @@ async def on_dictate(room: Room, p: Player, msg: dict):
     if not won and front < DICTATE_FRONT:
         await room.notice(f"Диктовать условия можно при перевесе от {DICTATE_FRONT}% (сейчас {int(front)}%).", "warn", p)
         return
-    if mode == "region" and not won and front < REGION_FRONT:
-        await room.notice(f"Отторгнуть область можно при перевесе от {REGION_FRONT}%.", "warn", p)
+    region_front = REGION_FRONT_GOAL if (w.get("goal") == "territory" and w["a"] == p.id) else REGION_FRONT
+    if mode == "region" and not won and front < region_front:
+        await room.notice(f"Отторгнуть область можно при перевесе от {region_front}%.", "warn", p)
         return
+    if mode == "regime":
+        if w.get("goal") != "regime" or w["a"] != p.id:
+            await room.notice("Сменить власть может агрессор, который объявил войну с целью «Смена власти».", "warn", p)
+            return
+        if p.ideology == other.ideology and p.relations.get(other.id, 0) > -30 and w.get("cause") != "ideology":
+            await room.notice("Сейчас смена власти недопустима: курсы совпадают, а отношения не враждебны.", "warn", p)
+            return
+        if other.regime_by and other.regime_end > room.month:
+            await room.notice(f"В {other.country} уже стоит поставленное правительство.", "warn", p)
+            return
     if mode == "annex" and not won:
         await room.notice("Полный захват — только при полной победе (100% на фронте).", "warn", p)
         return
