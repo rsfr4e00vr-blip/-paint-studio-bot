@@ -5,7 +5,7 @@
  const C=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(+v)?+v:0));
  const N=(v,d=0)=>Number.isFinite(+v)?+v:d;
  const avg=(xs,d)=>xs.length?xs.reduce((a,b)=>a+b,0)/xs.length:d;
- const DRAG=.0020, CYC_SD=.0009, EMP_MAX=95.5;
+ const DRAG=.0028, CYC_SD=.0009, EMP_MAX=95.5;
  function player(S){
   const pop=Math.max(1,N(S.pop,1)), war=!!S.war || (Array.isArray(S.wars)&&S.wars.some(w=>w&&!w.ended));
   const regions=Array.isArray(S.regions)?S.regions:[];
@@ -18,15 +18,19 @@
   const outputFactor=C((.62+industrialCapacity/35)*laborFactor*(.72+resourceFactor*.28),.55,1.35);
   const baseGDP=Math.max(100,N(S.gdp,100));
   const production=baseGDP*outputFactor*.012;
-  const foodUse=pop/1e6*(war?2.25:1.75), fuelUse=(industrialCapacity*.11+pop/1e6*.18)*(war?1.35:1), energyUse=industrialCapacity*.10+pop/1e6*.22, steelUse=industrialCapacity*.075+(war?N(S.mil,1)*.08:0);
-  const shortages={food:Math.max(0,foodUse-N(S.food,50)*.055),fuel:Math.max(0,fuelUse-N(S.fuel,50)*.055),energy:Math.max(0,energyUse-N(S.energy,50)*.055),steel:Math.max(0,steelUse-N(S.steel,50)*.055)};
+  // Масштаб населения: расход ресурсов растёт с размером страны, но не линейно (крупные страны добывают и импортируют больше).
+  // Раньше расход и дефицит росли линейно с населением, а запас всегда 0–100: у стран от ~330 млн дефицит был «всегда», и модель давала −3,81% в месяц даже при полных складах.
+  const popM=40*C(Math.pow(pop/40e6,.35),.5,1.6);
+  const foodUse=popM*(war?2.25:1.75)/1, fuelUse=(industrialCapacity*.11+popM*.18)*(war?1.35:1), energyUse=industrialCapacity*.10+popM*.22, steelUse=industrialCapacity*.075+(war?N(S.mil,1)*.08:0);
+  // Дефицит безразмерный: доля недобора запаса до норматива (еда 55, топливо 48, энергия 50, сталь 42), сумма по четырём ресурсам.
+  const shortages={food:Math.max(0,1-N(S.food,50)/55),fuel:Math.max(0,1-N(S.fuel,50)/48),energy:Math.max(0,1-N(S.energy,50)/50),steel:Math.max(0,1-N(S.steel,50)/42)};
   const shortage=Object.values(shortages).reduce((a,b)=>a+b,0);
-  const productionEfficiency=C(1-shortage/Math.max(1,foodUse+fuelUse+energyUse+steelUse)*.16,.72,1);
+  const productionEfficiency=C(1-shortage/4*.28,.72,1);
   const output=production*productionEfficiency;
   const wages=output*.34, householdIncome=wages+baseGDP*.002, consumption=householdIncome*C(.68+N(S.approval,50)/500,.65,.88);
   const taxRate=C(N(S.tax,20)/100,.05,.45), taxRevenue=baseGDP*taxRate/12*1.12;
   const militaryCost=war?Math.max(0,N(S.army))*0.0018+N(S.air)*.012+N(S.aa)*.8:Math.max(0,N(S.army))*.00055+N(S.air)*.004;
-  const resourcePenalty=shortage*.12;
+  const resourcePenalty=shortage*8;
   const regional=[];
   let weighted=0, weight=0;
   regions.forEach(r=>{
@@ -63,7 +67,7 @@
   const X=S._systemic;X.months++;X.cumulativeOutput+=output;X.cumulativeTaxes+=taxRevenue;X.cumulativeConsumption+=consumption;
   X.last={output:Math.round(output),wages:Math.round(wages),consumption:Math.round(consumption),taxRevenue:Math.round(taxRevenue),militaryCost:Math.round(militaryCost),shortages,growth:+(growth*100).toFixed(3),resourceFactor:+resourceFactor.toFixed(2),regionalProductivity:+regionalProductivity.toFixed(2),regions};
   S._systemic.last=X.last;
-  const unrestDelta=(N(S.inflation,5)>15?.45:0)+(N(S.employment,90)<75?.55:0)+(war?.25:0)+(shortage>.5?.35:0)-(N(S.approval,50)>60?.18:0);
+  const unrestDelta=(N(S.inflation,5)>15?.45:0)+(N(S.employment,90)<75?.55:0)+(war?.25:0)+(shortage>.15?.35:0)-(N(S.approval,50)>60?.18:0);
   S.approval=C(N(S.approval,50)-unrestDelta*.32+(N(S.employment,90)-85)*.008,0,100);
   S.stability=C(N(S.stability,50)-unrestDelta*.2+(N(S.employment,90)-85)*.006,0,100);
   S.coupRisk=C(N(S.coupRisk,10)+unrestDelta*.22+(N(S.debt,0)>baseGDP*3?.2:0),0,100);
