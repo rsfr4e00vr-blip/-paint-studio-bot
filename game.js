@@ -2033,11 +2033,17 @@ H.build=k=>{
  if(S.money<B.c)return toast('Недостаточно средств');
  S.money-=B.c;S.build.push({t:k,left:B.m,m:B.m});log(`Начато строительство: ${B.n}.`);save();render();
 };
+/* Отдача построек на ВВП: доля стоимости, которая возвращается приростом выпуска. Чем крупнее экономика, тем меньше отдача (убывающая доходность). */
+const BGDP={civ:.9,port:.8,rail:.7,power:.6,refinery:.5,steelw:.5,agro:.4,hospital:.25,oildepot:.1,granary:.1,steeldepot:.1,mil:.2,dock:.15};
+function bldGdpGain(k){const B=BUILD[k],r=BGDP[k];return B&&r?B.c*r/(1+Math.max(0,S.gdp)/150000):0}
 function buildTick(){
  S.build=S.build.filter(b=>{
+  /* стройка гражданских объектов сама даёт спрос: зарплаты, материалы, подрядчики */
+  {const Bd=BUILD[b.t];if(Bd&&Bd.g==='civ'&&b.left>1)S.gdp+=Bd.c/Bd.m*.3/(1+Math.max(0,S.gdp)/150000)}
   b.left--;if(b.left>0)return true;
   const k=b.t;
   if(!BUILD[k])return false;
+  {const g=bldGdpGain(k);if(g>0){S.gdp+=g;log(`📈 ${BUILD[k].n}: ВВП +${Math.round(g)}`)}}
   if(k==='civ')S.civ++;else if(k==='mil')S.mil++;else if(k==='dock')S.dock++;else if(k==='ship')S.navy++;else if(k==='sq')S.air+=2;else if(k==='fort'){S.threat=clamp(S.threat-5);S.morale=clamp(S.morale+1)}
   else{
    if(!S.bld)S.bld={};S.bld[k]=(S.bld[k]||0)+1;
@@ -2065,6 +2071,10 @@ function buildTick(){
   if(B('port'))S.money+=6*B('port');
   if(atWar()){S.threat=clamp(S.threat-.3*B('aabat'));S.morale=clamp(S.morale+.2*B('milhosp'))}
  }
+ /* постоянный вклад мощностей в ежемесячный рост ВВП (гражданские заводы относительно базовых 18) и штрафы за нехватку ресурсов */
+ {const B=bcount,cap=((+S.civ||0)-18)*.00003+B('port')*.00004+B('rail')*.00003+B('power')*.00002+B('refinery')*.00001+B('steelw')*.00001+B('agro')*.00001+B('univ')*.00002;
+  let sh=0;if(!atWar()){if(S.energy<30)sh-=.001;if(S.fuel<25)sh-=.0008;if(S.food<25)sh-=.0008;if(S.steel<15)sh-=.0005}
+  const d=Math.max(-.004,Math.min(.006,cap+sh));S.gdp=Math.max(100,S.gdp*(1+d))}
 }
 /* ---------- СТРАТЕГИЧЕСКИЕ ЗАПАСЫ: хранилища дают резерв сверх 100% ---------- */
 const RSV={fuel:{b:'oildepot',n:'Топливо (нефть)',ic:'⛽'},food:{b:'granary',n:'Продовольствие (зерно)',ic:'🌾'},steel:{b:'steeldepot',n:'Сталь',ic:'🔩'}},RSVCAP=30;
@@ -3220,27 +3230,35 @@ function autoPurchaseEnsure(){
 H.autoSet=(field,key,value)=>{
  const A=autoPurchaseEnsure();
  if(field==='enabled')A.enabled=!!value;
- else if(A.items[key]){if(field==='on')A.items[key].on=!!value;else if(field==='target')A.items[key].target=clamp(+value,5,95);else if(field==='amount')A.items[key].amount=clamp(Math.round(+value),1,30)}
+ else if(A.items[key]){if(field==='on'){A.items[key].on=!!value;if(value)A.enabled=true}else if(field==='target')A.items[key].target=clamp(+value,5,95);else if(field==='amount')A.items[key].amount=clamp(Math.round(+value),1,30)}
  save();render();
 };
 function autoPurchaseTick(){
- const A=autoPurchaseEnsure();if(!A.enabled)return;
- const bought=[];
+ const A=autoPurchaseEnsure();if(!A.enabled){A.last='Автозакупки выключены (включите общий переключатель).';return}
+ const bought=[],skipped=[];
  Object.keys(MK).forEach(g=>{
-  const cfg=A.items[g];if(!cfg||!cfg.on||S.mk.q[g]<=0)return;
-  const deficit=Math.max(0,Math.ceil(cfg.target-S[g]));if(deficit<1)return;
-  const room=100-Math.floor(S[g]),roomR=RSV[g]?Math.max(0,Math.floor(rsvCap(g)-rsvEnsure()[g])):0;
-  const n=Math.min(deficit,cfg.amount,30,S.mk.q[g],room+roomR);
-  if(n<1)return;const cost=Math.ceil(mkBuy(g)*n);if(S.money<cost)return;
+  const cfg=A.items[g];if(!cfg||!cfg.on)return;
+  const have=Number(S[g])||0,deficit=Math.max(0,Math.ceil(cfg.target-have));
+  if(deficit<1)return;                                   // запас выше порога — покупать не нужно
+  if(!S.mk||!S.mk.q||S.mk.q[g]<=0){skipped.push(`${MK[g][0]}: исчерпан месячный лимит рынка`);return}
+  const room=Math.max(0,100-Math.floor(have)),roomR=RSV[g]?Math.max(0,Math.floor(rsvCap(g)-rsvEnsure()[g])):0;
+  let n=Math.min(deficit,Math.max(1,Math.round(cfg.amount)),30,S.mk.q[g],room+roomR);
+  if(n<1){skipped.push(`${MK[g][0]}: нет места на складе`);return}
+  const price=mkBuy(g);
+  if(S.money<price*n){n=Math.floor(S.money/price)}      // не хватает денег на всё — покупаем сколько можем
+  if(n<1){skipped.push(`${MK[g][0]}: не хватает денег`);return}
+  const cost=Math.ceil(price*n);
   S.money-=cost;const main=Math.min(n,room);S[g]=clamp(S[g]+main);if(n>main)rsvEnsure()[g]+=n-main;
-  S.mk.q[g]-=n;S.mk.imp+=cost;bought.push(`${MK[g][0]} +${n}`);
+  S.mk.q[g]-=n;S.mk.imp+=cost;bought.push(`${MK[g][0]} +${n} (${fmt(cost)} млн)`);
  });
+ A.last=(bought.length?'Куплено: '+bought.join(', ')+'. ':'Покупок нет. ')+(skipped.length?'Пропущено: '+skipped.join('; ')+'.':'');
  if(bought.length)log(`🤖 Автозакупки выполнили импорт: ${bought.join(', ')}.`);
+ if(skipped.length&&(S.month%3===0))log(`🤖 Автозакупки: ${skipped.join('; ')}.`);
 }
 function autoPurchaseCard(){
  const A=autoPurchaseEnsure();
  const rows=Object.keys(MK).map(g=>{const d=A.items[g];return `<div class="mini"><b>${MK[g][1]} ${MK[g][0]}</b><small>Текущий запас: <b>${Math.round(S[g])}%</b> · цена: ${mkBuy(g)} млн/ед.</small><label class="autoline"><input type="checkbox" ${d.on?'checked':''} onchange="H.autoSet('on','${g}',this.checked)"> Автоматически покупать</label><div class="autogrid"><label>Порог запаса, %<input type="number" min="5" max="95" value="${d.target}" onchange="H.autoSet('target','${g}',this.value)"></label><label>Покупать за месяц<input type="number" min="1" max="30" value="${d.amount}" onchange="H.autoSet('amount','${g}',this.value)"></label></div></div>`}).join('');
- return card('🤖 Автоматические закупки','<p class="muted">Включите нужные товары. Каждый игровой месяц система проверит запас и автоматически купит выбранное количество, если запас ниже заданного порога. Покупки используют общий месячный лимит рынка (до 30 ед. на товар), учитывают цену и доступные деньги. Если денег или места не хватает — закупка пропускается.</p>'+`<label class="autoline autoglobal"><input type="checkbox" ${A.enabled?'checked':''} onchange="H.autoSet('enabled','',this.checked)"> <b>Включить автоматические закупки</b></label><div class="cards">${rows}</div>`);
+ return card('🤖 Автоматические закупки',(A.last?`<p><b>Последний месяц:</b> ${A.last}</p>`:'')+'<p class="muted">Включите нужные товары. Каждый игровой месяц система проверит запас и автоматически купит выбранное количество, если запас ниже заданного порога. Покупки используют общий месячный лимит рынка (до 30 ед. на товар), учитывают цену и доступные деньги. Если денег или места не хватает — закупка пропускается.</p>'+`<label class="autoline autoglobal"><input type="checkbox" ${A.enabled?'checked':''} onchange="H.autoSet('enabled','',this.checked)"> <b>Включить автоматические закупки</b></label><div class="cards">${rows}</div>`);
 }
 
 function worldTensionValue(){
@@ -3410,6 +3428,14 @@ function fxStress(){
  if(ws.length)x+=.003*Math.min(30,E.wm||0);
  x+=.030*Math.max(0,E.lossPct||0);   // потеря ВВП против довоенной траектории
  x+=3*Math.max(0,E.drag||0);          // ВВП падает прямо сейчас → валюта слабеет
+ /* ВВП в любое время (в т.ч. в мирное): падение за месяц, провал против недавнего уровня, рост — укрепляет */
+ const F=S.fx;
+ if(F&&F.gdpPrev>0){
+  const dg=g/F.gdpPrev-1,ref=F.gdpRef>0?F.gdpRef:g;
+  x+=3*Math.max(0,-dg-(E.drag||0));                         // мирное падение ВВП за месяц
+  if(!(E.lossPct>.01))x+=.8*Math.max(0,ref/g-1);            // ВВП ниже собственного недавнего уровня
+  x-=1.5*Math.max(0,dg);                                    // рост ВВП поддерживает валюту
+ }
  x+=Math.min(.05,Object.keys(S.restr||{}).length*.01);
  x-=.003*Math.max(0,S.stability-70)+.002*Math.max(0,(S.trust==null?70:S.trust)-75);
  return clamp(x,-.12,1.6,1.6);
@@ -3434,6 +3460,7 @@ function fxTick(){
  F.nw=nw;let r=F.rate+(F.base*Math.exp(fxStress())-F.rate)*(nw?.30:.16);
  r*=Math.exp(rnd(-.006,.006)*(1+(nw?1.2:0)));r=Math.max(F.base0*.5,r);r=fxPolicyStep(r);
  F.rate=r;F.mom=(r/prev-1)*100;if(Math.abs(r/F.base0-1)>.02)F.moved=1;
+ F.gdpRef=(F.gdpRef>0?F.gdpRef:S.gdp);F.gdpRef+=(S.gdp-F.gdpRef)*.08;F.gdpPrev=S.gdp;   /* память о ВВП для fxStress */
  if(F.mom>2)S.inflation=clamp(S.inflation+Math.min(.8,(F.mom-2)*.08),0,100);
  if(F.mom>8&&t-F.lastAlert>=3){F.lastAlert=t;log(`💱 Валютный кризис: 1 ${F.ref} подорожал на ${F.mom.toFixed(1)}% за месяц (теперь ${nf(r)} ${F.cur}).`);say('Курс валюты рушится — цены пересматривают каждый день','💸')}
 }
