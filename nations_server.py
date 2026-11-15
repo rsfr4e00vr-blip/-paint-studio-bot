@@ -206,6 +206,11 @@ class Player:
                     "appr": 61.0, "legit": 70.0, "power": START_POWER, "pop": 8200000.0,
                     "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0, "infl": 5.0, "rate": 5.0}
         self.score_gdp = START_GDP    # «зачётный» ВВП: растёт не быстрее лимита
+        # Личная «точка отсчёта»: у каждой страны свой стартовый ВВП, мощь и казна.
+        # Заполняется первым отчётом клиента после старта, чтобы очки считались честно для любой страны.
+        self.gdp0 = None
+        self.power0 = None
+        self.money0 = None
         self.score = 0.0
         self.comp = {}
         self.last_report = 0
@@ -386,15 +391,15 @@ class Room:
     # ---- очки
     def compute_score(self, p: Player) -> None:
         r = p.rep
-        g = max(0.05, p.score_gdp / START_GDP)
+        g = max(0.05, p.score_gdp / (p.gdp0 or START_GDP))
         # Логарифмическая шкала: ×1 → 30, ×2 → 60, ×4 → 90. Не насыщается при обычной игре.
         eco = max(0.0, min(100.0, 30.0 + 30.0 * math.log2(g)))
         # благосостояние: стабильность и одобрение + ресурсная обеспеченность (еда, топливо, энергия, сталь)
         welfare = max(0.0, min(100.0, r["stab"] * 0.4 + r["appr"] * 0.4 + r.get("res", 70.0) * 0.2))
         gov = max(0.0, min(100.0, (r["legit"] * 0.5 + r["trust"] * 0.5)))
         net = r["money"] - r["debt"]
-        fin = max(0.0, min(100.0, 50 + (net - self.start_money) / 400))   # ±20000 млн от старта = край шкалы
-        mil = max(0.0, min(100.0, r["power"] / START_POWER * 40))          # потолок при ×2.5 мощи
+        fin = max(0.0, min(100.0, 50 + (net - (p.money0 or self.start_money)) * (START_GDP / (p.gdp0 or START_GDP)) / 400))   # ±20000 млн от старта = край шкалы
+        mil = max(0.0, min(100.0, r["power"] / (p.power0 or START_POWER) * 40))          # потолок при ×2.5 мощи
         score = eco * 0.36 + welfare * 0.20 + gov * 0.14 + fin * 0.14 + mil * 0.16
         if p.out:
             score *= 0.6
@@ -874,6 +879,7 @@ async def handle(room: Room, p: Player, msg: dict):
             q.eliminated = False
             q.rep["money"] = room.start_money
             q.score_gdp = START_GDP
+            q.gdp0 = q.power0 = q.money0 = None
             room.compute_score(q)
         await room.broadcast({"type": "start", "diff": room.diff, "ai": room.ai, "length": room.length,
                               "speed": room.speed, "players": [q.pub() for q in room.players.values()]})
@@ -1007,6 +1013,14 @@ async def on_report(room: Room, p: Player, msg: dict):
         "pvo": num(r.get("pvo"), 0, 1000, old.get("pvo", 0.0)),
         "pp": num(r.get("pp"), 0, 400, old.get("pp", 60.0)),
     }
+    first = p.gdp0 is None and room.state in ("running", "paused")
+    if first:
+        # первый отчёт игры: запоминаем стартовые ВВП, мощь и казну этой страны
+        p.gdp0 = new["gdp"]
+        p.power0 = max(1.0, new["power"])
+        p.money0 = new["money"]
+        p.score_gdp = new["gdp"]
+        old = dict(old, power=new["power"], gdp=new["gdp"])
     months = max(1, room.month - p.last_report)
     p.last_report = room.month
     # зачётный ВВП растёт не быстрее 1.5% в месяц (читерский рост в таблицу не попадёт)

@@ -60,3 +60,16 @@ input[type=range]{min-width:100px;flex:1}
  .mpquick button{font-size:12px;padding:8px}
 }
 @media(max-width:380px){.cards{grid-template-columns:1fr}.mpquick{grid-template-columns:1fr 1fr}.timebar button{font-size:11px}}
+
+/* ===== Быстрый доступ к функциям государства + выбор страны в мультиплеере ===== */
+.qa-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 10px}
+.qa-chips .chip{font-size:12px}
+.qa-grid button{display:flex;align-items:center;gap:8px;transition:transform .12s ease,box-shadow .12s ease,border-color .12s ease}
+.qa-grid button:hover{transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.35);border-color:#d6b25e}
+.qa-grid button:active{transform:translateY(0) scale(.98)}
+.qa-grid .qa-ico{font-size:18px;line-height:1}
+.qa-auto{margin-top:10px}
+.qa-auto button{margin-left:6px}
+.mp-hint{margin:6px 0 2px;padding:8px 10px;border-radius:8px;border:1px dashed rgba(214,178,94,.35);font-size:12px;line-height:1.45;color:#aab7c8;background:rgba(255,255,255,.03)}
+.mp-hint.ok{border-style:solid;border-color:rgba(98,196,140,.55);color:#cfe9da;background:rgba(98,196,140,.08)}
+.mp-hint.warn{border-color:rgba(214,178,94,.6);color:#e8d9ae}

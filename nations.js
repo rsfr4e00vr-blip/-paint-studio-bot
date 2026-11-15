@@ -14,7 +14,13 @@ const SPEEDS={slow:['Медленно · 10 с/мес',10],normal:['Обычно
 const LENGTHS={short:'Короткая · 10 лет',normal:'Обычная · 15 лет',long:'Долгая · 20 лет'};
 const DIFFS={story:'История',easy:'Лёгкая',normal:'Нормальная',hard:'Сложная',expert:'Эксперт'};
 const IDEOLOGIES={'прагматизм':'Прагматизм','либеральный курс':'Либеральный курс','государственный курс':'Государственный курс','национальный курс':'Национальный курс','традиционализм':'Традиционализм','религиозный курс':'Религиозный курс'};
-const LKEY=(c)=>'novariaMP:'+c, SKEY='novariaMPSession';
+const SKEY='novariaMPSession';
+/* Профиль/сессия: sessionStorage принадлежит вкладке, localStorage — запасной вариант.
+   Раньше две вкладки одного браузера делили одну сессию и получали одну и ту же страну. */
+const sget=k=>{try{const v=sessionStorage.getItem(k);if(v!=null)return v}catch(e){}return localStorage.getItem(k)};
+const sset=(k,v)=>{try{sessionStorage.setItem(k,v)}catch(e){}try{localStorage.setItem(k,v)}catch(e){}};
+const sdel=k=>{try{sessionStorage.removeItem(k)}catch(e){}try{localStorage.removeItem(k)}catch(e){}};
+const LKEY=(c)=>'novariaMP:'+c+':'+(typeof me!=='undefined'&&me&&me.id?me.id:'');
 
 const AIO={aggr:{calm:'спокойный',normal:'обычный',high:'агрессивный',extreme:'беспощадный'},nn:{off:'выключена',std:'обычная',fast:'быстро учится'},ars:{none:'нет (страны вырабатывают и покупают сами)',small:'небольшой запас'}};
 const aiv=()=>Object.assign({aggr:'normal',nn:'std',ars:'none'},room.ai||{});
@@ -40,7 +46,7 @@ function connect(code,opts){
   closeWs();leaving=false;
   const proto=location.protocol==='https:'?'wss':'ws';
   ws=new WebSocket(`${proto}://${location.host}/ws/nations/${encodeURIComponent(code)}`);
-  const sess=opts.rejoin?JSON.parse(localStorage.getItem(SKEY)||'null'):null;
+  const sess=opts.rejoin?JSON.parse(sget(SKEY)||'null'):null;
   ws.onopen=()=>{retry=0;send({type:'join',name:val('#mpName')||(sess&&sess.name)||'Игрок',country:val('#mpCountry')||(sess&&sess.country)||'Новария',ideology:val('#mpIdeology')||(sess&&sess.ideology)||'прагматизм',token:sess?sess.token:'',rejoin:!!opts.rejoin})};
   ws.onmessage=e=>{try{on(JSON.parse(e.data))}catch(err){console.error(err)}};
   ws.onclose=()=>{if(leaving||!room.code)return;if(active||room.state==='lobby'){setBar();if(retry<6){retry++;setTimeout(()=>{if(!leaving)connect(room.code,{rejoin:true})},1500*retry)}else note('Соединение потеряно. Обновите страницу.','warn')}};
@@ -54,7 +60,7 @@ function on(m){
   switch(m.type){
   case'joined':
     me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};claims=m.claims||{};borderCases=m.border_cases||{};ideologyCases=m.ideology_cases||{};securityCases=m.security_cases||{};warGrounds=m.war_grounds||{};
-    localStorage.setItem(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(localStorage.getItem(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(localStorage.getItem(SKEY)||'{}').country)||'Новария',ideology:val('#mpIdeology')||(JSON.parse(localStorage.getItem(SKEY)||'{}').ideology)||'прагматизм'}));
+    sset(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(sget(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(sget(SKEY)||'{}').country)||'Новария',ideology:val('#mpIdeology')||(JSON.parse(sget(SKEY)||'{}').ideology)||'прагматизм'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
     setBar();break;
@@ -92,23 +98,23 @@ function on(m){
   case'annexed':{const S=NG.S;S.campaignOver=true;NG.log(`🏴 Наша страна полностью захвачена: ${m.by}`);NG.say('Страна захвачена…','😢');note(`🏴 ${m.by} захватил вашу страну. Вы наблюдаете за игрой.`,'warn');afterEffect();break}
   case'peace_offer':peaceOffer=m;showProposal({id:'peace',what:'peace',text:`${m.from} предлагает мир.`,ttl:30});break;
   case'final':finalData=m;view='final';active=false;paintModal();openModal();setBar();break;
-  case'error':note(m.text,'warn');if(m.fatal){localStorage.removeItem(SKEY);room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};active=false;view='setup';setBar();paintModal()}break;
+  case'error':note(m.text,'warn');if(m.fatal){sdel(SKEY);room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};active=false;view='setup';setBar();paintModal()}break;
   }
 }
 function pick(m){const o={};['code','state','host','month','length','speed','diff','ai','players'].forEach(k=>{if(m[k]!==undefined)o[k]=m[k]});return o}
 
 /* ---------- игровой процесс ---------- */
 function startGame(m){
-  const sess=JSON.parse(localStorage.getItem(SKEY)||'{}');
+  const sess=JSON.parse(sget(SKEY)||'{}');
   Object.assign(room,{state:'running',diff:m.diff,length:m.length,speed:m.speed,month:0,players:m.players});
   NG.begin(m.diff,sess.country||'Новария',m.ai);NG.S.mpMonth=0;NG.S.mpFlat=0;
   enterMP();sentElim=false;standings=m.players;mods={};wars=[];feed=[];lastTick=Date.now();
   closeModal();NG.setTab('mp');report();saveLocal();setBar();
-  note('🌍 Игра началась! Все страны стартуют с одинаковыми условиями.','info');
+  note('🌍 Игра началась! У каждой страны — свой ВВП, валюта и курс.','info');
 }
 function resume(){
   const raw=localStorage.getItem(LKEY(room.code));
-  if(!raw){note('Локальное сохранение этой игры не найдено','warn');localStorage.removeItem(SKEY);closeWs();return}
+  if(!raw){note('Локальное сохранение этой игры не найдено','warn');sdel(SKEY);closeWs();return}
   try{NG.load(JSON.parse(raw))}catch(e){note('Не удалось восстановить игру','warn');return}
   enterMP();sentElim=!!NG.S.campaignOver;lastTick=Date.now();closeModal();NG.setTab('mp');
   send({type:'sync'});
@@ -125,7 +131,7 @@ function leaveMP(){
   const sp=$('#speed');if(sp)sp.onchange=orig.speed;
   if(orig.reset)window.resetGame=orig.reset;if(orig.imp)window.importSave=orig.imp;
   if(room.code)localStorage.removeItem(LKEY(room.code));
-  localStorage.removeItem(SKEY);closeWs();
+  sdel(SKEY);closeWs();
   room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
   standings=[];mods={};wars=[];relations={};relationPrograms={};embassies={};claims={};borderCases={};ideologyCases={};securityCases={};warGrounds={};feed=[];chat=[];peaceOffer=null;finalData=null;view='setup';
   NG.end();setBar();closeModal();prop.classList.remove('open');
@@ -240,16 +246,17 @@ function openModal(){modal.classList.add('open')}
 function closeModal(){modal.classList.remove('open')}
 function paintModal(){
   if(view==='setup'){
-    const sess=JSON.parse(localStorage.getItem('nmpProfile')||'{}'),sp=new URLSearchParams(location.search),pre=(sp.get('room')||'').toUpperCase();
-    modal.innerHTML=`<div class="mpbox"><h2>🌍 Мультиплеер</h2><p class="muted2">2–6 игроков. У каждого своя страна и одинаковые стартовые условия. Время идёт одновременно, побеждает тот, у кого больше очков в конце.</p>
+    const sess=JSON.parse(sget('nmpProfile')||'{}'),sp=new URLSearchParams(location.search),pre=(sp.get('room')||'').toUpperCase();
+    modal.innerHTML=`<div class="mpbox"><h2>🌍 Мультиплеер</h2><p class="muted2">2–6 игроков. У каждого своя страна: свой ВВП, своя валюта и курс. Время идёт одновременно, побеждает тот, у кого больше очков в конце.</p>
 <label>Ваше имя</label><input id="mpName" maxlength="24" value="${esc(sess.name||tgName()||'')}" placeholder="Имя игрока">
-<label>Название вашей страны</label><input id="mpCountry" maxlength="28" value="${esc(sess.country||'')}" placeholder="Например, Республика Новария">
+<label>Ваша страна</label><input id="mpCountry" list="mpCountries" maxlength="28" autocomplete="off" value="${esc(sess.country||'')}" placeholder="Выберите из списка: Россия, Китай, Бразилия…"><datalist id="mpCountries">${countryOptions()}</datalist><div id="mpCountryHint" class="mp-hint"></div>
 <label>Идеология государства</label><select id="mpIdeology">${Object.entries(IDEOLOGIES).map(([k,v])=>`<option value="${k}" ${(sess.ideology||'прагматизм')===k?'selected':''}>${v}</option>`).join('')}</select>
 <div class="mprow"><button class="primary" id="mpCreate">Создать комнату</button></div>
 <label>Или войти по коду</label><div class="mprow"><input id="mpCode" maxlength="8" value="${esc(pre)}" placeholder="КОД"><button id="mpJoin">Войти</button></div>
 <div class="mprow"><button id="mpClose">Закрыть</button></div></div>`;
     $('#mpCreate').onclick=()=>go(randCode());$('#mpJoin').onclick=()=>go(val('#mpCode'));$('#mpClose').onclick=closeModal;
     $('#mpCode').oninput=e=>e.target.value=e.target.value.toUpperCase();
+    const mc=$('#mpCountry');if(mc){mc.oninput=paintCountryHint;mc.onchange=paintCountryHint;paintCountryHint()}
   }else if(view==='lobby'){
     const host=me.host,link=`${location.origin}/game?room=${room.code}`;
     modal.innerHTML=`<div class="mpbox"><h2>Комната</h2><div class="mpcode" id="mpCodeBig">${esc(room.code)}</div>
@@ -272,20 +279,33 @@ ${host&&room.players.length<2?'<p class="muted2">Нужно минимум 2 и�
     $('#mpFin').onclick=leaveMP;$('#mpStay').onclick=()=>{closeModal();NG.setTab('mp')};
   }
 }
+
+/* ---------- страна игрока: реальная страна = своя валюта, курс, ВВП ---------- */
+function countryOptions(){try{const l=(window.WORLD&&WORLD.list)||[];return l.slice().sort((a,b)=>String(a.name).localeCompare(String(b.name),'ru')).map(c=>`<option value="${esc(c.name)}">`).join('')}catch(e){return''}}
+function curRate(i){const r=Number(i.rate)||0;return r>=1000?fmt(r):r>=100?r.toFixed(1):r>=10?r.toFixed(2):r.toFixed(4)}
+function paintCountryHint(){const e=$('#mpCountryHint'),v=val('#mpCountry');if(!e)return;
+  const i=NG.countryInfo&&v?NG.countryInfo(v):null;
+  if(!v){e.className='mp-hint';e.innerHTML='Страна определяет ВВП, население, валюту и её курс. У каждого игрока — свои.';return}
+  if(!i){e.className='mp-hint warn';e.innerHTML='🧪 Такой страны нет в списке — будет вымышленная «'+esc(v)+'» с валютой «новарийский талер».';return}
+  e.className='mp-hint ok';e.innerHTML=`<b>${esc(i.key)}</b> · 💱 ${esc(i.curName)} (<b>${esc(i.cur)}</b>) · 1 ${esc(i.ref)} = <b>${curRate(i)}</b> ${esc(i.cur)} · 📈 стартовый ВВП ≈ <b>${fmt(i.gdp)}</b> млн · 👥 ${i.pop>=1?i.pop.toFixed(i.pop>=10?0:1)+' млн':Math.round(i.pop*1000)+' тыс.'}`}
+/* моя экономика прямо в «Быстром доступе»: ВВП и курс именно моей страны */
+function myEcoChips(){const S=NG.S;if(!S)return'';let fx='';try{const F=S.fx;if(F&&F.cur)fx=`<span class="chip">💱 1 ${esc(F.ref)} = <b>${curRate({rate:F.rate})}</b> ${esc(F.cur)}</span>`}catch(e){}
+  return `<span class="chip">🏳 <b>${esc(S.name||'')}</b></span>${fx}<span class="chip">📈 ВВП <b>${fmt(S.gdp)}</b> млн</span><span class="chip">👥 ${((S.pop||0)/1e6).toFixed(1)} млн</span>`}
 function tgName(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u&&u.first_name||''}
 function randCode(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=a[Math.floor(Math.random()*a.length)];return s}
 function go(code){
   const n=val('#mpName'),c=val('#mpCountry');
   if(!n){note('Введите имя','warn');return}
   if(!c){note('Введите название страны','warn');return}
-  const ideology=val('#mpIdeology')||'прагматизм';localStorage.setItem('nmpProfile',JSON.stringify({name:n,country:c,ideology}));connect(code);
+  const ideology=val('#mpIdeology')||'прагматизм';sset('nmpProfile',JSON.stringify({name:n,country:c,ideology}));connect(code);
 }
 function copy(t){try{navigator.clipboard.writeText(t)}catch(e){const i=document.createElement('input');i.value=t;document.body.appendChild(i);i.select();document.execCommand('copy');i.remove()}}
 
 /* ---------- вкладка «Мультиплеер» ---------- */
 function table(list){
-  return `<div style="overflow:auto"><table><tr><th>#</th><th>Страна</th><th>Очки</th><th>ВВП</th><th>Мощь</th><th>Стаб.</th><th>Инфляция</th><th>Ставка ЦБ</th></tr>${list.map((p,i)=>`<tr class="${p.id===me.id?'me':''}"><td>${i+1}</td><td><b>${esc(p.country)}</b>${p.eliminated?' 💀':p.out?' 🪧':''}${p.connected===false?' 📴':''}<br><span class="muted2">${esc(p.name)}</span><br>${chips(p.comp)}</td><td><b>${p.score}</b></td><td>${fmt(p.gdp)}</td><td>${p.power}</td><td>${p.stab}%</td><td>${Number(p.infl??0).toFixed(1)}%</td><td>${Number(p.rate??5).toFixed(1)}%</td></tr>`).join('')}</table></div>`;
+  return `<div style="overflow:auto"><table><tr><th>#</th><th>Страна</th><th>Очки</th><th>ВВП</th><th>Мощь</th><th>Стаб.</th><th>Инфляция</th><th>Ставка ЦБ</th></tr>${list.map((p,i)=>`<tr class="${p.id===me.id?'me':''}"><td>${i+1}</td><td><b>${esc(p.country)}</b>${p.eliminated?' 💀':p.out?' 🪧':''}${p.connected===false?' 📴':''}${curTag(p.country)}<br><span class="muted2">${esc(p.name)}</span><br>${chips(p.comp)}</td><td><b>${p.score}</b></td><td>${fmt(p.gdp)}</td><td>${p.power}</td><td>${p.stab}%</td><td>${Number(p.infl??0).toFixed(1)}%</td><td>${Number(p.rate??5).toFixed(1)}%</td></tr>`).join('')}</table></div>`;
 }
+function curTag(c){try{const i=NG.countryInfo&&NG.countryInfo(c);return i?` <span class="chip" title="${esc(i.curName)}">💱 ${esc(i.cur)}</span>`:''}catch(e){return''}}
 function chips(c){if(!c)return'';const n={eco:'Эко',welfare:'Нар.',gov:'Упр.',fin:'Фин.',mil:'Арм.'};return Object.keys(n).map(k=>`<span class="chip">${n[k]} ${c[k]}</span>`).join('')}
 window.NGMP={
   setWarCommand(region,troops,air,navy){send({type:'war_command',region:String(region||'').slice(0,60),troops:Number(troops)||0,air,navy})},
@@ -296,7 +316,7 @@ window.NGMP={
   tab(){
     if(!room.code)return `<section class="panel"><h2>🌍 Мультиплеер</h2><p>Вы не в комнате.</p><button class="primary" onclick="NGMP.open()">Создать или войти</button></section>`;
     if(room.state==='lobby')return `<section class="panel"><h2>🌍 Комната ${esc(room.code)}</h2><p>Игра ещё не началась.</p><button class="primary" onclick="NGMP.open()">Открыть лобби</button></section>`;
-    return `<div class="mpwrap">${NG.missionsHtml?NG.missionsHtml():''}<section class="panel"><h2>🧭 Быстрый доступ к функциям государства</h2><p class="muted2">Эти системы работают и в сетевой партии: закупки, экономика, армия, ПВО, карта и дипломатия.</p><div class="mprow mpquick"><button onclick="NG.setTab('autobuy')">🤖 Автозакупки</button><button onclick="NG.setTab('economy')">💰 Экономика</button><button onclick="NG.setTab('military')">🛡 Армия и ПВО</button><button onclick="NG.setTab('diplomacy')">🌐 Дипломатия мира</button><button onclick="NG.setTab('politics')">🏛 Политика</button><button onclick="NG.setTab('intelligence')">🕵 Разведка</button><button onclick="NG.setTab('worldtension')">🌍 Мировые события</button><button onclick="NG.setTab('map')">🗺 Карта и регионы</button><button onclick="NG.setTab('market')">🛒 Рынок</button></div><div id="mpAutoSummary" class="muted2"></div></section><section class="panel" id="mpStand"></section><section class="panel" id="mpMods"></section><section class="panel"><h2>Дипломатия игроков</h2><p class="muted2">По умолчанию все игроки нейтральны. Чужая война не втягивает остальные страны автоматически.</p><div class="mpdip" id="mpDip"></div></section><section class="panel"><h2>Чат</h2><div class="mpchat" id="mpChatLog"></div><div class="row"><input id="mpChatIn" maxlength="200" placeholder="Сообщение игрокам"><button id="mpChatSend">➤</button></div></section><section class="panel"><h2>События мира</h2><div class="mpfeed" id="mpFeed"></div></section>${me.host?`<section class="panel"><button id="mpPause">${room.state==='paused'?'▶ Продолжить':'⏸ Пауза'}</button> <button class="danger" id="mpLeave2">Покинуть игру</button></section>`:`<section class="panel"><button class="danger" id="mpLeave2">Покинуть игру</button></section>`}</div>`;
+    return `<div class="mpwrap">${NG.missionsHtml?NG.missionsHtml():''}<section class="panel"><h2>🧭 Быстрый доступ к функциям государства</h2><p class="muted2">Эти системы работают и в сетевой партии: закупки, экономика, армия, ПВО, карта и дипломатия.</p><div class="mprow mpquick"><button onclick="NG.setTab('autobuy')">🤖 Автозакупки</button><button onclick="NG.setTab('economy')">💰 Экономика</button><button onclick="NG.setTab('military')">🛡 Армия и ПВО</button><button onclick="NG.setTab('diplomacy')">🌐 Дипломатия мира</button><button onclick="NG.setTab('politics')">🏛 Политика</button><button onclick="NG.setTab('intelligence')">🕵 Разведка</button><button onclick="NG.setTab('worldtension')">🌍 Мировые события</button><button onclick="NG.setTab('map')">🗺 Карта и регионы</button><button onclick="NG.setTab('market')">🛒 Рынок</button></div><div id="mpMyEco" class="qa-chips"></div><div id="mpAutoSummary" class="muted2"></div></section><section class="panel" id="mpStand"></section><section class="panel" id="mpMods"></section><section class="panel"><h2>Дипломатия игроков</h2><p class="muted2">По умолчанию все игроки нейтральны. Чужая война не втягивает остальные страны автоматически.</p><div class="mpdip" id="mpDip"></div></section><section class="panel"><h2>Чат</h2><div class="mpchat" id="mpChatLog"></div><div class="row"><input id="mpChatIn" maxlength="200" placeholder="Сообщение игрокам"><button id="mpChatSend">➤</button></div></section><section class="panel"><h2>События мира</h2><div class="mpfeed" id="mpFeed"></div></section>${me.host?`<section class="panel"><button id="mpPause">${room.state==='paused'?'▶ Продолжить':'⏸ Пауза'}</button> <button class="danger" id="mpLeave2">Покинуть игру</button></section>`:`<section class="panel"><button class="danger" id="mpLeave2">Покинуть игру</button></section>`}</div>`;
   },
   after(){
     if(!room.code||room.state==='lobby')return;
@@ -312,7 +332,7 @@ window.NGMP={
   open(){view=room.state==='lobby'?'lobby':'setup';paintModal();openModal()}
 };
 function paintAll(){if(NG.getTab()!=='mp'||!active&&room.state==='lobby')return;paintStand();paintMods();paintDip();paintChat();paintFeed();paintAutoSummary() }
-function paintAutoSummary(){const e=$('#mpAutoSummary');if(!e||!NG.S)return;const a=NG.S.autoPurchase||{},items=a.items||{},on=Object.keys(items).filter(k=>items[k]&&items[k].on);e.innerHTML=`<b>Автозакупки:</b> ${a.enabled?'включены':'выключены'} · ${on.length?`товары: ${on.map(esc).join(', ')}`:'товары не выбраны'} <button onclick="NG.setTab('autobuy')">Настроить</button>`}
+function paintAutoSummary(){const me2=$('#mpMyEco');if(me2&&NG.S)me2.innerHTML=myEcoChips();const e=$('#mpAutoSummary');if(!e||!NG.S)return;const a=NG.S.autoPurchase||{},items=a.items||{},on=Object.keys(items).filter(k=>items[k]&&items[k].on);e.innerHTML=`<b>Автозакупки:</b> ${a.enabled?'включены':'выключены'} · ${on.length?`товары: ${on.map(esc).join(', ')}`:'товары не выбраны'} <button onclick="NG.setTab('autobuy')">Настроить</button>`}
 function paintStand(){const e=$('#mpStand');if(!e)return;const list=standings.length?standings:room.players;e.innerHTML=`<h2>🏆 Таблица очков · месяц ${room.month}/${room.length}</h2>${table(list)}<p class="muted2">Очки: экономика 36%, народ 20%, управление 14%, финансы 14%, армия 16%. Считаются на сервере; рост ВВП в зачёте ограничен 1,5% в месяц.</p>`}
 function pct(v){return(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v*1000)/10)+'%'}
 function relationTier(v){return v>=80?'🌟 стратегический партнёр':v>=60?'🤝 близкий партнёр':v>=35?'🙂 дружелюбные отношения':v>=10?'🕊 партнёрский диалог':v>-10?'😐 нейтралитет':v>-35?'🧊 напряжённые отношения':v>-60?'⚠️ недружественные отношения':'😠 враждебные отношения'}
@@ -368,9 +388,9 @@ setBar();
 (function boot(){
   const sp=new URLSearchParams(location.search);
   let start=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||sp.get('startapp')||'';
-  const sess=JSON.parse(localStorage.getItem(SKEY)||'null');
+  const sess=JSON.parse(sget(SKEY)||'null');
   if(sess&&sess.code&&localStorage.getItem(LKEY(sess.code))||sess&&sess.code){connect(sess.code,{rejoin:true});return}
-  if(start.startsWith('nat_')){const code=start.slice(4);const pr=JSON.parse(localStorage.getItem('nmpProfile')||'null');view='setup';paintModal();openModal();$('#mpCode').value=code.toUpperCase();if(pr&&pr.name&&pr.country){/* профиль уже есть — входим сразу */connect(code)}return}
+  if(start.startsWith('nat_')){const code=start.slice(4);const pr=JSON.parse(sget('nmpProfile')||'null');view='setup';paintModal();openModal();$('#mpCode').value=code.toUpperCase();if(pr&&pr.name&&pr.country){/* профиль уже есть — входим сразу */connect(code)}return}
   if(sp.get('room')){view='setup';paintModal();openModal()}
 })();
 })();
