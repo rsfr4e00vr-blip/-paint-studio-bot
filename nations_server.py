@@ -87,7 +87,7 @@ RUBBER_FIRST = -0.03
 START_GDP = 42000.0
 START_POWER = 100.0       # warPower() страны на старте (проверено симуляцией)
 START_MONEY = {"story": 26000, "easy": 22000, "normal": 18000, "hard": 14500, "expert": 10500}
-GDP_SCORE_CAP = 1.015     # зачётный ВВП растёт не быстрее 1.5% в месяц
+GDP_SCORE_CAP = 1.012     # зачётный ВВП растёт не быстрее 1.2% в месяц — то же, что EconCore.CFG.GDP_MONTH_MAX (проверяет test_economy_core.js)
 
 # ---- Сеть взаимозависимостей и стратегический арсенал (зеркало interdep.js; считает сервер) ----
 ECO_KEYS = ("energy", "fuel", "transport", "steel", "industry", "food", "finance", "defense")
@@ -1023,7 +1023,7 @@ async def on_report(room: Room, p: Player, msg: dict):
         old = dict(old, power=new["power"], gdp=new["gdp"])
     months = max(1, room.month - p.last_report)
     p.last_report = room.month
-    # зачётный ВВП растёт не быстрее 1.5% в месяц (читерский рост в таблицу не попадёт)
+    # зачётный ВВП растёт не быстрее 1.2% в месяц (читерский рост в таблицу не попадёт)
     cap = p.score_gdp * (GDP_SCORE_CAP ** months)
     p.score_gdp = max(1000.0, min(new["gdp"], cap)) if new["gdp"] >= p.score_gdp else new["gdp"]
     # мощь тоже ограничена: не более +6% в месяц

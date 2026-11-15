@@ -43,7 +43,7 @@ const win = {
 win.window = win; win.self = win; win.globalThis = win;
 vm.createContext(win);
 const scripts = ['world.js', 'regions.js', 'world_data.js', 'fx.js', 'resources.js', 'nn_core.js', 'grand_diplomacy.js',
-  'ai_resources.js', 'interdep.js', 'ai_arsenal.js', 'systemic_sim.js', 'ai_nations.js', 'population_ai.js', 'economy_diplomacy.js', 'game.js'];
+  'ai_resources.js', 'interdep.js', 'ai_arsenal.js', 'systemic_sim.js', 'economy_core.js', 'ai_nations.js', 'population_ai.js', 'economy_diplomacy.js', 'game.js'];
 for (const s of scripts) {
   try { let src = fs.readFileSync(path.join(ROOT, s), 'utf8'); if (s === 'game.js') src = src.replace("window.H=window.H||{};", "window.H=window.H||{};window.__dbg={get S(){return S},startWar};"); vm.runInContext(src, win, { filename: s }); }
   catch (e) { console.error('LOAD FAIL', s, e.message.split('\n')[0]); }

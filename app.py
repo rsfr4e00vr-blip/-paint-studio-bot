@@ -761,6 +761,11 @@ def systemic_sim_js():
     return FileResponse(BASE / "systemic_sim.js", media_type="application/javascript")
 
 
+@app.get("/economy_core.js")
+def economy_core_js():
+    return FileResponse(BASE / "economy_core.js", media_type="application/javascript")
+
+
 @app.get("/interdep.js")
 def interdep_js():
     return FileResponse(BASE / "interdep.js", media_type="application/javascript")
