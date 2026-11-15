@@ -319,7 +319,7 @@ function renderCore(auto){if(window.__salv)return;if(tab==='events')tab='overvie
 if(tab==='overview')c=`<div class="grid">${warnBanner()}${warPanel()}${card('🗺 Карта державы','<div class="emp-slot"><p class="muted">Строится единая карта…</p></div><p class="muted">Ваши земли и все аннексированные территории показаны одним цветом; вассалы — отдельным оттенком.</p>')}${capList()}${card('Государство',`<div class="cards"><div class="mini"><b>${S.name}</b>Форма правления: ${S.gov}<br>Лидер: ${S.leader}<br>Партия: ${S.party}<br>Сложность: <b>${difficulty().label}</b><div class=\"actions\"><button onclick=\"H.chooser()\">🌍 Выбрать другое государство</button></div></div><div class="mini"><b>Состояние страны</b>${bar('Стабильность',S.stability)}${bar('Одобрение',S.approval)}${bar('Легитимность',S.legitimacy)}</div></div>`)}${card('Национальные ресурсы',`<div class="cards">${[['Продовольствие',S.food],['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo],['Энергия',S.energy],['Технологии',S.tech]].map(x=>`<div class="mini"><b>${x[0]}</b>${x[1]} / 100<div class="bar"><i style="width:${clamp(x[1])}%"></i></div></div>`).join('')}</div>`)}${card('Последние события',`<div class="log">${S.log.slice(0,9).map(x=>`<div>${x}</div>`).join('')}</div>`)}${card('Быстрые действия',`<div class="actions"><button onclick="act('roads')">Построить дороги (500 млн)</button><button onclick="act('aid')">Помощь населению (300 млн)</button><button onclick="act('reform')">Государственная реформа (700 млн)</button></div>`)}</div>`;
 if(tab==='economy')c=`<div class="grid">${card('Экономика',`<div class="cards"><div class="mini">Доходы в месяц <b>${fmt(income())} млн</b></div><div class="mini">Расходы в месяц <b>${fmt(expenses())} млн</b></div><div class="mini">Государственный долг <b>${fmt(S.debt)} млн</b></div><div class="mini">Инфляция <b>${(+S.inflation).toFixed(1)}%</b></div></div>${bar('Занятость',S.employment)}<div class="row"><button onclick="act('industry')">Развивать промышленность · 800 млн</button><button onclick="act('trade')">Торговое соглашение · 200 млн</button><button onclick="act('debt')">Погасить 1000 млн долга</button></div>`)}${card('Бюджетные настройки',`<div class="row"><label>Налоговая ставка <b id="taxv">${S.tax}%</b></label><input type="range" min="5" max="50" value="${S.tax}" oninput="setv('tax',this.value,'taxv','%')"></div><div class="row"><label>Здравоохранение <b id="healthv">${S.health}%</b></label><input type="range" min="0" max="35" value="${S.health}" oninput="setv('health',this.value,'healthv','%')"></div><div class="row"><label>Образование <b id="educationv">${S.education}%</b></label><input type="range" min="0" max="35" value="${S.education}" oninput="setv('education',this.value,'educationv','%')"></div><div class="row"><label>Оборона <b id="defensev">${S.defense}%</b></label><input type="range" min="0" max="45" value="${S.defense}" oninput="setv('defense',this.value,'defensev','%')"></div><button class="primary" onclick="saveBudget()">Применить бюджет</button>`)}${taxCard()}${budCard()}${systemicEconomyCard()}${window.InterDep?card('🕸 Сеть взаимозависимостей',InterDep.panel(S,'Ваша экономика: всё зависит от всего',{repair:true})):''}</div>`;
 if(tab==='military')c=`<div class="grid">${warPanel()}${card('Вооружённые силы',`<div class="cards">${[['Сухопутные войска',fmt(S.army)+' чел.'],['Флот',S.navy+' кораблей'],['Авиация',S.air+' эскадрилий'],['Подготовка',S.training+'%'],['Боевой дух',S.morale+'%'],['Комплексы ПВО',`${S.aa||0} комплексов · ${bcount('aabat')} позиций`],['Военная угроза',S.threat+'%']].map(x=>`<div class="mini">${x[0]}<b>${x[1]}</b></div>`).join('')}</div>${bar('Боевой дух',S.morale)}<div class="actions"><button onclick="act('recruit')">Набрать 5 000 солдат · 400 млн</button><button onclick="act('train')">Военные учения · 250 млн</button><button onclick="act('equipment')">Закупить вооружение · 500 млн</button><button class="primary" onclick="buildAA()">📡 Развернуть ПВО · 500 млн</button><button onclick="act('mobilize')">Мобилизация</button><button class="danger" onclick="act('demobilize')">Сократить армию</button></div><p>Состояние: <b>${S.war?'ВОЙНА':'Мирное время'}</b></p><button class="${S.war?'good':'danger'}" onclick="act('war')">${S.wars&&S.wars.length?'Заключить мир со всеми':S.martial?'Отменить военное положение':'Ввести военное положение'}</button>`)}${card('Военные запасы',`<div class="cards">${[['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo]].map(x=>`<div class="mini">${x[0]} <b>${x[1]}/100</b></div>`).join('')}</div>`)}${armsCard()}${tacticsCard()}</div>`;
-if(tab==='economy')c=mergeEco(c)+antiInflationCard()+(window.ECODIP?ECODIP.panel(S):'');if(tab==='military')c=mergeMil(c);
+if(tab==='economy')c=mergeEco(c)+warEconCard()+antiInflationCard()+(window.ECODIP?ECODIP.panel(S):'');if(tab==='military')c=mergeMil(c)+warEconCard();
 if(tab==='politics')c=`<div class="grid">${card('Твоя партия',`<div class="mini party-card"><b>🎖 ${S.playerParty}</b>Ты играешь за эту партию. Если она проиграет выборы и потеряет власть — кампания будет проиграна.</div><p>Правящая партия: <b>${S.party}</b></p><p>Глава правительства: <b>${S.leader}</b></p><p>До выборов: <b>${S.election} мес.</b></p><div class="actions"><button class="good" onclick="campaignAction('rally')">Провести митинг · 250 млн</button><button onclick="campaignAction('program')">Опубликовать программу · 400 млн</button><button onclick="act('speech')">Обращение к нации</button><button onclick="act('law')">Принять социальный закон</button><button class="primary" onclick="act('election')">Провести досрочные выборы</button><button onclick="act('security')">Усилить охрану правительства</button></div>${bar('Одобрение правительства',S.approval)}${bar('Риск переворота',S.coupRisk)}${S.grace>0?`<p class="muted">🛡 Защитный срок: ещё ${S.grace} мес. — отставка не грозит</p>`:S.crisis>0?`<p class="muted">⚠️ Угроза отставки (${S.crisisWhy||''}): ${S.crisis} мес. подряд. Власть могут сменить после ${crisisNeed()}-го месяца</p>`:''}</div>`)}${card('Политические партии и парламент',`<div class="cards">${S.parties.slice().sort((a,b)=>b.support-a.support).map(p=>`<div class="mini ${p.name===S.playerParty?'party-card':''}"><b>${p.name} ${p.name===S.playerParty?'★ ТВОЯ ПАРТИЯ':''}</b>${p.ideology}<br>Поддержка: <b>${Math.round(p.support)}%</b> · Мест: ${p.seats}<div class="bar"><i style="width:${clamp(p.support)}%"></i></div></div>`).join('')}</div><p class="action-note">Рейтинг партий меняется каждый месяц в зависимости от экономики, стабильности и решений правительства.</p>`)}</div>`;
 if(tab==='politics')c=mergePol(c);
 if(tab==='charts')c=`<div class="grid">${card('Экономика: рост и падение',`<div class="chart-wrap"><canvas id="chartEconomy"></canvas></div><p class="action-note">ВВП, казна и государственный долг. История последних 60 месяцев.</p>`)}${card('Политика и общество',`<div class="chart-wrap"><canvas id="chartPolitics"></canvas></div><p class="action-note">Поддержка твоей партии, одобрение правительства и стабильность.</p>`)}${card('Население и ресурсы',`<div class="chart-wrap"><canvas id="chartPopulation"></canvas></div><p class="action-note">Население, продовольствие и топливо.</p>`)}</div>`;
@@ -409,8 +409,97 @@ H.fxPolicy=v=>{if(blocked()||!['free','managed','peg'].includes(v))return;fxEnsu
 H.fxReserve=()=>{if(blocked())return;if((S.money||0)<500)return toast('Нужно 500 млн в казне');fxEnsure();fxPolicyEnsure();S.money-=500;S.fx.fxReserves+=500;log('🏦 ЦБ пополнил золотовалютные резервы на 500 млн.');save();render()};
 H.fxTarget=()=>{if(blocked())return;fxEnsure();fxPolicyEnsure();S.fx.fxTarget=S.fx.rate;log('🎯 ЦБ установил текущий рыночный курс как целевой.');save();render()};
 H.cbAction=(a)=>{if(blocked())return;const acts={intervene:[900,()=>{S.antiInflationFund=Math.max(0,(S.antiInflationFund||0)-900);S.inflation=Math.max(0,S.inflation-1.1);S.trust=clamp(S.trust+3);if(S.fx)S.fx.rate*=.985},'ЦБ провёл валютную интервенцию'],food:[650,()=>{S.antiInflationFund=(S.antiInflationFund||0)+650;S.food=clamp(S.food+8);S.inflation=Math.max(0,S.inflation-.5)},'Создан продовольственный стабфонд'],competition:[400,()=>{S.inflation=Math.max(0,S.inflation-.35);S.trust=clamp(S.trust+2);S.gdp+=60},'Начата антимонопольная проверка'],bond:[0,()=>{const amount=Math.min(1800,Math.max(0,S.money-500));if(amount<100)return toast('В казне нет свободных средств');S.money-=amount;S.debt+=amount;S.printed=Math.max(0,(S.printed||0)-4);S.inflation=Math.max(0,S.inflation-.65);S.trust=clamp(S.trust+1.5)},'ЦБ стерилизовал часть денежной массы']};const q=acts[a];if(!q)return;if(S.money<q[0])return toast('Недостаточно средств');S.money-=q[0];q[1]();log(q[2]);save();render();toast(q[2])};
+
+/* ================= ВОЕННЫЕ РЕЛЬСЫ: экономика на военном положении =================
+   Пока включён режим и идёт война, ВВП не падает ниже уровня начала месяца (+0.2% роста от военных заказов).
+   Платит за это не ВВП, а казна, цены и население: удары по экономике оплачиваются из казны, растёт инфляция,
+   нормируются еда и топливо, падает одобрение. Зато растёт выпуск боеприпасов и техники. После войны режим выключается. */
+const WE_COST=()=>Math.round(1200*econScale());
+const WE_GROWTH=.002;
+function weWar(){return atWar()||(S.mpWars||[]).length>0}   // и одиночные, и сетевые войны
+function weState(){return S.we=S.we||{on:false,m:0,shield:0,hits:0,last:0,since:-99,total:0}}
+function weOn(){return !!(S.we&&S.we.on&&weWar())}
+function warEconAbsorbCut(cut){
+ const W=weState();
+ if(weOn()){W.shield+=cut;W.hits++;W.last=cut;S.money-=Math.round(cut*.30);if(S.money<0){S.debt+=-S.money;S.money=0}return S.gdp}
+ return Math.max(100,S.gdp-cut);
+}
+function weNow(){return (S.year||1)*12+(S.month||0)}
+H.warEconOn=(skipAsk)=>{
+ if(blocked())return;const W=weState();
+ if(W.on)return;
+ if(!weWar())return toast('Военные рельсы доступны только во время войны');
+ const cost=WE_COST();
+ const go=()=>{if(S.money<cost)return toast('Недостаточно средств: нужно '+fmt(cost)+' млн');
+  S.money-=cost;W.on=true;W.m=0;W.tail=null;W.since=weNow();S.approval=clamp(S.approval-3);S.inflation=clamp(S.inflation+.8,0,100);
+  log('🏭 Страна переведена на военные рельсы: заводы работают на фронт, ВВП защищён от военных потерь.');
+  try{say('Заводы перешли на военные заказы','🏭')}catch(e){}
+  save();render()};
+ if(skipAsk===true)return go();
+ ask(`Перевести страну на военные рельсы? Стоимость: ${fmt(cost)} млн. ВВП не будет падать во время войны, но вырастут цены, нормируются еда и топливо, упадёт одобрение, а потери оплачивает казна.`,go);
+};
+H.warEconOff=()=>{
+ const W=weState();if(!W.on)return;
+ const cost=Math.round(500*econScale());S.money=Math.max(0,S.money-cost);
+ W.on=false;W.since=weNow();S.inflation=clamp(S.inflation+.5,0,100);S.approval=clamp(S.approval+2);
+ log(`🕊 Конверсия: заводы возвращаются к гражданской продукции (−${fmt(cost)} млн).`);
+ save();render()};
+function warEconTick(g0){
+ const W=weState();if(!W.on)return;
+ const war=weWar();
+ if(!war){
+  // война закончилась: ещё 3 месяца защита остаётся (плавная конверсия), чтобы не было обвала ВВП в день мира
+  if(W.tail==null){W.tail=3;log('🕊 Война окончена — 3 месяца плавной конверсии, ВВП под защитой.')}
+  W.tail--;
+  if(S.gdp<g0){const gap=g0-S.gdp;W.shield+=gap;W.total=Math.round(W.shield);S.gdp=g0}
+  if(W.tail<=0){W.on=false;W.tail=null;W.since=weNow();log('🕊 Конверсия завершена: экономика на мирных рельсах.')}
+  return;
+ }
+ W.tail=null;W.m++;const k=econScale();
+ S.ammo=clamp(S.ammo+2.2);S.equipment=clamp(S.equipment+.9);S.steel=clamp(S.steel-.3);
+ S.fuel=clamp(S.fuel-.25);S.food=clamp(S.food-.2);
+ S.employment=clamp(S.employment+.25,0,100);
+ S.inflation=clamp(S.inflation+(S.priceControls?.12:.22),0,100);
+ S.approval=clamp(S.approval-.18);
+ S.money-=Math.round(140*k);
+ const target=g0*(1+WE_GROWTH);
+ if(S.gdp<target){const gap=target-S.gdp;W.shield+=gap;W.last=gap;S.money-=Math.round(gap*.25);S.gdp=target}
+ W.total=Math.round(W.shield);
+ if(S.money<0){S.debt+=-S.money;S.money=0;S.stability=clamp(S.stability-.4)}
+}
+/* Нейросеть-советник: учится онлайн, когда включать/выключать военные рельсы (работает, если передать политику нейросети) */
+function nnWarRails(){
+ if(!window.NN)return;
+ const W=weState(),war=weWar(),g=Math.max(1,S.gdp);
+ const wr=(S.wars||[])[0]||(S.mpWars||[])[0],prog=wr?(+wr.p||50)/100:.5;
+ const x=[C01((S.inflation||0)/25),C01((S.money||0)/(g*.25)),C01((S.approval||0)/100),C01((S.stability||0)/100),C01((W.shield||0)/(g*.4)),prog,C01((S.debt||0)/(g*1.5)),W.on?1:0];
+ const net=NN.get(S,'nnWarRails',8,10,2,[0,.1]);
+ // обучение на результате прошлого решения
+ const L=S._nnWarLast;
+ if(L){const dg=(S.gdp-L.gdp)/Math.max(1,L.gdp)*100,r=NN.C(dg*.6+(S.approval-L.approval)*.04-((S.inflation||0)>15?.5:0)-(S.money<0?.5:0)-((S.stability||0)<35?.4:0),-1.5,1.5);
+  NN.remember(S._nnWarBuf=S._nnWarBuf||[],{x:L.x,k:L.k,t:r},120);NN.train(net,L.x,L.k,r,.04);NN.replay(net,S._nnWarBuf,3,.02)}
+ if(!war){S._nnWarLast=null;return}
+ if(weNow()-(W.since||-99)<6){S._nnWarLast={x,k:W.on?1:0,gdp:S.gdp,approval:S.approval};return}
+ const q=NN.predict(net,x),k=NN.choose(q,i=>i===0||(i===1&&(W.on||S.money>=WE_COST()*1.5)),.05);
+ if(k===1&&!W.on){H.warEconOn(true);log('🧠 Нейросеть-советник перевела экономику на военные рельсы.')}
+ else if(k===0&&W.on){H.warEconOff();log('🧠 Нейросеть-советник вернула экономику к мирному режиму.')}
+ S._nnWarLast={x,k:W.on?1:0,gdp:S.gdp,approval:S.approval};
+}
+function C01(v){return Math.max(0,Math.min(1,Number.isFinite(+v)?+v:0))}
+function warEconCard(){
+ const W=weState(),war=weWar(),on=weOn(),cost=WE_COST();
+ const st=on?'<b style="color:#4ade80">ВКЛЮЧЕНЫ</b>':war?'выключены':'мирное время';
+ const btn=on?`<button onclick="H.warEconOff()">🕊 Вернуться к мирной экономике</button>`:`<button class="primary" ${war?'':'disabled'} onclick="H.warEconOn()">🏭 Перевести страну на военные рельсы · ${fmt(cost)} млн</button>`;
+ return card('🏭 Военные рельсы',`<p class="muted">Экономика на военном положении: пока идёт война и режим включён, ВВП не падает ниже уровня начала месяца и растёт на 0.2% в месяц от военных заказов. Цена: инфляция, нормирование еды и топлива, падение одобрения, расходы казны. Удары врага по экономике оплачиваются из казны, а не из ВВП.</p>
+ <div class="cards"><div class="mini"><b>Статус</b><strong>${st}</strong><small>${war?'Идёт война':'Режим доступен только во время войны'}</small></div>
+ <div class="mini"><b>Защищено ВВП</b><strong>${fmt(W.shield||0)} млн</strong><small>${W.hits?`ударов поглощено: ${W.hits}`:'за всё время режима'}</small></div>
+ <div class="mini"><b>Месяцев на рельсах</b><strong>${W.m||0}</strong><small>выпуск: боеприпасы +2.2, техника +0.9 в мес.</small></div></div>
+ <div class="actions">${btn}</div>
+ <small class="muted">🧠 Если передать экономику нейросети (карточка Центробанка), она сама выбирает, когда включать и выключать режим, и учится на результатах.</small>`);
+}
 function aiMonetaryGovernor(){
  if(!S.aiEconomicGovernor)return;
+ try{nnWarRails()}catch(e){console.warn('nnWarRails',e)}
  const inf=Number(S.inflation)||0,trust=Number(S.trust??70),debtRatio=(S.debt||0)/Math.max(1,S.gdp),war=atWar(),cash=S.money||0;
  // Нейросетевой советник использует те же инструменты, но не душит экономику при слабом росте.
  if(inf>14&&S.cbRate<12)S.cbRate=Math.min(12,S.cbRate+1);
@@ -437,7 +526,7 @@ function monetaryTick(){
  if(S.antiInflationFund>0&&inf>9&&!atWar()){const use=Math.min(90,S.antiInflationFund);S.antiInflationFund-=use;S.inflation=Math.max(0,S.inflation-use*.0018)}
 }
 
-function monthTick(){if(S.campaignOver)return;darkTick();S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.lastInc=inc;S.lastExp=exp;S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}const regionalProductivity=S.regions.length?S.regions.reduce((a,r)=>a+(Number(r.productivity)||.75)*Math.max(1,r.pop||1),0)/S.regions.reduce((a,r)=>a+Math.max(1,r.pop||1),0):.75;S.regions.forEach(r=>{r.regionalGDP=Math.max(0,Math.round(S.gdp*(r.pop/Math.max(1,S.pop))*(Number(r.productivity)||.75)));r.productivity=clamp((Number(r.productivity)||.75)+(r.infra-50)/10000+(r.industry-50)/16000-(r.unrest/10000),.35,1.35)});S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)+(regionalProductivity-.75)*.0008));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}try{if(window.ECODIP)ECODIP.tick(S)}catch(e){console.warn('economy diplomacy tick',e)}addonTick();try{fxTick()}catch(e){console.error('fxTick',e)}try{if(window.SystemicSim)SystemicSim.tick(S)}catch(e){console.error('Systemic simulation',e)}try{if(window.InterDep)InterDep.tickPlayer(S,atWar())}catch(e){console.error('InterDep',e)}log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
+function monthTick(){if(S.campaignOver)return;const __g0=S.gdp;darkTick();S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.lastInc=inc;S.lastExp=exp;S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{S.debt=Math.max(0,S.debt-20);S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}const regionalProductivity=S.regions.length?S.regions.reduce((a,r)=>a+(Number(r.productivity)||.75)*Math.max(1,r.pop||1),0)/S.regions.reduce((a,r)=>a+Math.max(1,r.pop||1),0):.75;S.regions.forEach(r=>{r.regionalGDP=Math.max(0,Math.round(S.gdp*(r.pop/Math.max(1,S.pop))*(Number(r.productivity)||.75)));r.productivity=clamp((Number(r.productivity)||.75)+(r.infra-50)/10000+(r.industry-50)/16000-(r.unrest/10000),.35,1.35)});S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)+(regionalProductivity-.75)*.0008));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}try{if(window.ECODIP)ECODIP.tick(S)}catch(e){console.warn('economy diplomacy tick',e)}addonTick();try{fxTick()}catch(e){console.error('fxTick',e)}try{if(window.SystemicSim)SystemicSim.tick(S)}catch(e){console.error('Systemic simulation',e)}try{if(window.InterDep)InterDep.tickPlayer(S,atWar())}catch(e){console.error('InterDep',e)}try{warEconTick(__g0)}catch(e){console.error('warEcon',e)}log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
 window.exportSave=()=>{
  try{
   const payload={...S,exportVersion:1,exportedAt:new Date().toISOString()};
@@ -737,7 +826,7 @@ function myEcoStrike(w,t,f,reg){
  const K={mil:.0004,infra:.0013,civ:.0003},ind=avgReg('industry')||1;
  const rf=reg&&okn(reg.industry)?Math.min(1.6,Math.max(.6,.7+reg.industry/ind*.3)):1;
  const loss=Math.min(.03,(K[t]||.002)*f*rf),cut=S.gdp*loss,money=t==='infra'?Math.round(30*f):0;
- S.gdp=Math.max(100,S.gdp-cut);
+ S.gdp=warEconAbsorbCut(cut);
  fxShock(Math.min(.03,loss*.9));
  const H0=w.myHit=w.myHit||{n:0,pct:0,cut:0,money:0,last:0};
  H0.n++;H0.pct+=loss*100;H0.cut+=cut;H0.money+=money;H0.last=loss*100;

@@ -72,6 +72,20 @@ function recover(o,opt){
  KEYS.forEach(k=>{if(I.h[k]<100){const gap=100-I.h[k];I.h[k]=C(I.h[k]+Math.min(gap,base*(.5+gap/160)),0,100)}});
  return base;
 }
+/* ВВП следует за ЗДОРОВЬЕМ отраслей как за уровнем, а не вычитается каждый месяц.
+   Раньше «стресс» (доля повреждений) срезал ВВП на 1–3% КАЖДЫЙ месяц, пока отрасль не починена: ВВП падал
+   по экспоненте, а ремонт не мог его вернуть. Теперь: удар = разовое падение, ремонт = возврат ВВП. */
+function followHealth(o,f,floor){
+ const I=of(o);if(!Number.isFinite(I.gfx)||I.gfx<=0)I.gfx=N(I.m)<=1?1:f.gdp;   // новая страна — с полного здоровья; старое сохранение — без скачка
+ const ratio=C(f.gdp/Math.max(.05,I.gfx),.88,1.12);
+ o.gdp=Math.max(floor,N(o.gdp,floor)*ratio);I.gfx=f.gdp;return ratio;
+}
+/* Склады еды/топлива/энергии/стали пополняются живыми отраслями (раньше только убывали -> спираль до нуля) */
+function regenStocks(o,f,k){
+ const cfg={food:[f.food,.35,72],fuel:[f.fuel,.30,70],energy:[f.energy,.30,72],steel:[f.steel,.22,62]};
+ for(const key in cfg){const [eff,rate,cap]=cfg[key];if(!Number.isFinite(+o[key]))continue;
+  if(o[key]<cap)o[key]=C(o[key]+rate*eff*(1+(cap-o[key])/100)*(k||1),0,100)}
+}
 /* Применение к игроку: связывает отрасли со старыми показателями (ресурсы, ВВП, инфляция, стабильность, оружие) */
 function tickPlayer(S,war){
  const I=of(S);I.m=N(I.m)+1;
@@ -80,8 +94,8 @@ function tickPlayer(S,war){
  const rb=N(S._idRepairLeft)>0?1.1:0;if(rb&&!synced)S._idRepairLeft--;
  if(!synced)recover(S,{war,boost:rb});
  const f=effects(S),stress=f.stress;
+ followHealth(S,f,100);regenStocks(S,f,1);
  if(stress>.02){
-  S.gdp=Math.max(100,N(S.gdp,100)*(1-stress*.030));
   S.food=C(N(S.food,50)-stress*(1-f.food)*1.6-(1-f.transport)*.4,0,100);
   S.fuel=C(N(S.fuel,50)-(1-f.fuel)*1.2,0,100);
   S.energy=C(N(S.energy,50)-(1-f.energy)*1.4,0,100);
@@ -110,8 +124,8 @@ function tickNation(n,war){
  const I=of(n);I.m=N(I.m)+1;
  recover(n,{war:!!war});
  const f=effects(n),stress=f.stress;
+ followHealth(n,f,1);regenStocks(n,f,.8);
  if(stress>.02){
-  n.gdp=Math.max(1,N(n.gdp,1)*(1-stress*.028));
   n.food=C(N(n.food,55)-stress*(1-f.food)*1.2,0,100);
   n.fuel=C(N(n.fuel,55)-(1-f.fuel)*1,0,100);
   n.energy=C(N(n.energy,55)-(1-f.energy)*1.2,0,100);
