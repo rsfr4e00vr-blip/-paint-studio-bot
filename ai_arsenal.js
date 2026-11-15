@@ -112,7 +112,8 @@ function monthly(S,c,atWar){
     const want=p*(atWar?1.4:.2),take=Math.max(0,Math.min(want,c.treasury*.08));
     c.treasury-=take;funds=take;
   }else{c.arsFund=(c.arsFund||0)+p*(atWar?1.4:.25);funds=c.arsFund;c.arsFund=0}
-  if(window.AIRES)funds*=Math.max(.3,1-.25*AIRES.shortage(c));     // страна в нехватке сырья тратит деньги на еду и топливо, а не на оружие
+  if(window.AIRES)funds*=Math.max(.3,1-.25*AIRES.shortage(c));
+  if(window.InterDep&&c.idp)funds*=Math.max(.35,InterDep.effects(c).fx);   // банки и финансы легли — на оружие денег меньше     // страна в нехватке сырья тратит деньги на еду и топливо, а не на оружие
   if(atWar&&!c.arsWar){   // начало войны: мобилизация оборонки и срочные закупки
     c.arsWar=true;
     if(hasTre){const x=Math.max(0,Math.min(p*2.5,c.treasury*.12));c.treasury-=x;funds+=x}else funds+=p*2.5;
@@ -120,7 +121,8 @@ function monthly(S,c,atWar){
   if(!atWar)c.arsWar=false;
   const embargo=c.embargo&&c.embargo>mi;
   const rf=window.AIRES?Math.min(AIRES.factor(c,'steel'),AIRES.factor(c,'fuel')+.25):1;   // нет стали/топлива — заводы встают, остаётся покупать готовое
-  let capLeft=Math.max(rf<.5?0:1,Math.round(p/22*ind*(atWar?2:1)*(embargo?.7:1)*rf));   // сколько единиц заводы выпускают за месяц
+  const idm=window.InterDep?InterDep.armsMult(c):1;    // цепочка: оборонка живёт на заводах, стали, энергии, топливе и транспорте
+  let capLeft=Math.max((rf*idm)<.5?0:1,Math.round(p/22*ind*(atWar?2:1)*(embargo?.7:1)*rf*idm));   // сколько единиц заводы выпускают за месяц
   const canBuy=!embargo&&(atWar||(c.aggr||.4)>.55||funds>p*1.2);
   for(let i=0;i<10&&funds>=4;i++){
     const w=pickWeapon(S,c);if(!w)break;
@@ -201,5 +203,26 @@ function plan(S,c,o){
   }
   return acts;
 }
-window.AIARS={WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
+
+/* ---------- ВЫБОР ОТРАСЛИ ДЛЯ УДАРА ПО ЭКОНОМИКЕ (нейросеть №2) ----------
+   Когда тактик выбрал «инфраструктуру», вторая маленькая сеть решает, КАКУЮ отрасль бить: энергосеть, НПЗ, порты, заводы...
+   Вход: состояние отраслей цели (8), агрессивность, война. Выход: Q-оценка каждой отрасли. Награда — реальное падение работоспособности
+   экономики цели, поэтому ИИ сам открывает, что удар по энергосети рушит цепочку поставок сильнее всего. */
+function secFeats(def,o){const ID=window.InterDep,e=ID.solve(ID.of(def));return ID.KEYS.map(k=>+(e[k]/100).toFixed(3)).concat([o&&o.aggr!=null?o.aggr:.5,o&&o.war?1:0])}
+function pickSector(S,c,def,o){
+  const ID=window.InterDep;if(!ID||!def)return null;
+  const b=brain(S),TK=ID.TKEYS,x=secFeats(def,o),sc=ID.bestTarget(def);
+  b.secN=b.secN||{};b.secSteps=b.secSteps||0;
+  const nt=(window.NN&&!NN.off)?NN.get(b,'nn2',x.length,12,TK.length,TK.map(()=>0)):null,out=nt?NN.predict(nt,x):null;
+  const eps=Math.max(.05,.25*Math.exp(-b.secSteps/300)),lg=Math.log(b.secSteps+3);let best=-1,bv=-1e9;
+  if(Math.random()<eps)best=Math.floor(Math.random()*TK.length);
+  else TK.forEach((t,i)=>{const v=(out?out[i]:0)+sc[t]*.12+.2*Math.sqrt(lg/((b.secN[t]||0)+1))*Math.max(.2,1-b.secSteps/1500);if(v>bv){bv=v;best=i}});
+  return{t:TK[best],x,idx:best};
+}
+function learnSector(S,act,reward){
+  const b=brain(S);b.secN=b.secN||{};b.secN[act.t]=(b.secN[act.t]||0)+1;b.secSteps=(b.secSteps||0)+1;
+  const nt=(window.NN&&!NN.off&&b.nn2)?b.nn2:null;
+  if(nt&&act.x&&nt.nin===act.x.length)NN.train(nt,act.x,act.idx,C(reward,-1,1.5),.05);
+}
+window.AIARS={pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
 })();

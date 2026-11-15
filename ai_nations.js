@@ -33,11 +33,12 @@ function strike1(W,w,att,def,isA){
  if(air&&Math.random()<Math.min(.7,def.aa*.06)){AIARS.learn(curS,act,-.2*f);return}
  let shift=0,r=0;
  if(act.t==='mil'){shift=2.5*f*.5;def.power=Math.max(1,def.power-.25*f);def.manpower=Math.max(0,def.manpower-.02*f);r=shift/3+.2*f}
- else if(act.t==='infra'){shift=1.5*f*.5;def.infrastructure=C(def.infrastructure-.04*f,.4,3);def.industry=C(def.industry-.03*f,.4,3);def.treasury=Math.max(0,def.treasury*(1-.004*f));r=shift/3+.15*f}
+ else if(act.t==='infra'){shift=1.5*f*.5;def.infrastructure=C(def.infrastructure-.04*f,.4,3);def.industry=C(def.industry-.03*f,.4,3);def.treasury=Math.max(0,def.treasury*(1-.004*f));r=shift/3+.15*f;
+  if(window.InterDep&&AIARS.pickSector){const sa=AIARS.pickSector(curS,att,def,{aggr:C(.45+att.intrigue/200,.15,.95),war:true});if(sa){const R2=InterDep.strike(def,sa.t,f,1,C(def.aa*.02,0,.4));if(R2){act.sec=sa;act.secDrop=R2.gdpDrop;r+=R2.gdpDrop*8;if(Math.random()<.25)ev(W,`💥 ${att.name} бьёт по отрасли «${InterDep.NAMES[R2.main]}» (${def.name}): цепочка поставок просела`)}}}}
  else{shift=.5*f*.5;def.pop=Math.max(.01,def.pop*(1-.0008*f*(def.shelter||1)));def.stability=C(def.stability-.5*f,5,96);def.morale=C(def.morale-.5*f,15,100);att.relations-=.8*f;r=shift/3+.12*f+(def.stability<42?.15*f:0)-.5}
  def.dmg=C((def.dmg||0)+(act.t==='infra'?.5:act.t==='mil'?.3:.2)*f,0,20);
  w.score=C(w.score+sg*shift,-100,100);w.front=C(50+w.score/2,0,100);
- AIARS.learn(curS,act,r-.12*f);
+ AIARS.learn(curS,act,r-.12*f);if(act.sec&&AIARS.learnSector)AIARS.learnSector(curS,act.sec,(act.secDrop||0)*14-.05);
  if(Math.random()<.12)ev(W,`${act.t==='civ'?'🏘':act.t==='infra'?'🏗':'🎯'} ${att.name}: ${AIARS.WN[act.w]} по цели «${AIARS.TN[act.t]}» (${def.name})`);
 }
 function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80)}
@@ -306,7 +307,7 @@ function brainStats(W){
  return{steps:B.steps,eps:epsS(B),avg:B.avg,rows:rows.sort((a,b)=>b.n-a.n),tot,coverage:Math.round(100*rows.length/ACTS.length)};
 }
 function tick(S){
- curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;curW=W;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);if(window.SystemicSim)A.forEach(n=>{try{SystemicSim.tickNation(n)}catch(e){console.warn('AI systemic economy',e)}});A.forEach(fxStep);if(window.AIARS)A.forEach(n=>{try{AIARS.stock(n,!!n.war,S)}catch(e){}});if(window.AIRES&&W.month%3===0){try{AIRES.updatePrices(S)}catch(e){}}if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
+ curS=S;init(S);let W=S.aiWorld;if(!W)return;W.month++;curW=W;let A=W.nations.filter(n=>!n.annexed&&!n.human);byNameCur=Object.fromEntries(A.map(n=>[n.name,n]));worldDrag=.0012*A.filter(n=>n.war).length/Math.max(1,A.length);A.forEach(economy);if(window.SystemicSim)A.forEach(n=>{try{SystemicSim.tickNation(n)}catch(e){console.warn('AI systemic economy',e)}});if(window.InterDep)A.forEach(n=>{try{InterDep.tickNation(n,!!n.war)}catch(e){console.warn('AI interdep',e)}});A.forEach(fxStep);if(window.AIARS)A.forEach(n=>{try{AIARS.stock(n,!!n.war,S)}catch(e){}});if(window.AIRES&&W.month%3===0){try{AIRES.updatePrices(S)}catch(e){}}if(window.PopAI)A.forEach(n=>{try{PopAI.tickNation(S,n)}catch(e){}});
  W.nations.forEach(n=>{if(n.annexed)return;(n.gh||(n.gh=[])).push(Math.round(n.gdp*100)/100);if(n.gh.length>13)n.gh.shift();if(n.gdp>(n.gpeak||0))n.gpeak=n.gdp});
  {const m=med(A),wv=worldView(A);W.view={atWar:+wv.atWar.toFixed(3),growth:+wv.growth.toFixed(4)};A.forEach(n=>think(W,n,A,m,wv))}diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
