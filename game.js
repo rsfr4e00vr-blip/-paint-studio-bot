@@ -3659,7 +3659,7 @@ function dlt(a,b,bad){if(!okn(a)||!okn(b)||!a)return['',''];const d=(b/a-1)*100;
 function chKpis(gid){
  const h=S.history||[],L=h[h.length-1]||{},F0=h[0]||{},E=S.econ||{},F=S.fx||{};
  const y=h.length>12?h[h.length-13]:F0;let k=[];
- if(gid==='econ'){
+ if(gid==='econ'||gid==='why'){
   let d=dlt(y.gdp,L.gdp);k=[kpi('ВВП',fmt(S.gdp)+' млрд','за год '+d[0],d[1]),kpi('Казна',fmt(S.money)+' млн'),kpi('Долг',fmt(S.debt)+' млн'),(()=>{const b=(S.lastInc||0)-(S.lastExp||0);return kpi('Баланс за месяц',(b>=0?'+':'−')+fmt(Math.abs(b))+' млн','',b>=0?'up':'dn')})()];
  }else if(gid==='fx'){
   const m=fxMarket(),d=dlt(F.base0,F.rate,1);
@@ -3672,7 +3672,7 @@ function chKpis(gid){
      kpi(`Курс ${F.ref}`,nf(F.rate,F.rate<10?2:F.rate<100?1:0),w0?'с войны '+r[0]:'',r[1]),kpi('Погибших',fmt(dead),'солдат и мирных')];
   if(E.eLast){const e=E.eLast;k.push(kpi('ВВП врага','−'+e.loss.toFixed(1)+'%',e.n,e.loss>.5?'up':''),kpi('Валюта врага',nf(e.r,e.r<10?2:e.r<100?1:0)+' '+e.cur,'1 '+e.ref+' · '+pct((e.r/e.r0-1)*100,0)))}
  }else{
-  const g=chGroups().find(z=>z.id===gid),s=g.charts[0].s.slice(0,4);
+  const g=chGroups().find(z=>z.id===gid),s=(g&&g.charts&&g.charts[0]&&g.charts[0].s||[]).slice(0,4);
   k=s.map(z=>{const a=okn(F0[z.k])?F0[z.k]:null,b=okn(L[z.k])?L[z.k]:null,d=dlt(a,b,z.bad);return kpi(z.n,okn(b)?nf(b,z.d,z.u)+(z.u||''):'—','с начала '+d[0],d[1])});
  }
  return `<div class="kpis">${k.join('')}</div>`;
