@@ -3598,10 +3598,11 @@ const pct=(v,d=1)=>okn(v)?(v>=0?'+':'−')+Math.abs(v).toFixed(d)+'%':'—';
 const mon=p=>`${months[p.month].slice(0,3)} ${p.year} г.`;
 const TT=p=>p.t!=null?p.t:p.year*12+p.month;
 /* --- состояние окна графиков --- */
-const CHU={g:'econ',p:'all',m:'auto',h:{},hov:{},reg:{}};
+const CHU={g:'why',p:'all',m:'auto',h:{},hov:{},reg:{}};
 function chGroups(){
  const F=S.fx||{cur:'—',ref:'USD',refB:'EUR'},cur=F.cur,ref=F.ref,rb=F.refB;
  return[
+ {id:'why',ic:'🔍',n:'Почему ВВП',charts:[],extra:'why'},
  {id:'econ',ic:'💹',n:'Экономика',charts:[
   {t:'ВВП, казна и долг',m:'idx',s:[{k:'gdp',n:'ВВП',c:'#69aef2',u:' млрд'},{k:'money',n:'Казна',c:'#55c58a',u:' млн'},{k:'debt',n:'Долг',c:'#ef6d72',u:' млн',bad:1}],note:'Режим «% от старта» показывает рост и падение всех линий в одном масштабе. Проведите пальцем по графику — появятся точные значения.'},
   {t:'Бюджет: доходы и расходы за месяц',m:'abs',s:[{k:'income',n:'Доходы',c:'#55c58a',u:' млн'},{k:'expense',n:'Расходы',c:'#ef6d72',u:' млн',bad:1}]}]},
@@ -3718,7 +3719,26 @@ function chartsHtml(){
  const n=(S.history||[]).length;
  return `<div id="chroot" class="chroot"><div class="chtabs">${gs.map(z=>`<button class="${z.id===CHU.g?'on':''}" onclick="chSet('g','${z.id}')">${z.ic} ${z.n}</button>`).join('')}</div>
  <div class="chbar">${seg(per,'p')}${seg(mod,'m')}</div><p class="chnote" style="margin:0 0 8px">С начала партии: ${n} мес.${n<2?' Графики появятся после нескольких месяцев игры.':''}</p>
- ${chKpis(g.id)}<div class="grid">${g.charts.map((c,i)=>chCard(c,g.id+i)).join('')}</div>${g.extra==='fx'?chFxExtra():''}${g.extra==='war'?chWarExtra()+chRecCard():''}</div>`;
+ ${chKpis(g.id)}<div class="grid">${g.charts.map((c,i)=>chCard(c,g.id+i)).join('')}</div>${g.extra==='fx'?chFxExtra():''}${g.extra==='war'?chWarExtra()+chRecCard():''}${g.extra==='why'?chWhyExtra():''}</div>`;
+}
+
+/* ГРАФИК «ПОЧЕМУ ВВП»: красное — убирать и исправлять, зелёное — поднимать и держать */
+function chWhyBars(items,max){
+ return items.map(i=>{const w=Math.max(2,Math.round(Math.abs(i.v)/max*100)),neg=i.v<0,hint=neg?(EconCore.hintFor(i.label)||''):'';
+  return`<div style="margin:9px 0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span>${i.label}</span><b style="color:var(${neg?'--red':'--green'},${neg?'#ef6d72':'#55c58a'})">${i.v>0?'+':'−'}${Math.abs(i.v).toFixed(2)}%</b></div>
+  <div style="height:9px;border-radius:6px;background:rgba(255,255,255,.07);margin-top:4px"><div style="width:${w}%;height:100%;border-radius:6px;background:${neg?'#ef6d72':'#55c58a'}"></div></div>${hint?`<div class="muted" style="font-size:12px;margin-top:3px">→ ${hint}</div>`:''}</div>`}).join('')
+}
+function chWhyExtra(){
+ let D;try{D=EconCore.chartData(S,12)}catch(e){D=null}
+ if(!D||!D.last)return`<section class="panel"><h3>🔍 Почему ВВП растёт или падает</h3><p class="muted">График появится после первого прошедшего месяца. Нажмите «+ 1 месяц» или «Играть».</p></section>`;
+ const L=D.last,neg=L.items.filter(i=>i.v<0),pos=L.items.filter(i=>i.v>0),max=Math.max(.05,...L.items.map(i=>Math.abs(i.v)),...D.avg.map(i=>Math.abs(i.v)));
+ const head=`<section class="panel"><h3>${L.g<0?'📉':'📈'} Итог последнего месяца: ${L.g>0?'+':'−'}${Math.abs(L.g).toFixed(2)}%</h3><p class="muted" style="margin:0">Красное тянет ВВП вниз — это надо убирать. Зелёное тянет вверх — это надо поднимать и держать. Длиннее полоска — сильнее влияние.</p></section>`;
+ const bad=`<section class="panel"><h3 style="color:#ef6d72">🔴 Что тянет вниз (убирать / исправлять)</h3>${neg.length?chWhyBars(neg,max):'<p class="muted">Ничего заметного — отлично.</p>'}</section>`;
+ const good=`<section class="panel"><h3 style="color:#55c58a">🟢 Что тянет вверх (поднимать / держать)</h3>${pos.length?chWhyBars(pos,max):'<p class="muted">Плюсов почти нет — вкладывайтесь в промышленность и инфраструктуру.</p>'}</section>`;
+ const av=D.avg.filter(a=>Math.abs(a.v)>=.005),avBlock=D.n>=3?`<section class="panel"><h3>📊 Постоянные причины (в среднем за ${D.n} мес.)</h3><p class="muted" style="margin:0 0 4px">Случайные скачки здесь сглажены: видно, что давит всегда.</p>${chWhyBars(av.slice(0,8),max)}</section>`:'';
+ const sMax=Math.max(.2,...D.series.map(v=>Math.abs(v))),cols=D.series.map(v=>`<div title="${v.toFixed(2)}%" style="flex:1;display:flex;flex-direction:column;justify-content:center;height:100%"><div style="height:${Math.max(2,Math.abs(v)/sMax*45)}px;background:${v<0?'#ef6d72':'#55c58a'};align-self:stretch;${v<0?'margin-top:50%':'margin-bottom:50%;margin-top:auto'};border-radius:2px"></div></div>`).join('');
+ const hist=D.n>=2?`<section class="panel"><h3>📅 Рост ВВП по месяцам</h3><div style="display:flex;gap:3px;height:100px;align-items:stretch;border-top:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12)">${cols}</div><p class="muted" style="margin:6px 0 0;font-size:12px">Каждый столбик — месяц. Зелёный вверх — рост, красный вниз — падение.</p></section>`:'';
+ return head+bad+good+avBlock+hist;
 }
 window.chSet=(k,v)=>{CHU[k]=v;render()};
 window.chTog=(id,k)=>{const key=id+':'+k;CHU.h[key]=!CHU.h[key];render()};

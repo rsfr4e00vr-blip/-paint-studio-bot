@@ -104,8 +104,17 @@
     'Дефицит ресурсов и долговое давление': 'Докупайте ресурсы (еда, топливо, энергия, сталь) и не раздувайте долг.',
     'Запущенная экономика (ресурсы ниже 28 или долг больше ВВП)': 'Срочно закупите самый слабый ресурс и сократите долг.',
     'Война': 'Война тянет ВВП вниз: ремонтируйте регионы, закупайте ресурсы.',
-    'Выпуск экономики': 'Это рост от промышленности, занятости и инфраструктуры.'
+    'Выпуск экономики': 'Это рост от промышленности, занятости и инфраструктуры.',
+    'Национальные проекты': 'Проверьте вкладку национальных проектов: у некоторых есть цена для ВВП.',
+    'Валюта и курс': 'Слабая валюта: интервенция, меньше печати денег, ниже инфляция.',
+    'Взаимозависимости отраслей': 'Проверьте энергосеть, топливо, транспорт, сталь и еду.',
+    'Военная экономика': 'Ремонтируйте регионы, закупайте ресурсы, не держите военные рельсы без нужды.',
+    'Торговля и дипломатия': 'Снимите эмбарго и санкции, заключайте торговые соглашения.',
+    'Политика, разведка, кризисы, проекты': 'Смотрите журнал событий: забастовки, кризисы и штрафы за политику.',
+    'Базовый расчёт месяца (бюджет, налоги)': 'Проверьте налог, дефицит бюджета и ключевую ставку ЦБ.',
+    'Системная модель (выпуск, ресурсы, цикл)': 'Смотрите причины внутри системной модели: выпуск, ресурсы, цикл.'
   };
+  const hintFor = (label) => HINTS[label] || HINTS[String(label).replace(/ \(прочее\)$/, '')] || '';
 
   /** Собрать список причин за последний месяц: [{label, v, stage}] по модулю убывания. */
   function whyList(S, L) {
@@ -126,6 +135,16 @@
     return items;
   }
 
+  /** Данные для графика причин: последний месяц и сумма по месяцам. */
+  function chartData(S, months) {
+    const E = state(S), H = (E.hist || []).slice(-Math.max(1, months || 12));
+    const last = H.length ? H[H.length - 1] : null;
+    const sum = {};
+    H.forEach(h => h.it.forEach(a => { sum[a[0]] = (sum[a[0]] || 0) + a[1]; }));
+    const avg = Object.keys(sum).map(k => ({ label: k, v: sum[k] / H.length })).sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+    return { last: last ? { g: last.g, items: last.it.map(a => ({ label: a[0], v: a[1] })) } : null, avg, n: H.length, series: H.map(h => h.g) };
+  }
+
   /** Короткое сообщение «почему ВВП растёт/падает» (HTML или простой текст). */
   function explain(S, asText) {
     const E = state(S), L = E.last;
@@ -142,7 +161,7 @@
     }
     let h = '<div class="mini" style="margin:8px 0;padding:10px"><b>' + (down ? '📉 Почему ВВП падает' : '📈 Почему ВВП растёт') + ' (' + f(L.final) + ' за месяц)</b>';
     h += '<ul style="margin:6px 0 0 16px;padding:0">' + items.slice(0, 6).map(i => '<li style="color:var(' + (i.v >= 0 ? '--green' : '--red') + ')">' + i.label + ': <b>' + f(i.v) + '</b></li>').join('') + '</ul>';
-    const tips = bad.map(i => HINTS[i.label.replace(/ \(прочее\)$/, '')]).filter(Boolean);
+    const tips = bad.map(i => hintFor(i.label)).filter(Boolean);
     if (down && tips.length) h += '<p class="muted" style="margin:8px 0 0">Что сделать: ' + tips.slice(0, 2).join(' ') + '</p>';
     return h + '</div>';
   }
@@ -193,6 +212,12 @@
     (E._order || []).forEach(k => { const r = E._stages[k]; stages[k] = { gdp: +r.gdp.toFixed(3), money: Math.round(r.money), infl: +r.infl.toFixed(2), emp: +r.emp.toFixed(2), appr: +r.appr.toFixed(2), stab: +r.stab.toFixed(2) }; });
     E.last = { raw: +(raw * 100).toFixed(3), final: +(fin * 100).toFixed(3), note, stages, interest: Math.round(E.interestPaid), debtRate: +(debtRate(S) * 100).toFixed(2) };
     E._whyLast = E._why || []; E._why = [];
+    try {
+      const wl = whyList(S, E.last);
+      E.hist = E.hist || [];
+      E.hist.push({ m: E.months, g: E.last.final, it: wl.slice(0, 14).map(i => [i.label, +i.v.toFixed(3)]) });
+      if (E.hist.length > 36) E.hist.shift();
+    } catch (_) {}
     E._stages = null; E._order = null;
   }
 
@@ -238,5 +263,5 @@
     return '<section class="panel"><h2>⚖️ Единый экономический механизм</h2>' + head + (L ? explain(S) : '') + rows + guide + '</section>';
   }
 
-  root.EconCore = { CFG, scale, begin, stage, note, track, explain, debtRate, debtService, settle, settleNation, report, panelHtml };
+  root.EconCore = { CFG, scale, begin, stage, note, track, explain, chartData, hintFor, debtRate, debtService, settle, settleNation, report, panelHtml };
 })(typeof window !== 'undefined' ? window : globalThis);
