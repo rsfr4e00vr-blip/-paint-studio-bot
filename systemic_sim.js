@@ -57,6 +57,15 @@
   const gauss=()=>{let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)};
   S._cyc=C(.93*N(S._cyc,0)+gauss()*CYC_SD,-.012,.012);
   const cyc=S._cyc;
+  try{if(window.EconCore){
+   const core=(output/baseGDP)*.55-0.006+(regionalProductivity-.75)*.006;
+   EconCore.note(S,'Выпуск экономики',core*100);
+   EconCore.note(S,'Дефицит ресурсов и долговое давление',-(resourcePenalty*.0007+debtPressure*.0005)*100);
+   EconCore.note(S,'Запущенная экономика (ресурсы ниже 28 или долг больше ВВП)',-neglect*100);
+   EconCore.note(S,'Война',war?-.4:0);
+   EconCore.note(S,'Старение экономики (постоянный вычет)',-DRAG*100);
+   EconCore.note(S,'Деловой цикл (рецессия/подъём)',cyc*100);
+  }}catch(e){}
   S.gdp=Math.max(100,baseGDP*(1+growth-DRAG+cyc));
   S.employment=C(employment+(outputFactor-1)*1.4-(war?1.0:0)+(resourceFactor-.8)*.35+Math.min(0,cyc)*25,35,EMP_MAX);
   S.food=C(N(S.food,50)-foodUse*.025+(N(S.food,50)<35?.3:0),0,100);

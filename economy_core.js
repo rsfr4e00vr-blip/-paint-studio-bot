@@ -37,6 +37,9 @@
     E._t0 = snapOf(S);
     E._stages = {};
     E._order = [];
+    E._why = [];
+    E._acc = 0;
+    E._curStage = null;
   }
 
   /** Запуск старой подсистемы через журнал: возвращает её результат, ошибки не пропускает наружу. */
@@ -45,7 +48,9 @@
     if (!E._stages) begin(S);
     const a = snapOf(S);
     let res;
+    E._curStage = name;
     try { res = fn(); } catch (e) { try { console.error('[EconCore] стадия ' + name, e); } catch (_) {} }
+    E._curStage = null;
     const b = snapOf(S);
     const row = E._stages[name] || (E._stages[name] = { gdp: 0, money: 0, infl: 0, emp: 0, appr: 0, stab: 0 });
     if (!E._order.includes(name)) E._order.push(name);
@@ -56,6 +61,90 @@
     row.appr += b.appr - a.appr;
     row.stab += b.stab - a.stab;
     return res;
+  }
+
+
+  /* ---------- ПОЧЕМУ ВВП МЕНЯЕТСЯ: причины простым языком ---------- */
+  /** Записать причину изменения ВВП (в % за месяц; минус = падение). Вызывается внутри стадии. */
+  function note(S, label, pctVal) {
+    const E = state(S);
+    if (!E._why) E._why = [];
+    const v = N(pctVal);
+    if (Math.abs(v) < 0.005) return;
+    E._why.push([E._curStage || 'base', label, v]);
+  }
+
+  /** Выполнить fn и записать, как она изменила ВВП. Вложенные вызовы не считаются дважды. */
+  function track(S, label, fn) {
+    const E = state(S);
+    if (!E._why) E._why = [];
+    const g0 = N(S.gdp), acc0 = E._acc || 0;
+    let res;
+    try { res = fn(); }
+    finally {
+      const g1 = N(S.gdp), d = g0 > 0 ? (g1 / g0 - 1) * 100 : 0;
+      const own = d - ((E._acc || 0) - acc0);
+      E._acc = acc0 + d;
+      if (Math.abs(own) >= 0.005) E._why.push([E._curStage || 'base', label, own]);
+    }
+    return res;
+  }
+
+  /** Подсказки: что делать, если причина — это. */
+  const HINTS = {
+    'Высокий налог': 'Налог выше 35% режет ВВП каждый месяц — поставьте 20–30%.',
+    'Национализация': 'Национализация даёт доход, но давит на ВВП. Новых национализаций лучше не делать.',
+    'Низкое доверие рынков': 'Доверие ниже 25: гасите долг, снижайте инфляцию, не печатайте деньги.',
+    'Протесты в стране': 'Недовольство людей: поднимайте одобрение и стабильность (медицина, образование, меньше налогов).',
+    'Мировой кризис': 'Идёт мировой кризис. Кнопка «Ответные меры» уменьшает ущерб вдвое.',
+    'Решения и законы': 'Это разовый эффект от принятого решения или закона.',
+    'Население': 'Влияние выбора населения (работа, эмиграция, укрытия) — небольшое.',
+    'Старение экономики (постоянный вычет)': 'Это встроенный минус, чтобы ВВП не рос бесконечно. Перебивается инвестициями в промышленность и инфраструктуру.',
+    'Деловой цикл (рецессия/подъём)': 'Случайная рецессия. Обычно проходит сама за несколько месяцев.',
+    'Дефицит ресурсов и долговое давление': 'Докупайте ресурсы (еда, топливо, энергия, сталь) и не раздувайте долг.',
+    'Запущенная экономика (ресурсы ниже 28 или долг больше ВВП)': 'Срочно закупите самый слабый ресурс и сократите долг.',
+    'Война': 'Война тянет ВВП вниз: ремонтируйте регионы, закупайте ресурсы.',
+    'Выпуск экономики': 'Это рост от промышленности, занятости и инфраструктуры.'
+  };
+
+  /** Собрать список причин за последний месяц: [{label, v, stage}] по модулю убывания. */
+  function whyList(S, L) {
+    const E = state(S);
+    const fine = E._whyLast || [];
+    const items = fine.map(a => ({ stage: a[0], label: a[1], v: a[2] }));
+    const sumBy = {};
+    fine.forEach(a => { sumBy[a[0]] = (sumBy[a[0]] || 0) + a[2]; });
+    let sumAll = 0;
+    Object.keys(L.stages).forEach(k => {
+      const rest = L.stages[k].gdp - (sumBy[k] || 0);
+      sumAll += L.stages[k].gdp;
+      if (Math.abs(rest) >= 0.005) items.push({ stage: k, label: (STAGE_NAMES[k] || k) + (sumBy[k] ? ' (прочее)' : ''), v: rest });
+    });
+    const base = L.raw - sumAll;
+    if (Math.abs(base) >= 0.005) items.push({ stage: 'base', label: 'Базовый расчёт месяца (бюджет, налоги)', v: base });
+    items.sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+    return items;
+  }
+
+  /** Короткое сообщение «почему ВВП растёт/падает» (HTML или простой текст). */
+  function explain(S, asText) {
+    const E = state(S), L = E.last;
+    if (!L) return '';
+    const items = whyList(S, L);
+    const f = (v) => (v > 0 ? '+' : '') + v.toFixed(2) + '%';
+    const down = L.final < 0;
+    const bad = items.filter(i => i.v < 0).slice(0, 3), good = items.filter(i => i.v > 0).slice(0, 2);
+    if (asText) {
+      let s = (down ? '📉 ВВП упал на ' : '📈 ВВП вырос на ') + Math.abs(L.final).toFixed(2) + '%.';
+      if (bad.length) s += ' Минусы: ' + bad.map(i => i.label + ' ' + f(i.v)).join('; ') + '.';
+      if (good.length) s += ' Плюсы: ' + good.map(i => i.label + ' ' + f(i.v)).join('; ') + '.';
+      return s;
+    }
+    let h = '<div class="mini" style="margin:8px 0;padding:10px"><b>' + (down ? '📉 Почему ВВП падает' : '📈 Почему ВВП растёт') + ' (' + f(L.final) + ' за месяц)</b>';
+    h += '<ul style="margin:6px 0 0 16px;padding:0">' + items.slice(0, 6).map(i => '<li style="color:var(' + (i.v >= 0 ? '--green' : '--red') + ')">' + i.label + ': <b>' + f(i.v) + '</b></li>').join('') + '</ul>';
+    const tips = bad.map(i => HINTS[i.label.replace(/ \(прочее\)$/, '')]).filter(Boolean);
+    if (down && tips.length) h += '<p class="muted" style="margin:8px 0 0">Что сделать: ' + tips.slice(0, 2).join(' ') + '</p>';
+    return h + '</div>';
   }
 
   /** Ставка по госдолгу (годовая): ключевая ставка + премия за риск. */
@@ -103,6 +192,7 @@
     const stages = {};
     (E._order || []).forEach(k => { const r = E._stages[k]; stages[k] = { gdp: +r.gdp.toFixed(3), money: Math.round(r.money), infl: +r.infl.toFixed(2), emp: +r.emp.toFixed(2), appr: +r.appr.toFixed(2), stab: +r.stab.toFixed(2) }; });
     E.last = { raw: +(raw * 100).toFixed(3), final: +(fin * 100).toFixed(3), note, stages, interest: Math.round(E.interestPaid), debtRate: +(debtRate(S) * 100).toFixed(2) };
+    E._whyLast = E._why || []; E._why = [];
     E._stages = null; E._order = null;
   }
 
@@ -145,8 +235,8 @@
       '<li><b>Единый масштаб:</b> стоимость и эффект разовых действий умножаются на размер вашей экономики (ВВП ÷ ' + fmt(CFG.START_GDP) + '). Малая и крупная страны получают честную отдачу.</li>' +
       '<li><b>Долг стоит денег:</b> ставка = ' + (CFG.DEBT_BASE_RATE * 100).toFixed(1) + '% + ' + (CFG.DEBT_RATE_PER_CB * 100).toFixed(1) + ' п.п. за каждый 1% ключевой ставки + премия за долг выше ВВП. Плановое погашение — ' + (CFG.DEBT_REPAY_SHARE * 100).toFixed(2) + '% ВВП в месяц.</li>' +
       '<li><b>Журнал выше</b> показывает, сколько каждая подсистема добавила или отняла в этом месяце. Подробный гайд — файл ECONOMY_GUIDE.md.</li></ol></details>';
-    return '<section class="panel"><h2>⚖️ Единый экономический механизм</h2>' + head + rows + guide + '</section>';
+    return '<section class="panel"><h2>⚖️ Единый экономический механизм</h2>' + head + (L ? explain(S) : '') + rows + guide + '</section>';
   }
 
-  root.EconCore = { CFG, scale, begin, stage, debtRate, debtService, settle, settleNation, report, panelHtml };
+  root.EconCore = { CFG, scale, begin, stage, note, track, explain, debtRate, debtService, settle, settleNation, report, panelHtml };
 })(typeof window !== 'undefined' ? window : globalThis);
