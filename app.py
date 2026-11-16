@@ -716,6 +716,14 @@ def ai_nations_js():
 def nn_core_js():
     return FileResponse(BASE / "nn_core.js", media_type="application/javascript")
 
+@app.get("/pvo.js")
+def pvo_js():
+    return FileResponse(BASE / "pvo.js", media_type="application/javascript")
+
+@app.get("/pvo.css")
+def pvo_css():
+    return FileResponse(BASE / "pvo.css", media_type="text/css")
+
 @app.get("/population_ai.js")
 def population_ai_js():
     return FileResponse(BASE / "population_ai.js", media_type="application/javascript")

@@ -11,7 +11,7 @@ function init(S){
  W.brain||={nn:null,steps:0,stat:{},mem:[],avg:0};
  /* gdp0 — ВВП на старте игры. Для старых сохранений восстанавливаем по той же формуле, по которой мир создавался. */
  W.nations.forEach(n=>{if(!(n.gdp0>0)){const c=window.WORLD&&WORLD.map&&WORLD.map[n.name];n.gdp0=c?Math.max(1,(+c.pop||1)*(+c.inc||1)*100):n.gdp}n.gh||=[];n.gpeak??=n.gdp});
- W.nations.forEach(n=>{n.aa??=Math.round(n.power/25);n.dmg??=0;n.manpower??=n.pop*.035;n.morale??=75;n.exhaustion??=0;n.industry??=1;n.infrastructure??=1;n.research??=1;n.exports??=0;n.imports??=0;n.cooldown??=0;n.tradePartners||=[];n.allies||=[];n.rivals||={};n.intrigue??=0;n.intent??='Развитие экономики';n.warPlan??=0;n.debt??=0;n.arrears??=0;n.defaults??=0;n.human=n.name===player});
+ W.nations.forEach(n=>{n.aa??=(window.PVO?PVO.base(n):Math.round(n.power/25));n.dmg??=0;n.manpower??=n.pop*.035;n.morale??=75;n.exhaustion??=0;n.industry??=1;n.infrastructure??=1;n.research??=1;n.exports??=0;n.imports??=0;n.cooldown??=0;n.tradePartners||=[];n.allies||=[];n.rivals||={};n.intrigue??=0;n.intent??='Развитие экономики';n.warPlan??=0;n.debt??=0;n.arrears??=0;n.defaults??=0;n.human=n.name===player});
 }
 let curS=null;
 /* Удар страны att по стране def: оружие и цель выбирает общий обучаемый тактик (AIARS). */
@@ -24,19 +24,20 @@ function strike(W,w,att,def,isA){
 function strike1(W,w,att,def,isA){
  if(!window.AIARS||!curS)return;
  const WP=AIARS.WEAPONS;
- if(def.aa==null)def.aa=Math.round(def.power/25);
+ if(def.aa==null)def.aa=window.PVO?PVO.base(def):Math.round(def.power/25);
  const front=isA?w.front:100-w.front;
  const act=AIARS.pick(curS,att,{vs:'n',front,defAA:def.aa,defStab:def.stability,aggr:C(.45+att.intrigue/200+(AIARS.aggrMult(curS)-1)*.2,.15,.95),dmg:C((def.dmg||0)/20,0,1),months:w.months,allowBomb:att.power>=70&&front>70&&def.power<att.power*.6,allowCiv:true});
  if(!act)return;att.ars[act.w]-=1;
  const f=WP[act.w].f,air=WP[act.w].air,sg=isA?1:-1;
- if(air)def.aa=Math.min(14,def.aa+.4*f);                      // противник учится и наращивает ПВО
- if(air&&Math.random()<Math.min(.7,def.aa*.06)){AIARS.learn(curS,act,-.2*f);return}
+ if(air)def.aa=Math.min(14,def.aa+(window.PVO?PVO.BAL.pvo.adapt:.4)*f);   // противник учится и наращивает ПВО
+ if(air&&Math.random()<(window.PVO?PVO.p(def.aa):Math.min(.7,def.aa*.06))){AIARS.learn(curS,act,-.2*f);if(AIARS.learnAA)AIARS.learnAA(curS,.2);return}
  let shift=0,r=0;
  if(act.t==='mil'){shift=2.5*f*.5;def.power=Math.max(1,def.power-.25*f);def.manpower=Math.max(0,def.manpower-.02*f);r=shift/3+.2*f}
  else if(act.t==='infra'){shift=1.5*f*.5;def.infrastructure=C(def.infrastructure-.04*f,.4,3);def.industry=C(def.industry-.03*f,.4,3);def.treasury=Math.max(0,def.treasury*(1-.004*f));r=shift/3+.15*f;
   if(window.InterDep&&AIARS.pickSector){const sa=AIARS.pickSector(curS,att,def,{aggr:C(.45+att.intrigue/200,.15,.95),war:true});if(sa){const R2=InterDep.strike(def,sa.t,f,1,C(def.aa*.02,0,.4));if(R2){act.sec=sa;act.secDrop=R2.gdpDrop;r+=R2.gdpDrop*8;if(Math.random()<.25)ev(W,`💥 ${att.name} бьёт по отрасли «${InterDep.NAMES[R2.main]}» (${def.name}): цепочка поставок просела`)}}}}
+ else if(act.t==='pvo'&&window.PVO){const R3=PVO.sead(def,act.w,f);shift=.6*f*.5;def.power=Math.max(1,def.power-.05*f);r=shift/3+(R3.missed?-.1:R3.dmg*.35+(R3.destroyed&&!R3.already?.35:0));if(AIARS.learnAA)AIARS.learnAA(curS,R3.destroyed&&!R3.already?-.4:-.05);if(R3.destroyed&&!R3.already&&Math.random()<.4)ev(W,`📡 ${att.name} выбила ПВО страны ${def.name}: небо открыто`)}
  else{shift=.5*f*.5;def.pop=Math.max(.01,def.pop*(1-.0008*f*(def.shelter||1)));def.stability=C(def.stability-.5*f,5,96);def.morale=C(def.morale-.5*f,15,100);att.relations-=.8*f;r=shift/3+.12*f+(def.stability<42?.15*f:0)-.5}
- def.dmg=C((def.dmg||0)+(act.t==='infra'?.5:act.t==='mil'?.3:.2)*f,0,20);
+ def.dmg=C((def.dmg||0)+(act.t==='infra'?.5:act.t==='mil'?.3:act.t==='pvo'?.1:.2)*f,0,20);
  w.score=C(w.score+sg*shift,-100,100);w.front=C(50+w.score/2,0,100);
  AIARS.learn(curS,act,r-.12*f);if(act.sec&&AIARS.learnSector)AIARS.learnSector(curS,act.sec,(act.secDrop||0)*14-.05);
  if(Math.random()<.12)ev(W,`${act.t==='civ'?'🏘':act.t==='infra'?'🏗':'🎯'} ${att.name}: ${AIARS.WN[act.w]} по цели «${AIARS.TN[act.t]}» (${def.name})`);
@@ -80,6 +81,7 @@ function recov(n){
  return gap>.002?Math.min(.0035,gap*.025)*fr:0;
 }
 function economy(n){
+ if(window.PVO)PVO.monthly(n,n.treasury>n.gdp*.004);
  n.inflation??=4.5;n.cbRate??=5;n.priceStability??=50;
  const tp=n.tradePartners||[],tpWar=tp.length?tp.filter(x=>byNameCur[x]&&byNameCur[x].war).length/tp.length:0;
  const inflationPressure=(n.fx||100)>125?.00045:(n.fx||100)<90?-.00012:0;

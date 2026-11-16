@@ -7,7 +7,7 @@
 (function(){'use strict';
 const WEAPONS={cannon:{f:1,air:false},drone:{f:1,air:true},tank:{f:1.5,air:false},rocket:{f:2.5,air:true},bomb:{f:5,air:true},
   howitzer:{f:1.3,air:false},heli:{f:1.4,air:true},mlrs:{f:2,air:false},cruise:{f:3,air:true},bomber:{f:4,air:true}};
-const TARGETS=['mil','infra','civ'];
+const TARGETS=['mil','infra','civ','pvo'];
 const WK=Object.keys(WEAPONS);
 const C=(v,a,b)=>Math.max(a,Math.min(b,v));
 const R=(a,b)=>a+Math.random()*(b-a);
@@ -27,6 +27,9 @@ function ctx(o){
 // Стартовые знания (чтобы ИИ был разумным с первого дня): по военным бить выгодно, по гражданским — рискованно
 function prior(w,t,c){
   const P=String(c).split('|');
+  if(t==='pvo'){   // подавление ПВО: имеет смысл, когда у цели есть что подавлять, и лучше всего воздушным оружием
+    let v=.22;if(P.indexOf('aaH')>=0)v+=.3;else if(P.indexOf('aa')>=0)v+=.15;else v-=.1;
+    const e=(window.BAL&&BAL.sead.eff[w])||.5;v+=(e-.8)*.25;if(!WEAPONS[w].air)v-=.1;return v}
   let v=t==='mil'?.55:t==='infra'?.5:.18;
   if(P.indexOf('weak')>=0&&t==='civ')v+=.2;
   if(P.indexOf('aa')>=0&&WEAPONS[w].air)v-=.2;
@@ -48,8 +51,8 @@ function qv(b,c,w,t){const k=key(c,w,t);return b.q[k]==null?prior(w,t,c):b.q[k]}
    Вход (11): перевес на фронте, ПВО цели, устойчивость цели, цель=игрок, агрессивность, мощь атакующего,
    доля видов оружия на складе, накопленный ущерб цели, длительность войны, усталость, смещение.
    Выход (30): Q-оценка каждой пары «оружие × тип цели». Учится после каждого удара по реальному результату. */
-const NIN=11,NH=20,NOUT=WK.length*3,NEUTRAL='even|noaa|firm|p';
-const aidx=(w,t)=>WK.indexOf(w)*3+TARGETS.indexOf(t);
+const NIN=11,NH=20,NOUT=WK.length*TARGETS.length,NEUTRAL='even|noaa|firm|p';
+const aidx=(w,t)=>WK.indexOf(w)*TARGETS.length+TARGETS.indexOf(t);
 function feats(o,c){
   let have=0;WK.forEach(k=>{if(c.ars&&(c.ars[k]||0)>=1)have++});
   return [C((o.front-50)/50,-1,1),C((o.defAA||0)/14,0,1),C((o.defStab==null?60:o.defStab)/100,0,1),o.vs==='p'?1:0,o.aggr==null?.5:o.aggr,
@@ -102,6 +105,9 @@ function stock(c,atWar,S){
   if(S)monthly(S,c,!!atWar);
   return c.ars;
 }
+function aaBrain(S){const b=brain(S);return b.aaBuy||(b.aaBuy={n:0,r:0,pn:0})}
+/* обучение докупке ПВО: reward>0, если ПВО сбило удар; <0, если ПВО выбили или оно пропустило удар */
+function learnAA(S,reward){const a=aaBrain(S);a.n++;a.r+=C(reward,-1,1);if(a.n>400){a.n*=.5;a.r*=.5}}
 function monthly(S,c,atWar){
   const mi=mIdx(S);if(mi==null||c.arsM===mi)return;c.arsM=mi;
   if(window.AIRES){try{AIRES.tick(S,c,atWar)}catch(e){}}     // сначала ресурсы: добыча, нехватка, закупки сырья
@@ -123,6 +129,11 @@ function monthly(S,c,atWar){
   const rf=window.AIRES?Math.min(AIRES.factor(c,'steel'),AIRES.factor(c,'fuel')+.25):1;   // нет стали/топлива — заводы встают, остаётся покупать готовое
   const idm=window.InterDep?InterDep.armsMult(c):1;    // цепочка: оборонка живёт на заводах, стали, энергии, топливе и транспорте
   let capLeft=Math.max((rf*idm)<.5?0:1,Math.round(p/22*ind*(atWar?2:1)*(embargo?.7:1)*rf*idm));   // сколько единиц заводы выпускают за месяц
+  /* ПВО: нейросеть решает докупать ли её. Вес растёт, если ПВО выбивали, и если докупка раньше окупалась (перехваты) */
+  if(window.PVO&&funds>=PVO.BAL.pvo.buyCost){
+    PVO.ensure(c);const ab=aaBrain(S),ln=ab.n?ab.r/ab.n:0,want=C(.22+(c.aaLost?.2:0)+(c.aa<c.aaBase?.25:0)+(atWar?.12:0)+ln*.3,.05,.9);
+    if(Math.random()<want){const r=PVO.buy(c,funds,capLeft,embargo);if(r.spent>0){funds-=r.spent;capLeft=r.capLeft;ab.pn=(ab.pn||0)+r.n}}
+  }
   const canBuy=!embargo&&(atWar||(c.aggr||.4)>.55||funds>p*1.2);
   for(let i=0;i<10&&funds>=4;i++){
     const w=pickWeapon(S,c);if(!w)break;
@@ -152,6 +163,7 @@ function pick(S,c,o){
     if(w==='bomb'&&!o.allowBomb)return;
     TARGETS.forEach(t=>{
       if(t==='civ'&&!o.allowCiv)return;
+      if(t==='pvo'&&!(o.defAA>=.5))return;      // подавлять нечего
       const k=key(cx,w,t),tab=b.q[k]==null?0:(b.q[k]-prior(w,t,cx))*.4;     // что таблица узнала сверх стартовых знаний
       let q;
       if(out)q=out[aidx(w,t)]+(prior(w,t,cx)-prior(w,t,NEUTRAL))*cold+tab;
@@ -176,7 +188,7 @@ function learn(S,act,reward){
   const nt=net(S);
   if(nt&&act.x){const r=C(reward,-1.5,1.5);NN.train(nt,act.x,act.idx,r,.04);NN.remember(b.mem,{x:act.x,k:act.idx,t:+r.toFixed(3)},96);NN.replay(nt,b.mem,3,.02)}
 }
-const WN={cannon:'пушка',drone:'дрон',tank:'танк',rocket:'ракета',bomb:'бомба',howitzer:'гаубица',heli:'вертолёт',mlrs:'РСЗО',cruise:'крылатая ракета',bomber:'бомбардировщик'},TN={mil:'военные цели',infra:'инфраструктура',civ:'гражданские'};
+const WN={cannon:'пушка',drone:'дрон',tank:'танк',rocket:'ракета',bomb:'бомба',howitzer:'гаубица',heli:'вертолёт',mlrs:'РСЗО',cruise:'крылатая ракета',bomber:'бомбардировщик'},TN={mil:'военные цели',infra:'инфраструктура',civ:'гражданские',pvo:'ПВО'};
 function summary(S){
   const b=brain(S),rows=Object.keys(b.stat).map(k=>{const s=b.stat[k],p=k.split('>');return{w:p[0],t:p[1],n:s.n,avg:s.r/s.n}}).filter(x=>x.n>=2).sort((x,y)=>y.avg-x.avg);
   const pairs=WK.length*TARGETS.length,tried=Object.keys(b.cnt||{}).filter(k=>b.cnt[k]>0).length,used=WK.filter(w=>TARGETS.some(t=>(b.cnt[w+'>'+t]||0)>0)).length;
@@ -224,5 +236,5 @@ function learnSector(S,act,reward){
   const nt=(window.NN&&!NN.off&&b.nn2)?b.nn2:null;
   if(nt&&act.x&&nt.nin===act.x.length)NN.train(nt,act.x,act.idx,C(reward,-1,1.5),.05);
 }
-window.AIARS={pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
+window.AIARS={WK,learnAA,pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
 })();
