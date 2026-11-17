@@ -271,6 +271,7 @@ class Room:
         self.task: asyncio.Task | None = None
         self.proposals: dict = {}     # id -> dict
         self.cedes: dict = {}         # id проигравшего -> ожидающая передача области
+        self.territories: dict = {}   # "страна-источник|область" -> страна-владелец
         self.wars: dict = {}          # id -> dict
         self.chat: list = []
         self.created = now()
@@ -787,6 +788,10 @@ class Room:
         elif mode == "annex":
             pop = int(lose.rep["pop"] * 0.5)
             gdp = int(lose.rep["gdp"] * 0.4)
+            for region_name in region_catalog().get(lose.country, set()):
+                self.territories[f"{lose.country}|{region_name}"] = win.country
+            await self.broadcast({"type": "territory_change", "from": lose.country, "to": win.country,
+                                  "region": "*", "territories": dict(self.territories)})
             await self.send(win, {"type": "region_gain", "kind": "annex", "from": lose.country,
                                   "region": {"name": f"Земли {lose.country}", "from": lose.country, "pop": pop, "gdp": gdp, "full": True}})
             await self.send(lose, {"type": "annexed", "by": win.country})
@@ -900,7 +905,7 @@ async def handle(room: Room, p: Player, msg: dict):
         return
 
     if kind == "sync":
-        await room.send(p, {"type": "state", "ars": dict(p.ars), "sect": {k: round(v, 1) for k, v in p.sect.items()}, **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
+        await room.send(p, {"type": "state", "ars": dict(p.ars), "sect": {k: round(v, 1) for k, v in p.sect.items()}, "territories": dict(room.territories), **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
                             "mods": {q.id: room.income_mod(q) for q in room.players.values()},
                             "relations": room.relations_for(p), "relation_programs": room.programs_for(p),
                             "embassies": room.embassies_for(p), "claims": room.claims_for(p), "border_cases": room.border_cases_for(p), "ideology_cases": room.ideology_cases_for(p), "security_cases": room.security_cases_for(p), "war_grounds": room.grounds_for(p), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
@@ -1603,11 +1608,15 @@ async def on_cede(room: Room, p: Player, msg: dict):
         return
     pop = int(num(r.get("pop"), 0, p.rep["pop"] * 0.35, 0))
     gdp = int(min(p.rep["gdp"] * 0.3, p.rep["gdp"] * pop / max(1.0, p.rep["pop"]) * 0.8))
-    name = f"{clean_name(r.get('name'), 'Область', 24)} ({p.country})"[:40]
+    raw_region = clean_name(r.get("name"), "Область", 40)
+    name = f"{raw_region} ({p.country})"[:60]
+    room.territories[f"{p.country}|{raw_region}"] = win.country
     await room.send(win, {"type": "region_gain", "kind": "region", "from": p.country,
                           "region": {"name": name, "from": p.country, "pop": pop, "gdp": gdp,
                                      "wealth": num(r.get("wealth"), 0, 100, 40), "industry": num(r.get("industry"), 0, 100, 36),
                                      "infra": num(r.get("infra"), 0, 100, 34), "resource": clean_name(r.get("resource"), "Захвачено", 16)}})
+    await room.broadcast({"type": "territory_change", "from": p.country, "to": win.country,
+                          "region": raw_region, "territories": dict(room.territories)})
 
 
 # ------------------------------------------------------------------ WebSocket
@@ -1658,7 +1667,7 @@ async def nations_socket(ws: WebSocket, code: str):
                     room.players[pid] = me
                     if room.host is None:
                         room.host = pid
-                await ws.send_json({"type": "joined", "id": me.id, "host": room.host == me.id,
+                await ws.send_json({"type": "joined", "id": me.id, "host": room.host == me.id, "territories": dict(room.territories),
                                     **room.lobby_info(),
                                     "wars": [room.war_pub(w) for w in room.wars.values()], "relations": room.relations_for(me), "relation_programs": room.programs_for(me), "embassies": room.embassies_for(me), "claims": room.claims_for(me), "border_cases": room.border_cases_for(me), "ideology_cases": room.ideology_cases_for(me), "security_cases": room.security_cases_for(me), "war_grounds": room.grounds_for(me), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
                                     "crisis_response": bool(room.global_crisis and me.crisis_response == room.global_crisis.get("id"))})

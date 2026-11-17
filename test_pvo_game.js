@@ -83,3 +83,14 @@ console.log('ALL OK');
 { const L = (S().log || S().logs || []).map(x => typeof x === 'string' ? x : (x.t || x.text || JSON.stringify(x)));
   const real = L.filter(x => /сила ПВО \d/.test(x)).length, miss = L.filter(x => /искала наше ПВО/.test(x)).length, stop = L.filter(x => /ПВО отразила/.test(x)).length;
   console.log(`Журнал: ударов по нашему ПВО ${real}, промахов ${miss}, перехваченных ударов ${stop}, записей ${L.length}`); console.log(L.filter(x => /сила ПВО \d/.test(x)).slice(0, 3).join('\n')); }
+// 5) ИИ может полностью уничтожить комплексы и построенные позиции ПВО игрока.
+{
+  const testState={aa:0,aaSup:0,aaDamage:0,bld:{aabat:2}};
+  const oldRandom=Math.random; Math.random=()=>.1;
+  let result;
+  for(let i=0;i<8 && (testState.bld.aabat>0 || testState.aa>0);i++) result=PVO.seadMe(testState,'cruise',4,testState.bld.aabat,0);
+  Math.random=oldRandom;
+  assert.equal(testState.bld.aabat,0,'ИИ должен иметь возможность уничтожить все позиции ПВО');
+  assert.equal(result.destroyed,true,'после уничтожения комплексов и позиций ПВО защита должна стать нулевой');
+  console.log('OK: ИИ может полностью уничтожить ПВО игрока');
+}

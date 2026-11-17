@@ -164,3 +164,7 @@ input[type=range]{min-height:34px;accent-color:var(--gold)}
 .wnews>b{display:block;margin-bottom:4px}
 .wnews .wn{padding:3px 0;font-size:13px;border-top:1px solid rgba(255,255,255,.06)}
 .wnews .wn span{font-size:16px;margin-right:4px}
+
+/* Country labels follow changing territory ownership. */
+.territory-country-label{font:700 7px/1 system-ui,sans-serif;letter-spacing:.2px;fill:#fff;paint-order:stroke;stroke:#07111c;stroke-width:2px;stroke-linejoin:round;opacity:.94;vector-effect:non-scaling-stroke}
+.wmnode svg.far #territory-labels{display:none}

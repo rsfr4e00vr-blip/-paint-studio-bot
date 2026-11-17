@@ -13,7 +13,7 @@ const BAL={
   buyCost:30,buyMarkup:1.6,buyUnit:.5,buyMonth:2},  // докупка ПВО нейросетью: цена за единицу, наценка рынка, +сила за единицу, максимум покупок в месяц
  sead:{base:.55,hit:.85,self:.6,             // базовый урон подавления, шанс найти радары, насколько ПВО защищает само себя
   eff:{drone:1.2,rocket:1,cruise:1.3,bomber:1.2,bomb:.8,heli:1,mlrs:.8,howitzer:.5,cannon:.4,tank:.3}},
- me:{aabat:1.5,patrol:.07,supMax:10,supDecay:.15,supFlat:.3,destroy:.12,rebuild:1.5},  // ПВО игрока: позиция = 1.5 комплекса; подавление спадает, комплекс может быть уничтожен
+ me:{aabat:1.5,patrol:.07,supMax:10,supDecay:.15,supFlat:.3,destroy:.12,rebuild:1.5, batteryDamage:1.65},  // ПВО игрока: позиция = 1.5 комплекса; подавление спадает, комплекс может быть уничтожен
  eco:{cap:.035,repeat:12,rewardMul:.6,rewardCap:.6,                  // потолок потерь ВВП от ударов за месяц, затухание повторных ударов в область, награда нейросети за урон экономике
   K:{mil:.0004,infra:.0013,civ:.0003,pvo:.0002}}
 };
@@ -56,15 +56,22 @@ const myRaw=(S,bat,patrol)=>(S.aa||0)+bat*BAL.me.aabat+(patrol||0)*BAL.me.patrol
 const myStrength=(S,bat,patrol)=>Math.max(0,myRaw(S,bat,patrol)-(S.aaSup||0));
 function seadMe(S,w,f,bat,patrol){
  const B=BAL.sead,M=BAL.me,before=myStrength(S,bat,patrol);
- if(before<=.05)return{before,after:0,dmg:0,missed:false,destroyed:false,lostComplex:false};
+ if(before<=.05&&(S.aa||0)<=0&&((S.bld||{}).aabat||0)<=0)return{before,after:0,dmg:0,missed:false,destroyed:true,lostComplex:false,lostBattery:false,batteriesLeft:0};
  if(Math.random()>B.hit)return{before,after:before,dmg:0,missed:true,destroyed:false,lostComplex:false};
  const d=B.base*f*(B.eff[w]||.5)*rn(.75,1.25)*(1-B.self*Math.min(.6,p(before)));
  S.aaSup=Math.min(M.supMax,(S.aaSup||0)+d);
- let lost=false;if((S.aa||0)>0&&Math.random()<M.destroy*f*(B.eff[w]||.5)){S.aa--;lost=true}
- const after=myStrength(S,bat,patrol);
- return{before,after,dmg:before-after,missed:false,destroyed:after<BAL.pvo.down,lostComplex:lost};
+ let lost=false,lostBattery=false;
+ // Удары по ПВО повреждают не только запас комплексов, но и построенные позиции.
+ // Накопленный урон постепенно уничтожает все позиции ПВО; ИИ и игрок используют одну формулу.
+ S.aaDamage=(S.aaDamage||0)+d;
+ if((S.aa||0)>0&&Math.random()<Math.min(.95,M.destroy*f*(B.eff[w]||.5))){S.aa--;lost=true}
+ const bld=S.bld||(S.bld={});
+ while((bld.aabat||0)>0&&S.aaDamage>=M.batteryDamage){S.aaDamage-=M.batteryDamage;bld.aabat--;lostBattery=true;S.aaBatteryLost=(S.aaBatteryLost||0)+1}
+ const after=myStrength(S,Math.max(0,bld.aabat||0),patrol);
+ const destroyed=after<BAL.pvo.down&&(S.aa||0)<=0&&(bld.aabat||0)<=0;
+ return{before,after,dmg:before-after,missed:false,destroyed,lostComplex:lost,lostBattery,batteriesLeft:bld.aabat||0};
 }
-function myMonthly(S){if(S.aaSup>0)S.aaSup=Math.max(0,S.aaSup*(1-BAL.me.supDecay)-BAL.me.supFlat);if(S.aaSup<.05)S.aaSup=0}
+function myMonthly(S){if(S.aaSup>0)S.aaSup=Math.max(0,S.aaSup*(1-BAL.me.supDecay)-BAL.me.supFlat);if(S.aaSup<.05)S.aaSup=0;S.aaDamage=Math.max(0,(S.aaDamage||0)-.08)}
 /* --- экономика: единый расчёт потери ВВП от одного удара врага --- */
 function ecoLoss(w,t,f,rf,regHitPct,S){
  const E=BAL.eco,m=mIdx(S);
@@ -88,7 +95,7 @@ function panelHTML(S,H){
  if(window.AIARS){const b=AIARS.brain(S),T=AIARS.TARGETS,rows=T.map(t=>{let n=0,r=0;AIARS.WK.forEach(k=>{const s=b.stat[k+'>'+t];if(s){n+=s.n;r+=s.r}});return{t,n,avg:n?r/n:0}}),tot=rows.reduce((a,x)=>a+x.n,0);
   if(tot>0){nn=`<div class="pvonn"><b>🧠 Чему научился ИИ врага (${tot} ударов)</b>${rows.map(x=>{const sh=Math.round(100*x.n/tot),col=x.avg>=.3?'#58c27d':x.avg>=0?'#e0b341':'#d9534f';return `<div class="pvorow"><span>${AIARS.TN[x.t]}</span><i><u style="width:${sh}%;background:${col}"></u></i><em>${sh}% · ${x.avg>=0?'+':''}${x.avg.toFixed(2)}</em></div>`}).join('')}<small class="muted">Полоса — доля ударов, цвет — средняя польза (зелёный — нейросеть считает такие удары выгодными). Урон нашей экономике входит в награду.</small></div>`}}
  let buys='';(S.wars||[]).forEach(w=>{const c=H.rel(w.n);if(c&&((c.aaBought||0)+(c.aaMade||0))>0)buys+=`<small class="muted">📡 ${esc(w.n)}: ПВО докуплено ${c.aaBought||0}, выпущено ${c.aaMade||0}${c.aaLost?`, уничтожено ${c.aaLost} раз`:''}</small>`});
- return `<section class="panel pvopanel"><h3>📡 Противовоздушная оборона</h3><div class="pvogs">${g.join('')}</div>${buys}${nn}<small class="muted">Кольцо — текущая сила ПВО, засечка — минимум страны. Бейте «📡 ПВО врага», чтобы выбить его перехватчики; враг может бить по нашему ПВО так же. Подавленное ПВО восстанавливается, уничтоженное — медленно (или докупается).</small></section>`;
+ return `<section class="panel pvopanel"><h3>📡 Противовоздушная оборона</h3><div class="pvogs">${g.join('')}</div>${buys}${nn}<small class="muted">Кольцо — текущая сила ПВО, засечка — минимум страны. Бейте «📡 ПВО врага», чтобы уничтожать комплексы и построенные позиции; ИИ может полностью уничтожить ваше ПВО тем же способом. Подавленное ПВО восстанавливается, уничтоженное — медленно (или докупается).</small></section>`;
 }
 function fx(kind,text){
  try{const d=document.createElement('div');d.className='pvofx '+kind;d.innerHTML=`<div class="rad"><i></i></div><div class="cap">${esc(text||'')}</div>`;document.body.appendChild(d);setTimeout(()=>d.remove(),1900)}catch(e){}

@@ -59,16 +59,17 @@ setInterval(()=>send({type:'ping',t:Date.now()}),25000);
 function on(m){
   switch(m.type){
   case'joined':
-    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};claims=m.claims||{};borderCases=m.border_cases||{};ideologyCases=m.ideology_cases||{};securityCases=m.security_cases||{};warGrounds=m.war_grounds||{};
+    me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};claims=m.claims||{};borderCases=m.border_cases||{};ideologyCases=m.ideology_cases||{};securityCases=m.security_cases||{};warGrounds=m.war_grounds||{};if(NG.syncMPTerritories)NG.syncMPTerritories(m.territories||{});
     sset(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(sget(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(sget(SKEY)||'{}').country)||'Новария',ideology:val('#mpIdeology')||(JSON.parse(sget(SKEY)||'{}').ideology)||'прагматизм'}));
     if(room.state==='lobby'){view='lobby';active=false;paintModal();openModal()}
     else{resume()}
     setBar();break;
   case'lobby':Object.assign(room,pick(m));me.host=room.host===me.id;
     if(room.state==='lobby'&&modal.classList.contains('open'))paintModal();setBar();paintAll();break;
-  case'state':if(m.ars)arsStock=m.ars;if(m.sect)syncIdp({h:m.sect});Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;embassies=m.embassies||embassies;claims=m.claims||claims;borderCases=m.border_cases||borderCases;ideologyCases=m.ideology_cases||ideologyCases;securityCases=m.security_cases||securityCases;warGrounds=m.war_grounds||warGrounds;if(NG.S)NG.S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_response?1:null}:null;if(m.global_next!=null)NG.S.globalNext=m.global_next;catchUp();setBar();paintAll();break;
+  case'state':if(m.ars)arsStock=m.ars;if(m.sect)syncIdp({h:m.sect});Object.assign(room,pick(m));mods=m.mods||mods;wars=m.wars||wars;relations=m.relations||relations;relationPrograms=m.relation_programs||relationPrograms;embassies=m.embassies||embassies;claims=m.claims||claims;borderCases=m.border_cases||borderCases;ideologyCases=m.ideology_cases||ideologyCases;securityCases=m.security_cases||securityCases;warGrounds=m.war_grounds||warGrounds;if(NG.syncMPTerritories)NG.syncMPTerritories(m.territories||{});if(NG.S)NG.S.globalCrisis=m.global_crisis?{...m.global_crisis,response:m.crisis_response?1:null}:null;if(m.global_next!=null)NG.S.globalNext=m.global_next;catchUp();setBar();paintAll();break;
   case'start':startGame(m);break;
   case'war_orders':wars=m.wars||wars;syncMpWars();paintAll();break;
+  case'territory_change':if(NG.syncMPTerritories)NG.syncMPTerritories(m.territories||{});if(m.region&&m.region!=='*')NG.log(`🗺 Граница изменилась: ${m.from} → ${m.to}, область «${m.region}».`);paintAll();break;
   case'ars_paid':addMoney(-m.amount);if(m.ars)arsStock=m.ars;NG.log(m.text||'Арсенал');note('💸 '+(m.text||'Арсенал'),'war');afterEffect();break;
   case'ars_result':if(m.ars)arsStock=m.ars;NG.log(m.text);NG.say(`Залп: попало ${m.landed}, сбито ПВО ${m.stopped}`,'💥');NG.toast(`💥 Попало ${m.landed}/${m.landed+m.stopped} · экономика врага на ${m.gdp_factor}%`);note(m.text,'war');afterEffect();break;
   case'eco_strike':applyEcoStrike(m);break;

@@ -193,11 +193,18 @@ function regCount(n){const r=regsOf(n);return r?r.length:(WORLD.REGS[n]||WORLD.G
 /* сколько областей можно забрать: доля областей страны растёт вместе с перевесом на фронте (60%→0, 100%→60% областей) */
 function quota(n,w){const tot=regCount(n),c=rel(n)||{},rg=regsOf(n),free=rg?rg.filter(x=>!taken()[x.id]).length:Math.max(0,tot-(c.regTaken||[]).length),p=w.won?100:w.p,share=Math.max(0,(p-60)/40);return{tot,free,p,q:Math.min(free,Math.max(1,Math.round(tot*share*.6),(w.occ||[]).length)+(w.goal==='territory'&&!w.def?1:0))}}
 function baseCol(iso,i){let h=0;for(const ch of iso)h=(h*31+ch.charCodeAt(0))%360;return `hsl(${h},38%,${33+(i%4)*3}%)`}
-function regFill(C,r,i){const nm=C.name,rc=nm&&S.relations.find(x=>x.name===nm);if(rc&&rc.self)return MYC;const aiOwner=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm];if(aiOwner&&WORLD.map[aiOwner])return baseCol(WORLD.map[aiOwner].iso||WORLD.map[aiOwner].name,1);if(taken()[r.id]||(rc&&rc.annexed))return MYC;if(rc&&isVas(nm))return VAS;return baseCol(C.iso,i)}
-function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).length+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',')+'|'+(S.me||'')+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{});if(WMAP.usig===sig)return;WMAP.usig=sig;
+function mpRegionOwner(C,r){const shared=S.mpTerritories||{},key=C.name+'|'+r.n;if(shared[key])return shared[key];const cap=(S.captured||[]).find(x=>x&&x.from===C.name&&(x.name===r.n||x.name===r.n+' ('+C.name+')'));if(cap)return S.me||S.name||'Игрок';return null}
+function regionOwner(C,r){const mp=mpRegionOwner(C,r);if(mp)return mp;const nm=C.name,rc=nm&&S.relations.find(x=>x.name===nm),aiOwner=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm];if(aiOwner)return aiOwner;if(rc&&rc.self)return S.me||S.name||'Игрок';if(taken()[r.id]||(rc&&rc.annexed))return S.me||S.name||'Игрок';if(rc&&isVas(nm))return 'Вассал: '+nm;return nm}
+function ownerColor(owner,C,i){if(owner==='Вассал: '+C.name)return VAS;if(owner===(S.me||S.name||'Игрок'))return MYC;const w=WORLD.map[owner];return baseCol(w?(w.iso||w.name):owner,i)}
+function regFill(C,r,i){const owner=regionOwner(C,r);return owner===C.name?baseCol(C.iso,i):ownerColor(owner,C,i)}
+function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).length+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',')+'|'+(S.me||'')+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.mpTerritories||{});if(WMAP.usig===sig)return;WMAP.usig=sig;
  if(!WMAP.el){WMAP.el={r:{},o:{}};svg.querySelectorAll('[data-r]').forEach(e=>WMAP.el.r[e.getAttribute('data-r')]=e);svg.querySelectorAll('[data-o]').forEach(e=>WMAP.el.o[e.getAttribute('data-o')]=e)}
- Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e)e.setAttribute('fill',regFill(C,r,i))});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}});
- drawOcc(svg)}
+ Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e){e.setAttribute('fill',regFill(C,r,i));const changed=regionOwner(C,r)!==C.name;e.setAttribute('stroke',changed?'#f5d889':'rgba(0,0,0,.38)');e.setAttribute('stroke-width',changed?'1.15':'.35')}});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}});
+ drawOcc(svg);drawTerritoryLabels(svg)}
+function drawTerritoryLabels(svg){
+ const NS='http://www.w3.org/2000/svg';let g=svg.querySelector('#territory-labels');if(!g){g=document.createElementNS(NS,'g');g.id='territory-labels';g.setAttribute('pointer-events','none');svg.appendChild(g)}g.replaceChildren();
+ Object.values(GEO.c).forEach(C=>{const groups={};(C.regs||[]).forEach(r=>{if(!r.d)return;const q=regClip(C,r);if(!q||!Number.isFinite(q.cx)||!Number.isFinite(q.cy))return;const owner=regionOwner(C,r);(groups[owner]||(groups[owner]=[])).push({r,q})});Object.entries(groups).forEach(([owner,regs])=>{if(!regs.length)return;let weight=0,x=0,y=0;regs.forEach(v=>{const a=Math.max(1,+v.r.s||v.q.w*v.q.h||1);weight+=a;x+=v.q.cx*a;y+=v.q.cy*a});const label=owner.startsWith('Вассал: ')?owner.slice(8):owner;const t=document.createElementNS(NS,'text');t.setAttribute('x',x/weight);t.setAttribute('y',y/weight);t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','central');t.setAttribute('class','territory-country-label');t.textContent=label.length>18?label.slice(0,17)+'…':label;g.appendChild(t)})});
+}
 function drawOcc(svg){
  const NS='http://www.w3.org/2000/svg',ids=[].concat(...S.wars.map(w=>w.occ||[]));
  let g=svg.querySelector('#occl');
@@ -324,7 +331,7 @@ function econLedgerHtml(){const L=S._econ&&S._econ.last;if(!L)return'';const nm=
 function renderCore(auto){if(window.__salv)return;if(tab==='events')tab='overview';stats();if(auto&&tab==='map'&&WMAP.node&&document.getElementById('wm-slot')){updateWorld();mountEmpire();return}if(auto&&tab==='mp'&&window.NGMP)return;if(auto&&(down||(document.activeElement&&document.activeElement.type==='range')))return;let c='';if(tab==='map')c=empireCard()+worldMapCard()+capList();
 if(tab==='overview')c=`<div class="grid">${warnBanner()}${warPanel()}${quickAccessCard()}${card('🗺 Карта державы','<div class="emp-slot"><p class="muted">Строится единая карта…</p></div><p class="muted">Ваши земли и все аннексированные территории показаны одним цветом; вассалы — отдельным оттенком.</p>')}${capList()}${card('Государство',`<div class="cards"><div class="mini"><b>${S.name}</b>Форма правления: ${S.gov}<br>Лидер: ${S.leader}<br>Партия: ${S.party}<br>Сложность: <b>${difficulty().label}</b><div class=\"actions\"><button onclick=\"H.chooser()\">🌍 Выбрать другое государство</button></div></div><div class="mini"><b>Состояние страны</b>${bar('Стабильность',S.stability)}${bar('Одобрение',S.approval)}${bar('Легитимность',S.legitimacy)}</div></div>`)}${card('Национальные ресурсы',`<div class="cards">${[['Продовольствие',S.food],['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo],['Энергия',S.energy],['Технологии',S.tech]].map(x=>`<div class="mini"><b>${x[0]}</b>${x[1]} / 100<div class="bar"><i style="width:${clamp(x[1])}%"></i></div></div>`).join('')}</div>`)}${card('Последние события',`<div class="log">${S.log.slice(0,9).map(x=>`<div>${x}</div>`).join('')}</div>`)}${card('Быстрые действия',`<div class="actions"><button onclick="act('roads')">Построить дороги (500 млн)</button><button onclick="act('aid')">Помощь населению (300 млн)</button><button onclick="act('reform')">Государственная реформа (700 млн)</button></div>`)}</div>`;
 if(tab==='economy')c=`<div class="grid">${card('Экономика',`<div class="cards"><div class="mini">Доходы в месяц <b>${fmt(income())} млн</b></div><div class="mini">Расходы в месяц <b>${fmt(expenses())} млн</b></div><div class="mini">Государственный долг <b>${fmt(S.debt)} млн</b></div><div class="mini">Инфляция <b>${(+S.inflation).toFixed(1)}%</b></div></div>${bar('Занятость',S.employment)}<div class="row"><button onclick="act('industry')">Развивать промышленность · 800 млн</button><button onclick="act('trade')">Торговое соглашение · 200 млн</button><button onclick="act('debt')">Погасить 1000 млн долга</button></div>`)}${card('Бюджетные настройки',`<div class="row"><label>Налоговая ставка <b id="taxv">${S.tax}%</b></label><input type="range" min="5" max="50" value="${S.tax}" oninput="setv('tax',this.value,'taxv','%')"></div><div class="row"><label>Здравоохранение <b id="healthv">${S.health}%</b></label><input type="range" min="0" max="35" value="${S.health}" oninput="setv('health',this.value,'healthv','%')"></div><div class="row"><label>Образование <b id="educationv">${S.education}%</b></label><input type="range" min="0" max="35" value="${S.education}" oninput="setv('education',this.value,'educationv','%')"></div><div class="row"><label>Оборона <b id="defensev">${S.defense}%</b></label><input type="range" min="0" max="45" value="${S.defense}" oninput="setv('defense',this.value,'defensev','%')"></div><button class="primary" onclick="saveBudget()">Применить бюджет</button>`)}${taxCard()}${budCard()}${systemicEconomyCard()}${window.InterDep?card('🕸 Сеть взаимозависимостей',InterDep.panel(S,'Ваша экономика: всё зависит от всего',{repair:true})):''}</div>`;
-if(tab==='military')c=`<div class="grid">${warPanel()}${window.PVO?PVO.panelHTML(S,{bat:bcount('aabat'),rel,patrolOf:()=>((S.wars||[])[0]||{}).airDefense||0}):''}${card('Вооружённые силы',`<div class="cards">${[['Сухопутные войска',fmt(S.army)+' чел.'],['Флот',S.navy+' кораблей'],['Авиация',S.air+' эскадрилий'],['Подготовка',S.training+'%'],['Боевой дух',S.morale+'%'],['Комплексы ПВО',`${S.aa||0} комплексов · ${bcount('aabat')} позиций`],['Военная угроза',S.threat+'%']].map(x=>`<div class="mini">${x[0]}<b>${x[1]}</b></div>`).join('')}</div>${bar('Боевой дух',S.morale)}<div class="actions"><button onclick="act('recruit')">Набрать 5 000 солдат · 400 млн</button><button onclick="act('train')">Военные учения · 250 млн</button><button onclick="act('equipment')">Закупить вооружение · 500 млн</button><button class="primary" onclick="buildAA()">📡 Развернуть ПВО · 500 млн</button><button onclick="act('mobilize')">Мобилизация</button><button class="danger" onclick="act('demobilize')">Сократить армию</button></div><p>Состояние: <b>${S.war?'ВОЙНА':'Мирное время'}</b></p><button class="${S.war?'good':'danger'}" onclick="act('war')">${S.wars&&S.wars.length?'Заключить мир со всеми':S.martial?'Отменить военное положение':'Ввести военное положение'}</button>`)}${card('Военные запасы',`<div class="cards">${[['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo]].map(x=>`<div class="mini">${x[0]} <b>${x[1]}/100</b></div>`).join('')}</div>`)}${armsCard()}${tacticsCard()}</div>`;
+if(tab==='military')c=`<div class="grid">${warPanel()}${window.PVO?PVO.panelHTML(S,{bat:bcount('aabat'),rel,patrolOf:()=>((S.wars||[])[0]||{}).airDefense||0}):''}${card('Вооружённые силы',`<div class="cards">${[['Сухопутные войска',fmt(S.army)+' чел.'],['Флот',S.navy+' кораблей'],['Авиация',S.air+' эскадрилий'],['Подготовка',S.training+'%'],['Боевой дух',S.morale+'%'],['Комплексы ПВО',`${S.aa||0} комплексов · ${bcount('aabat')} позиций`],['Военная угроза',S.threat+'%']].map(x=>`<div class="mini">${x[0]}<b>${x[1]}</b></div>`).join('')}</div>${bar('Боевой дух',S.morale)}<div class="actions"><button onclick="act('recruit')">Набрать 5 000 солдат · 400 млн</button><button onclick="act('train')">Военные учения · 250 млн</button><button onclick="act('equipment')">Закупить вооружение · 500 млн</button><button class="primary" onclick="buildAA(1)">📡 Купить 1 комплекс ПВО · 500 млн</button><button onclick="buildAA(5)">Купить до 5 комплексов ПВО</button><button onclick="buildAA(10)">Купить до 10 комплексов ПВО</button><button onclick="act('mobilize')">Мобилизация</button><button class="danger" onclick="act('demobilize')">Сократить армию</button></div><p>Состояние: <b>${S.war?'ВОЙНА':'Мирное время'}</b></p><button class="${S.war?'good':'danger'}" onclick="act('war')">${S.wars&&S.wars.length?'Заключить мир со всеми':S.martial?'Отменить военное положение':'Ввести военное положение'}</button>`)}${card('Военные запасы',`<div class="cards">${[['Топливо',S.fuel],['Сталь',S.steel],['Вооружение',S.equipment],['Боеприпасы',S.ammo]].map(x=>`<div class="mini">${x[0]} <b>${x[1]}/100</b></div>`).join('')}</div>`)}${armsCard()}${tacticsCard()}</div>`;
 if(tab==='economy')c=mergeEco(c)+warEconCard()+antiInflationCard()+(window.ECODIP?ECODIP.panel(S):'');if(tab==='military')c=mergeMil(c)+warEconCard();
 if(tab==='politics')c=`<div class="grid">${card('Твоя партия',`<div class="mini party-card"><b>🎖 ${S.playerParty}</b>Ты играешь за эту партию. Если она проиграет выборы и потеряет власть — кампания будет проиграна.</div><p>Правящая партия: <b>${S.party}</b></p><p>Глава правительства: <b>${S.leader}</b></p><p>До выборов: <b>${S.election} мес.</b></p><div class="actions"><button class="good" onclick="campaignAction('rally')">Провести митинг · 250 млн</button><button onclick="campaignAction('program')">Опубликовать программу · 400 млн</button><button onclick="act('speech')">Обращение к нации</button><button onclick="act('law')">Принять социальный закон</button><button class="primary" onclick="act('election')">Провести досрочные выборы</button><button onclick="act('security')">Усилить охрану правительства</button></div>${bar('Одобрение правительства',S.approval)}${bar('Риск переворота',S.coupRisk)}${S.grace>0?`<p class="muted">🛡 Защитный срок: ещё ${S.grace} мес. — отставка не грозит</p>`:S.crisis>0?`<p class="muted">⚠️ Угроза отставки (${S.crisisWhy||''}): ${S.crisis} мес. подряд. Власть могут сменить после ${crisisNeed()}-го месяца</p>`:''}</div>`)}${card('Политические партии и парламент',`<div class="cards">${S.parties.slice().sort((a,b)=>b.support-a.support).map(p=>`<div class="mini ${p.name===S.playerParty?'party-card':''}"><b>${p.name} ${p.name===S.playerParty?'★ ТВОЯ ПАРТИЯ':''}</b>${p.ideology}<br>Поддержка: <b>${Math.round(p.support)}%</b> · Мест: ${p.seats}<div class="bar"><i style="width:${clamp(p.support)}%"></i></div></div>`).join('')}</div><p class="action-note">Рейтинг партий меняется каждый месяц в зависимости от экономики, стабильности и решений правительства.</p>`)}</div>`;
 if(tab==='politics')c=mergePol(c);
@@ -602,7 +609,7 @@ const cdSet=(k,n)=>{S.cd=S.cd||{};S.cd[k]=n};
 const cdTick=()=>{if(!S.cd)return;for(let k in S.cd)if(S.cd[k]>0)S.cd[k]--};
 const cdMsg=k=>`Подождите ещё ${cdLeft(k)} мес.`;
 const DN=['Иван Корнев','Мария Лозинская','Павел Рудь','Олег Баранов','Елена Ветрова','Артём Щукин','Нина Орлова','Глеб Сомов'];
-window.buildAA=()=>{if(blocked())return;if(S.money<500)return toast('Для развёртывания ПВО нужно 500 млн');if(S.equipment<2)return toast('Нужно не менее 2 единиц вооружения');S.money-=500;S.equipment=clamp(S.equipment-2);S.aa=(S.aa||0)+1;S.aaSup=Math.max(0,(S.aaSup||0)-(window.BAL?BAL.me.rebuild:1.5));S.threat=clamp(S.threat-1);log(`📡 Развёрнут новый комплекс ПВО. Всего комплексов: ${S.aa}. Защита от авиаударов усилена.`);save();render();toast('Комплекс ПВО развёрнут')};
+window.buildAA=(qty=1)=>{if(blocked())return;qty=Math.max(1,Math.min(10,Math.floor(+qty||1)));const can=Math.min(qty,Math.floor((S.money||0)/500),Math.floor((S.equipment||0)/2));if(can<1)return toast('На каждый комплекс нужно 500 млн и 2 единицы вооружения');S.money-=500*can;S.equipment=clamp(S.equipment-2*can);S.aa=(S.aa||0)+can;S.aaSup=Math.max(0,(S.aaSup||0)-(window.BAL?BAL.me.rebuild:1.5)*can);S.threat=clamp(S.threat-can);log(`📡 Закуплено и развёрнуто комплексов ПВО: ${can}. Всего комплексов: ${S.aa}.`);save();render();toast(`Развёрнуто комплексов ПВО: ${can}`)};
 /* ------------------------ АРСЕНАЛ (вкладка «Армия») ------------------------ */
 const ARMS={
  cannon:{n:'Пушка',ic:'💥',c:300,pw:.5,t:'Артиллерия: на войне давит врага'},
@@ -876,7 +883,7 @@ function enemyStrikes(w,c){
    r=shift/3+(di+dn)*.05;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по инфраструктуре (${reg.name}): дороги, энергосеть, склады. ВВП −${ES.pct.toFixed(2)}%, ремонт −${Math.round(30*f)} млн. Погибло ${fmt(cd)} мирных.${extra}`);
    infraNews(w,reg.name,false,AIARS.WN[act.w])}
   else if(t==='pvo'&&window.PVO){
-   const R3=PVO.seadMe(S,act.w,f,bcount('aabat'),w.airDefense||0);shift=.6*f*.5;
+   const R3=PVO.seadMe(S,act.w,f,bcount('aabat'),w.airDefense||0);if(R3.lostBattery)log(`📡 Вражеский удар уничтожил позицию ПВО. Осталось позиций: ${bcount('aabat')}.`);if(R3.destroyed)log('🚨 Наше ПВО полностью уничтожено — воздушное пространство открыто для ударов.');shift=.6*f*.5;
    if(R3.missed){r=-.1;log(`📡 ${w.n}: ${AIARS.WN[act.w]} искала наше ПВО (${reg.name}), но не нашла цели.`)}
    else{r=shift/3+R3.dmg*.35+(R3.destroyed?.35:0);const m=`${w.n}: ${AIARS.WN[act.w]} по нашему ПВО (${reg.name}) — сила ПВО ${R3.before.toFixed(1)} → ${R3.after.toFixed(1)}${R3.lostComplex?', уничтожен комплекс':''}${R3.destroyed?'. Небо открыто!':''}`;log('📡 '+m);warNews(w,'📡',m);shows[shows.length-1].pvo=R3;if(R3.destroyed)PVO.fx('dead','Наше ПВО подавлено!')}
    S.stability=clamp(S.stability-.2*f)}
@@ -1159,7 +1166,7 @@ function tacticsCard(){
  return card('🧠 Потери и тактика врага',h)}
 /* ------------------------ АНИМАЦИЯ БОЁВ НА КАРТЕ ------------------------ */
 const SVGNS='http://www.w3.org/2000/svg';
-const SCN={drone:{n:3,dur:1.6,R:16},heli:{n:2,dur:1.8,R:18},bomber:{n:3,dur:2,R:24},cruise:{n:1,dur:1.7,R:22,rk:1},rocket:{n:1,dur:1.5,R:28,rk:1},bomb:{n:1,dur:2.2,R:62,rk:1},cannon:{n:4,dur:1.1,R:12,ar:1},howitzer:{n:3,dur:1.2,R:15,ar:1},mlrs:{n:9,dur:1.1,R:11,ar:1,gap:.11},tank:{n:5,dur:2.4,R:16,tk:1}};
+const SCN={drone:{n:3,dur:2.5,R:16},heli:{n:2,dur:2.8,R:18},bomber:{n:3,dur:3.1,R:24},cruise:{n:1,dur:3.2,R:22,rk:1},rocket:{n:1,dur:2.8,R:28,rk:1},bomb:{n:1,dur:3.3,R:62,rk:1},cannon:{n:4,dur:1.8,R:12,ar:1},howitzer:{n:3,dur:1.9,R:15,ar:1},mlrs:{n:9,dur:1.8,R:11,ar:1,gap:.16},tank:{n:5,dur:3.1,R:16,tk:1}};
 function strikeScene(o){
  wmLoad(ok=>{if(!ok)return;try{if(!WMAP.box)buildWorldNode();try{updateWorld()}catch(e){}runScene(o)}catch(e){console.warn('scene',e)}});
 }
@@ -1250,11 +1257,34 @@ function runScene(o){
    const C={x:(P0.x+Aim.x)/2+nx*side,y:(P0.y+Aim.y)/2+ny*side};
    const pe=sh.down?downAt(P0,C,Aim):1,dd=dur*pe,E=bez(P0,C,Aim,pe);
    muzzle(P0,t0);
-   add(t0,dd,()=>({tr:mk('polyline',{fill:'none',stroke:rk?'#ffb06a':'#fff3c4','stroke-width':px((rk?2:1.3)*sc),opacity:.85,'stroke-linecap':'round','stroke-linejoin':'round'}),b:mk('path',{fill:rk?'#ff6a3d':'#e8eef5',stroke:'#0b1218','stroke-width':px(.5)}),pts:[]}),
-    (st,p)=>{const u=p*pe,q=bez(P0,C,Aim,u),vx=2*(1-u)*(C.x-P0.x)+2*u*(Aim.x-C.x),vy=2*(1-u)*(C.y-P0.y)+2*u*(Aim.y-C.y),a=Math.atan2(vy,vx),c=Math.cos(a),s2=Math.sin(a),L1=px((big?10:7)*sc),W=px((big?5:3.6)*sc);
-     st.pts.push(q.x.toFixed(1)+','+q.y.toFixed(1));if(st.pts.length>18)st.pts.shift();st.tr.setAttribute('points',st.pts.join(' '));
-     st.b.setAttribute('d',`M${q.x+c*L1},${q.y+s2*L1}L${q.x-c*L1*.6-s2*W},${q.y-s2*L1*.6+c*W}L${q.x-c*L1*.6+s2*W},${q.y-s2*L1*.6-c*W}Z`)},
-    st=>{st.tr.remove();st.b.remove()});
+   add(t0,dd,()=>{
+     const tr=mk('polyline',{fill:'none',stroke:rk?'#ff9b62':'#fff0bd','stroke-width':px((rk?2.1:1.5)*sc),opacity:.9,'stroke-linecap':'round','stroke-linejoin':'round'});
+     const g=mk('g',{});const col=rk?'#ff754b':'#e7edf3',edge='#18212b';
+     const path=(d,fill=col,sw=.55)=>mk('path',{d,fill,stroke:edge,'stroke-width':sw*sc,'stroke-linejoin':'round'},g);
+     const line=(x1,y1,x2,y2,stroke='#253342',sw=.8)=>mk('line',{x1:x1*sc,y1:y1*sc,x2:x2*sc,y2:y2*sc,stroke,'stroke-width':sw*sc,'stroke-linecap':'round'},g);
+     const kind=o.k;
+     if(kind==='drone'){
+       path('M 10 0 L 2 -2.2 L -3 -1.4 L -8 -4 L -6 0 L -8 4 L -3 1.4 L 2 2.2 Z','#d5dfd0');
+       line(-2,-1,-5,-5,'#9fb18c',.8);line(-2,1,-5,5,'#9fb18c',.8);line(4,-1,7,-4,'#9fb18c',.7);line(4,1,7,4,'#9fb18c',.7);
+       mk('circle',{cx:-6*sc,cy:0,r:1.4*sc,fill:'#d6b25e'},g);
+     }else if(kind==='rocket'||kind==='cruise'){
+       path(kind==='cruise'?'M 11 0 L 4 -1.5 L 0 -1.4 L -5 -4 L -4 -1 L -9 -1.5 L -9 1.5 L -4 1 L -5 4 L 0 1.4 L 4 1.5 Z':'M 12 0 L 3 -2.4 L -5 -2.4 L -8 -4 L -7 0 L -8 4 L -5 2.4 L 3 2.4 Z',rk?'#ff784c':'#d7e0e9');
+       line(-7,-1, -11,-2,'#ffb06a',1);line(-7,1,-11,2,'#ffb06a',1);
+     }else if(kind==='bomber'){
+       path('M 12 0 L 3 -1.5 L 0 -9 L -2 -9 L -1 -1.5 L -8 -4 L -10 -3 L -4 0 L -10 3 L -8 4 L -1 1.5 L -2 9 L 0 9 L 3 1.5 Z','#c5d0dc');
+     }else if(kind==='heli'){
+       path('M 7 0 Q 4 -3 -1 -2 L -5 -1 L -6 1 L -1 2 Q 4 3 7 0 Z','#8eaa75');line(-2,-4,3,-4,'#d5dce5',1);line(.5,-4,.5,-1,'#d5dce5',.7);line(6,0,10,-2,'#8eaa75',1.1);
+     }else if(kind==='bomb'){
+       path('M 6 0 Q 4 -4 0 -4 Q -6 -4 -7 0 Q -6 4 0 4 Q 4 4 6 0 Z','#46566a');line(5,0,9,-2,'#ff9a54',1.3);
+     }else{
+       path('M 9 0 L 1 -2 L -6 -2 L -8 -3 L -7 0 L -8 3 L -6 2 L 1 2 Z',col);
+     }
+     return{tr,g,pts:[]};
+    },
+    (st,p)=>{const u=p*pe,q=bez(P0,C,Aim,u),vx=2*(1-u)*(C.x-P0.x)+2*u*(Aim.x-C.x),vy=2*(1-u)*(C.y-P0.y)+2*u*(Aim.y-C.y),a=Math.atan2(vy,vx);
+     st.pts.push(q.x.toFixed(1)+','+q.y.toFixed(1));if(st.pts.length>22)st.pts.shift();st.tr.setAttribute('points',st.pts.join(' '));
+     st.g.setAttribute('transform',`translate(${q.x} ${q.y}) rotate(${a*57.2958}) scale(${px(1)})`);
+    },st=>{st.tr.remove();st.g.remove()});
    if(sh.down)flak(E.x,E.y,t0+dd);else boom(Aim.x,Aim.y,cfg.R,t0+dd,false,sh.el);
   };
  /* ---- сценарии ---- */
@@ -1825,6 +1855,37 @@ E('festival','Театральный фестиваль','Артисты со в
 E('radio','Новая радиосеть','Инженеры предлагают построить национальную радиосеть.',[
  O('Построить',{tech:2,approval:1,legitimacy:2,gdp:100},'Страна слышит новости.',400),
  O('Отказаться',{money:150},'Деньги сэкономлены.')]),
+/* ---------- НОВЫЕ СОБЫТИЯ: ЭКОНОМИКА, ТЕХНОЛОГИИ И ОБЩЕСТВО ---------- */
+E('cybergrid','Кибератака на энергосеть','Скоординированная атака вывела из строя часть цифровых систем энергоснабжения.',[
+ O('Оплатить экстренную защиту',{money:-650,energy:3,trust:2},'Энергосеть восстановлена, специалисты закрыли уязвимости.'),
+ O('Отключить уязвимые узлы',{energy:-3,gdp:-180,stability:1},'Ущерб ограничен, но производство временно замедлилось.')]),
+E('oilshock','Мировой нефтяной шок','Крупные экспортёры сократили поставки топлива, цены на энергию резко выросли.',[
+ O('Создать стратегический резерв',{money:-550,fuel:8,inflation:1},'Резерв создан, но бюджет понёс дополнительные расходы.'),
+ O('Перейти на экономию',{fuel:2,gdp:-220,approval:-1},'Потребление снижено ценой замедления экономики.')]),
+E('supplychain','Разрыв цепочек поставок','Ключевой зарубежный поставщик остановил отгрузки промышленного оборудования.',[
+ O('Найти новых партнёров',{money:-400,rel:3,equipment:3},'Новые контракты частично закрыли дефицит.'),
+ O('Запустить местное производство',{money:-700,tech:2,gdp:100},'Импортозамещение началось, но потребует времени.')]),
+E('bankpanic','Паника на финансовом рынке','Крупный банк столкнулся с массовым снятием вкладов. Риск заражения растёт.',[
+ O('Предоставить ликвидность',{money:-800,trust:4,inflation:1},'Отток вкладов остановлен.'),
+ O('Не вмешиваться',{trust:-6,gdp:-250,stability:-2},'Кризис доверия ударил по кредитованию.')]),
+E('techbreak','Технологический прорыв','Исследовательская группа представила перспективную технологию для промышленности.',[
+ O('Масштабировать разработку',{money:-500,tech:5,gdp:180},'Разработка переходит к промышленному внедрению.'),
+ O('Продать лицензию',{money:650,rel:2,tech:1},'Лицензия принесла доход, часть технологий ушла за рубеж.')]),
+E('leakcabinet','Утечка из кабинета министров','В прессу попали документы о разногласиях внутри правительства.',[
+ O('Опубликовать полный отчёт',{legitimacy:3,approval:1,stability:-1},'Открытость снизила подозрения, но обнажила конфликт.'),
+ O('Начать расследование',{money:-250,legitimacy:-1,coupRisk:-2},'Утечка локализована, расследование продолжается.')]),
+E('harvestcrisis','Неурожай в нескольких регионах','Засуха и вредители сократили прогнозируемый сбор зерна.',[
+ O('Закупить продовольствие',{money:-450,food:8,inflation:.5},'Импорт смягчил дефицит.'),
+ O('Ограничить экспорт',{food:4,relr:-3,approval:-1},'Внутренний рынок защищён, партнёры недовольны.')]),
+E('railstrike','Железнодорожный кризис','Износ инфраструктуры и спор о зарплатах вызвали перебои грузовых перевозок.',[
+ O('Срочно отремонтировать пути',{money:-600,gdp:120,approval:1},'Главные маршруты восстановлены.'),
+ O('Ввести временное расписание',{fuel:-2,gdp:-200,stability:-1},'Перевозки продолжаются с задержками.')]),
+E('borderrefugees','Крупный поток беженцев','Обострение в соседнем регионе вызвало прибытие большого числа людей к границе.',[
+ O('Развернуть гуманитарные пункты',{money:-350,legitimacy:2,approval:1,relr:3},'Люди получили помощь, нагрузка на бюджет выросла.'),
+ O('Усилить пограничный контроль',{money:-150,stability:1,relr:-4},'Поток ограничен, отношения с соседями ухудшились.')]),
+E('officerreform','Реформа военного командования','Военные предлагают обновить систему подготовки и снабжения армии.',[
+ O('Провести реформу',{money:-500,training:5,morale:2,equipment:-1},'Командование обновлено, армия получила новый стандарт подготовки.'),
+ O('Отложить реформу',{money:100,morale:-1,approval:-1},'Расходы отложены, недовольство офицеров осталось.')],{when:()=>!S.war||S.wars.length>0}),
 /* ---------- ВОЙНА ---------- */
 E('ceasefire','Предложение перемирия','Враг предлагает прекратить огонь.',[
  O('Принять перемирие',{peace:1,approval:1,legitimacy:-1,morale:-1},'Огонь прекращён.'),
@@ -1930,7 +1991,7 @@ function fireMinor(){
  const L=MIN.map((m,i)=>[m,i]).filter(([m,i])=>!(S.mlast||[]).includes(i)&&(!m.when||m.when()));
  if(!L.length)return;
  const [m,i]=pick(L);S.mlast=((S.mlast||[]).concat(i)).slice(-14);
- const sm=ch(m.fx);log(`${m.e||'•'} ${m.x}. (${sm})`);say(m.x,m.e||'🙂');
+ S.mevlast=mt();const sm=ch(m.fx);log(`${m.e||'•'} ${m.x}. (${sm})`);say(m.x,m.e||'🙂');
 }
 function evTick(){
  if(S.event){
@@ -1947,8 +2008,11 @@ function evTick(){
  }
  const due=S.evq.findIndex(q=>q.t<=mt());
  if(due>=0){const q=S.evq.splice(due,1)[0];openEvent(q.id);return}
- if(Math.random()<.34)fireMinor();
- if(mt()-S.evlast>=2&&Math.random()<.2*Math.sqrt(difficulty().unrest)){const id=rollEvent();if(id)openEvent(id)}
+ // События не должны сыпаться одно за другим: мелкие происшествия отделены паузой,
+ // крупные решения — минимум четырьмя игровыми месяцами.
+ if(!Number.isFinite(S.mevlast))S.mevlast=-9;
+ if(mt()-S.mevlast>=2&&Math.random()<.12)fireMinor();
+ if(mt()-S.evlast>=4&&mt()-S.mevlast>=2&&Math.random()<.12*Math.sqrt(difficulty().unrest)){const id=rollEvent();if(id)openEvent(id)}
 }
 window.resolveEvent=(i,auto)=>{
  if(!S.event)return;
@@ -2002,9 +2066,9 @@ function evTab(){
 
 /* ------------------------ ИНИЦИАЛИЗАЦИЯ ------------------------ */
 function ensureHoi(){
- const d={captured:[],lost:[],pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mlast:[],spirits:[],wars:[],just:{},relPrograms:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bld:{},sanc:{},supp:{},bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},polSys:{protest:12,lastUnrest:-99,lastCampaign:-99,lastCabinet:-99},spyNetworks:{},spyReports:{},spyCooldowns:{},counterIntel:0,embassies:{},nationalProject:null,globalCrisis:null,globalHistory:[],globalNext:18,mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0},autoPurchase:{enabled:false,items:{food:{on:false,target:55,amount:10},fuel:{on:false,target:45,amount:10},steel:{on:false,target:45,amount:10},energy:{on:false,target:45,amount:10},equipment:{on:false,target:40,amount:5},ammo:{on:false,target:40,amount:5}}}};
+ const d={captured:[],lost:[],pp:60,civ:18,mil:6,dock:2,evq:[],evcd:{},evlast:-9,mevlast:-9,mlast:[],spirits:[],wars:[],just:{},relPrograms:{},puppets:[],flags:{},techs:{},research:[],rslots:2,build:[],bld:{},sanc:{},supp:{},bslots:2,adv:{pol:null,mil:null,eco:null},law:{eco:'civ',con:'vol'},doc:null,focus:{done:{},cur:null,p:0},martial:false,bud:{},tx:{},bills:{},gr:{workers:55,biz:55,pens:55,stud:55,mil:55,farm:55},polSys:{protest:12,lastUnrest:-99,lastCampaign:-99,lastCabinet:-99},spyNetworks:{},spyReports:{},spyCooldowns:{},counterIntel:0,embassies:{},nationalProject:null,globalCrisis:null,globalHistory:[],globalNext:24,mk:{m:{food:1,fuel:1,steel:1,energy:1,equipment:1,ammo:1},prev:{},q:{food:30,fuel:30,steel:30,energy:30,equipment:30,ammo:30},imp:0,exp:0},autoPurchase:{enabled:false,items:{food:{on:false,target:55,amount:10},fuel:{on:false,target:45,amount:10},steel:{on:false,target:45,amount:10},energy:{on:false,target:45,amount:10},equipment:{on:false,target:40,amount:5},ammo:{on:false,target:40,amount:5}}}};
  for(const k in d)if(S[k]==null)S[k]=d[k];
- S.polSys=Object.assign({protest:12,lastUnrest:-99,lastCampaign:-99,lastCabinet:-99},S.polSys||{});S.spyNetworks=S.spyNetworks||{};S.spyReports=S.spyReports||{};S.spyCooldowns=S.spyCooldowns||{};S.counterIntel=clamp(+S.counterIntel||0,0,5);S.nationalProject=S.nationalProject&&typeof S.nationalProject==='object'?S.nationalProject:null;S.globalHistory=Array.isArray(S.globalHistory)?S.globalHistory:[];if(!Number.isFinite(S.globalNext))S.globalNext=mt()+12;
+ S.polSys=Object.assign({protest:12,lastUnrest:-99,lastCampaign:-99,lastCabinet:-99},S.polSys||{});S.spyNetworks=S.spyNetworks||{};S.spyReports=S.spyReports||{};S.spyCooldowns=S.spyCooldowns||{};S.counterIntel=clamp(+S.counterIntel||0,0,5);S.nationalProject=S.nationalProject&&typeof S.nationalProject==='object'?S.nationalProject:null;S.globalHistory=Array.isArray(S.globalHistory)?S.globalHistory:[];if(!Number.isFinite(S.globalNext))S.globalNext=mt()+18;if(!Number.isFinite(S.mevlast))S.mevlast=-9;
  if(!S.relPrograms)S.relPrograms={};
  if(!S.embassies)S.embassies={};
  if(!S._relAttackCapV1){const affected=new Set((S.wars||[]).map(w=>w.n));Object.keys(S.sanc||{}).forEach(n=>affected.add(n));affected.forEach(n=>{const c=(S.relations||[]).find(x=>x.name===n);if(c&&c.value<-30)c.value=-30});S._relAttackCapV1=1;}
@@ -3111,7 +3175,7 @@ function intelligenceTab(){
 const GLOBAL_CRISIS={energy:{title:'Мировой энергетический шок',text:'Сбой поставок и дефицит энергоносителей подняли издержки бизнеса по всему миру.',months:6,action:'energy',actionName:'Субсидировать энергетику · 650 млн'},bank:{title:'Международная банковская паника',text:'Инвесторы выводят капитал, рынки нервничают, а кредитование замедляется.',months:5,action:'bank',actionName:'Гарантировать вклады · 500 млн'},food:{title:'Мировой продовольственный кризис',text:'Неурожай в нескольких регионах мира вызвал рост цен на продовольствие.',months:7,action:'food',actionName:'Закупить зерно · 400 млн'},health:{title:'Глобальная чрезвычайная ситуация в здравоохранении',text:'Международная система здравоохранения перегружена, торговля и занятость замедляются.',months:6,action:'health',actionName:'Усилить систему здравоохранения · 600 млн'},shipping:{title:'Кризис международной логистики',text:'Перебои перевозок задерживают поставки сырья и товаров.',months:5,action:'shipping',actionName:'Поддержать логистику · 450 млн'}};
 function globalCrisisTick(){
  let C=S.globalCrisis;
- if(!C){if(window.__NG_MP)return;if(mt()>=S.globalNext&&Math.random()<.12){const ids=Object.keys(GLOBAL_CRISIS),id=ids[Math.floor(Math.random()*ids.length)],D=GLOBAL_CRISIS[id];S.globalCrisis={id,left:D.months,age:0,response:null};S.globalHistory.unshift({t:mt(),title:D.title,result:'Начался мировой кризис'});S.globalHistory=S.globalHistory.slice(0,12);S.globalNext=mt()+18+Math.floor(Math.random()*19);log(`🌍 Мировое событие: ${D.title}.`);say(D.title,'🌍');}return;}
+ if(!C){if(window.__NG_MP)return;if(mt()>=S.globalNext&&Math.random()<.08){const ids=Object.keys(GLOBAL_CRISIS),id=ids[Math.floor(Math.random()*ids.length)],D=GLOBAL_CRISIS[id];S.globalCrisis={id,left:D.months,age:0,response:null};S.globalHistory.unshift({t:mt(),title:D.title,result:'Начался мировой кризис'});S.globalHistory=S.globalHistory.slice(0,12);S.globalNext=mt()+24+Math.floor(Math.random()*19);log(`🌍 Мировое событие: ${D.title}.`);say(D.title,'🌍');}return;}
  const D=GLOBAL_CRISIS[C.id];if(!D){S.globalCrisis=null;return;}C.age++;
  const mult=C.response?0.5:1;
  if(C.id==='energy'){S.fuel=clamp(S.fuel-1.5*mult);S.inflation=clamp(S.inflation+.22*mult);S.gdp=Math.max(100,S.gdp*(1-.0015*mult));}
@@ -3840,6 +3904,8 @@ try{if(window.FXD)FXD.fetchLive(ok=>{if(ok){fxRebase();if(tab==='charts'||tab===
 
 window.NG={
  get S(){return S},
+ syncMPTerritory(data){if(!data||!data.from||!data.region||!data.to)return;S.mpTerritories=S.mpTerritories||{};S.mpTerritories[data.from+'|'+data.region]=data.to;save();if(WMAP.node){WMAP.usig='';updateWorld()}render(true)},
+ syncMPTerritories(data){if(!data||typeof data!=='object')return;S.mpTerritories={...(S.mpTerritories||{}),...data};save();if(WMAP.node){WMAP.usig='';updateWorld()}render(true)},
  begin(diff,name,ai){NG._bak=NG._bak||S;window.__NG_MP=1;pause();mpFresh(diff,name,ai);tab='overview';render()},
  end(){window.__NG_MP=0;pause();if(NG._bak){S=NG._bak;NG._bak=null}tab='overview';render()},
  load(o){NG._bak=NG._bak||S;window.__NG_MP=1;pause();S={...initial(),...o};ensure();tab='overview';render()},
