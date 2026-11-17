@@ -7,7 +7,7 @@ function init(S){
  if(!S.aiWorld||!Array.isArray(S.aiWorld.nations)){
   S.aiWorld={version:3,month:0,nations:WORLD.list.filter(c=>c.name!==player).slice(0,194).map(c=>({name:c.name,iso:c.iso||'',pop:Math.max(.02,+c.pop||1),gdp:Math.max(1,(+c.pop||1)*(+c.inc||1)*100),power:Math.max(5,+c.power||15),stability:R(48,78),treasury:R(500,2400),growth:R(.002,.009),relations:R(-18,35),allies:[],war:null,owner:null,annexed:false,trait:c.trait||'',manpower:Math.max(5,(+c.pop||1)*.035),morale:R(65,90),exhaustion:0,industry:R(.7,1.3),infrastructure:R(.7,1.3),research:R(.5,1.2),exports:0,imports:0,cooldown:0,tradePartners:[]})),events:[],alliances:[],wars:[],owners:{},player};
  }
- const W=S.aiWorld;W.version=3;W.player=player;W.events||=[];W.wars||=[];W.alliances||=[];W.owners||={};
+ const W=S.aiWorld;W.version=3;W.player=player;W.events||=[];W.wars||=[];W.alliances||=[];W.owners||={};W.regionOwners||={};
  W.brain||={nn:null,steps:0,stat:{},mem:[],avg:0};
  /* gdp0 — ВВП на старте игры. Для старых сохранений восстанавливаем по той же формуле, по которой мир создавался. */
  W.nations.forEach(n=>{if(!(n.gdp0>0)){const c=window.WORLD&&WORLD.map&&WORLD.map[n.name];n.gdp0=c?Math.max(1,(+c.pop||1)*(+c.inc||1)*100):n.gdp}n.gh||=[];n.gpeak??=n.gdp});
@@ -205,8 +205,11 @@ function peace(W,w,a,b,A){
    ev(W,`🏛 В ${lose.name} сменилась власть: ${win.name} привела к власти дружественное правительство (${prev} → ${lose.ideology}).`);
   }else if(margin>65&&win.power>lose.power*1.45&&Math.random()<(goalHit&&w.goal==='territory'?.42:.28)){lose.annexed=true;lose.owner=win.name;W.owners[lose.name]=win.name;win.pop+=lose.pop;win.gdp+=lose.gdp;ev(W,`🏴 ${win.name} полностью аннексировала ${lose.name}`)}
   else{W.owners[lose.name+':occupied']=win.name;
+   const seedsL=(window.WORLD_SEEDS&&WORLD_SEEDS[lose.name])||[],freeL=seedsL.filter(x=>!W.regionOwners[lose.name+'|'+x.n]);
+   const takeR=(goalHit&&w.goal==='territory'&&w.claimRegion)?w.claimRegion:(freeL.length?freeL[Math.floor(Math.random()*freeL.length)].n:'');
+   if(takeR)W.regionOwners[lose.name+'|'+takeR]=win.name;
    if(goalHit&&w.goal==='territory'&&w.claimRegion){lose.lostRegions=(lose.lostRegions||[]);lose.lostRegions.push({region:w.claimRegion,to:win.name,month:W.month});ev(W,`🗺 ${win.name} захватила область «${w.claimRegion}» страны ${lose.name}`)}
-   else ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки`)}
+   else ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки${takeR?` («${takeR}» перешла к ${win.name})`:''}`)}
  }else ev(W,`🕊 ${a.name} и ${b.name} подписали мир без решающей победы`);
  try{GrandDiplomacy.goalOutcome(W,a,win===a&&margin>18?(w.goal==='tribute'?.6:1)+margin/150:-1)}catch(e){}
  if(w.goal==='regime'&&win===a&&margin<30)ev(W,`🏛 ${a.name} не смогла сменить власть в ${b.name}: перевес слишком мал`);

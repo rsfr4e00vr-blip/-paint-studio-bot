@@ -199,18 +199,21 @@ const isMe=o=>!!o&&o===myName();
 /* Единый источник правды: кто сейчас владеет областью. Им пользуются карта мира, «Моя держава» и окно страны.
    Порядок: общий список мультиплеера → моя страна → области, которые я захватил → ИИ-владелец → аннексия → вассал → исходная страна. */
 function regionOwner(C,r){const mp=mpRegionOwner(C,r);if(mp)return mp;const nm=C.name,me=myName(),rc=nm&&S.relations.find(x=>x.name===nm),aiOwner=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm];
- if(nm&&(nm===me||(rc&&rc.self)))return me;
+ if(nm&&(nm===me||(rc&&rc.self))){const lt=S.lostTo&&S.lostTo[String(r.n||'').replace(/ \(.*\)/,'')];return lt||me}
  if(taken()[r.id])return me;
+ const ro=S.aiWorld&&S.aiWorld.regionOwners&&S.aiWorld.regionOwners[nm+'|'+String(r.n||'').replace(/ \(.*\)/,'')];if(ro)return ro;
  if(aiOwner)return aiOwner;
+ const oc=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm+':occupied'];
+ if(oc&&!(window.WORLD_SEEDS&&WORLD_SEEDS[nm])&&C.regs.length>1){let h=0;for(const ch of nm)h=(h*31+ch.charCodeAt(0))>>>0;if(h%C.regs.length===(+String(r.id).split(':')[1]||0))return oc}
  if(rc&&rc.annexed)return me;
  if(rc&&isVas(nm))return 'Вассал: '+nm;
  return nm}
 function ownerColor(owner,C,i){if(owner==='Вассал: '+C.name)return VAS;if(isMe(owner))return MYC;const w=WORLD.map[owner];return baseCol(w?(w.iso||w.name):owner,i)}
 function regFill(C,r,i){const owner=regionOwner(C,r);if(isMe(owner))return MYC;return owner===C.name?baseCol(C.iso,i):ownerColor(owner,C,i)}
-const ownSig=()=>JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).join(',')+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+myName()+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.mpTerritories||{});
+const ownSig=()=>JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).join(',')+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+myName()+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.regionOwners||{})+'|'+JSON.stringify(S.lostTo||{})+'|'+JSON.stringify(S.mpTerritories||{});
 function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=ownSig()+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',');if(WMAP.usig===sig)return;WMAP.usig=sig;
  if(!WMAP.el){WMAP.el={r:{},o:{}};svg.querySelectorAll('[data-r]').forEach(e=>WMAP.el.r[e.getAttribute('data-r')]=e);svg.querySelectorAll('[data-o]').forEach(e=>WMAP.el.o[e.getAttribute('data-o')]=e)}
- Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e){e.setAttribute('fill',regFill(C,r,i));const changed=regionOwner(C,r)!==C.name;e.setAttribute('stroke',changed?'#f5d889':'rgba(0,0,0,.38)');e.setAttribute('stroke-width',changed?'1.15':'.35')}});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}});
+ Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e){e.setAttribute('fill',regFill(C,r,i));const ow=regionOwner(C,r),changed=ow!==C.name&&!isMe(ow);e.setAttribute('stroke',changed?'#f5d889':'rgba(0,0,0,.38)');e.setAttribute('stroke-width',changed?'1.15':'.35')}});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}});
  drawOcc(svg);drawTerritoryLabels(svg)}
 /* Подписи территорий: у каждого владельца отдельная подпись на каждом связном куске земли.
    Подпись стоит внутри самих областей (а не в центре страны) и пересчитывается при каждой смене границ. */
@@ -270,7 +273,7 @@ const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.
 function wzFit(v){v.w=Math.max(40,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
 function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
 const hwz=m=>{if(!WMAP.node)return;if(m==='full'){WMAP.full=!WMAP.full;const sl=document.getElementById('wm-slot');if(sl)sl.classList.toggle('full',!!WMAP.full);document.body.style.overflow=WMAP.full?'hidden':'';const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';return wzApply()}if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
-function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted">Нажмите на любой регион: откроется страна с её областями. Золотые регионы — ваши. Перетаскивайте и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}
+function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted">Нажмите на любой регион: откроется страна с её областями. Синие регионы — ваши (и своя страна, и захваченное выглядят одинаково). Перетаскивайте и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}
 function mountWorldMap(){if(!document.getElementById('wm-slot'))return;wmLoad(ok=>{const sl=document.getElementById('wm-slot');if(!sl)return;if(!ok){sl.innerHTML='<p class="muted" style="padding:12px">Не удалось загрузить карту мира (нет интернета или библиотека заблокирована).</p>';return}
  if(!WMAP.box)buildWorldNode();if(sl.firstChild!==WMAP.box)sl.replaceChildren(WMAP.box);sl.classList.toggle('full',!!WMAP.full);const fb=document.getElementById('wfull');if(fb)fb.textContent=WMAP.full?'✕':'⛶';updateWorld()})}
 /* --- окно страны: регионы, выбор региона для захвата --- */
@@ -2637,7 +2640,7 @@ function enemyTakesRegion(w){
  if(S.regions.length<=1||!cand.length){log(`🗺 ${w.n} требовала территорию, но уступать нечего — вместо этого выплачена контрибуция.`);return}
  const pri=cand.find(x=>x.name===w.claimRegion)||cand.find(x=>x.enemyOccupiedBy===w.n)||cand.slice().sort((a,b)=>(b.unrest-b.loyalty*.3)-(a.unrest-a.loyalty*.3))[0];
  const share=Math.min(.3,pri.pop/Math.max(1,S.pop)*.8);if(S.enemyOccupied)delete S.enemyOccupied[pri.name];
- NG.loseRegion(pri.name,share);log(`🗺 По итогам поражения ${w.n} отторгла область «${pri.name}». Население и ВВП сократились.`);say('Мы потеряли область: '+pri.name,'😢');
+ S.lostTo=S.lostTo||{};S.lostTo[String(pri.name).replace(/ \(.*\)/,'')]=w.n;NG.loseRegion(pri.name,share);log(`🗺 По итогам поражения ${w.n} отторгла область «${pri.name}». Население и ВВП сократились.`);say('Мы потеряли область: '+pri.name,'😢');
 }
 function regimeTick(){
  const R=S.regimes;if(!R)return;
