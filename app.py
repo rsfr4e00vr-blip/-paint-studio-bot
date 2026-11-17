@@ -730,6 +730,10 @@ def nn_core_js():
 def pvo_js():
     return FileResponse(BASE / "pvo.js", media_type="application/javascript")
 
+@app.get("/war_ai.js")
+def war_ai_js():
+    return FileResponse(BASE / "war_ai.js", media_type="application/javascript")
+
 @app.get("/pvo.css")
 def pvo_css():
     return FileResponse(BASE / "pvo.css", media_type="text/css")
