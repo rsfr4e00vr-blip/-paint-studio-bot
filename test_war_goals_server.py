@@ -53,6 +53,20 @@ async def run():
     pub = room.war_pub(w)
     assert pub["goal"] == "regime" and pub["goal_label"] == "Смена власти"
     assert any(m.get("type") == "war_start" and m.get("goal") == "regime" for m in b.ws.messages)
+    start_a = next(m for m in a.ws.messages if m.get("type") == "war_start")
+    start_b = next(m for m in b.ws.messages if m.get("type") == "war_start")
+    assert start_a["wars"] == start_b["wars"], "оба игрока должны получить один и тот же снимок войны"
+    assert start_a["wars"][0]["id"] == start_b["war"]
+    assert any(m.get("type") == "war_state" and m.get("wars") == start_a["wars"] for m in a.ws.messages)
+
+    # 1b. Нельзя создать войну против отключённого участника: иначе агрессор видит фантомную войну.
+    room_off, a_off, b_off = make_room("OFFLINE")
+    b_off.connected = False
+    a_off.border_cases[b_off.id] = {"created": room_off.month - 5, "expires": room_off.month + 20,
+                                    "severity": 90, "detail": "Инцидент"}
+    await ns.on_war(room_off, a_off, {"to": b_off.id, "cause": "border", "goal": "tribute"})
+    assert not room_off.wars and not a_off.war and not b_off.war
+    assert any(m.get("type") == "notice" and "не в сети" in m.get("text", "") for m in a_off.ws.messages)
 
     # 2. Диктовать смену власти нельзя без перевеса, можно — при перевесе 60%
     w["p"] = 55.0
