@@ -272,7 +272,29 @@ function think(W,n,A,m,wv){
   if(a==='ally')return !n.war&&n.allies.length<4;
   if(a==='trade')return !n.war&&n.tradePartners.length<8;
   return rich};
- const q=NN.predict(net,x),k=NN.choose(q,ok,epsS(B));
+ const q=NN.predict(net,x).slice();
+ // Стратегический слой поверх обучения: ИИ проверяет финансовые риски и угрозы,
+ // чтобы нейросеть не выбирала красивое, но саморазрушительное решение.
+ const debtR=(n.debt||0)/Math.max(1,n.gdp),cashR=n.treasury/Math.max(1,n.gdp),infl=n.inflation||0;
+ if(debtR>.35){q[13]+=.22+Math.min(.55,(debtR-.35)*.8);q[0]+=.08}
+ if(debtR>.65)q[13]+=.35;
+ if(cashR<.012&&(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.82)q[12]+=.28;
+ if(cashR<.004){q[0]+=.18;q[1]-=.12;q[4]-=.08}
+ if(infl>10){q[14]+=.18+Math.min(.4,(infl-10)*.025);q[15]+=.1;q[16]+=.12}
+ if(n.war){
+   if(n.manpower<Math.max(2,n.pop*.012))q[10]+=.32;
+   if(n.exhaustion>28)q[10]+=.12;
+   if(n.morale<42)q[7]+=.18;
+   if(peaceW&&peaceW.months>=4&&(n.exhaustion>48||n.treasury<n.gdp*.002||((peaceW.a===n.name&&peaceW.score < -25)||(peaceW.b===n.name&&peaceW.score > 25))))q[11]+=.24;
+   if((n.aa||0)<2)q[5]+=.14;
+ }else{
+   const danger=A.filter(b=>b!==n&&!b.annexed&&!b.war).sort((a,b)=>b.power-a.power)[0];
+   if(danger&&danger.power>n.power*1.45&&n.stability>35){q[5]+=.16;q[4]+=.12;q[9]+=.08}
+   if(n.stability<38)q[7]+=.3;
+ }
+ if(n.industry<.75&&cashR>.02)q[1]+=.16;
+ if(n.infrastructure<.7&&cashR>.02)q[2]+=.12;
+ const k=NN.choose(q,ok,epsS(B));
  n.last=k<0?null:{x,k,v};if(k<0)return;
  const a=ACTS[k];n.intent=({borrow:'Берёт заём',repay:'Гасит долг',economy:'Экономическое развитие',industry:'Наращивает промышленность',infra:'Строит инфраструктуру',research:'Вкладывается в науку',army:'Усиливает армию',aa:'Строит ПВО',arsenal:'Производит оружие',stabilize:'Внутренняя стабилизация',ally:'Ищет союзников',trade:'Расширяет торговлю',mobilize:'Мобилизация',peace:'Добивается мира'})[a];
  const g=Math.max(100,n.gdp);
