@@ -56,9 +56,15 @@ function connect(code,opts){
 function closeWs(){if(ws){const w=ws;ws=null;try{w.onclose=null;w.close()}catch(e){}}}
 function val(s){const e=$(s);return e?e.value.trim():''}
 setInterval(()=>send({type:'ping',t:Date.now()}),25000);
+setInterval(()=>{
+  if(!active||room.state!=='running'||!ws||ws.readyState!==1||!window.MilMap||!MilMap.core)return;
+  try{const units=MilMap.core.MM.units.filter(u=>u.own==='me').slice(0,120).map(u=>({id:u.id,sub:u.sub,x:u.x,y:u.y,hp:u.hp,ang:u.ang,name:u.name,mission:u.mission,fuel:u.fuel}));
+    send({type:'military_state',units});}catch(e){}
+},900);
 
 function on(m){
   switch(m.type){
+  case'military_state':if(window.MilMap&&MilMap.setNetworkState)MilMap.setNetworkState(m.player,m.units||[],m.country||m.name||'Игрок');break;
   case'joined':
     me.id=m.id;me.host=!!m.host;Object.assign(room,pick(m));wars=m.wars||[];relations=m.relations||{};relationPrograms=m.relation_programs||{};embassies=m.embassies||{};claims=m.claims||{};borderCases=m.border_cases||{};ideologyCases=m.ideology_cases||{};securityCases=m.security_cases||{};warGrounds=m.war_grounds||{};if(NG.syncMPTerritories)NG.syncMPTerritories(m.territories||{});
     sset(SKEY,JSON.stringify({code:room.code,token:m.id,name:val('#mpName')||(JSON.parse(sget(SKEY)||'{}').name)||'Игрок',country:val('#mpCountry')||(JSON.parse(sget(SKEY)||'{}').country)||'Новария',ideology:val('#mpIdeology')||(JSON.parse(sget(SKEY)||'{}').ideology)||'прагматизм'}));

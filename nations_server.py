@@ -320,6 +320,7 @@ class Player:
         self.sect: dict = eco_new()        # здоровье отраслей экономики (0..100), считает сервер
         self.ars: dict = {k: 0 for k in ARS_WEAPONS}   # стратегический арсенал (хранится на сервере)
         self.regions: list = []            # карта областей игрока: id/name/geo
+        self.military_state: dict = {}      # последние координаты войск для сетевой карты
         self.factories: list = []          # построенные военно-промышленные заводы
         self.factory_builds: list = []     # строящиеся заводы
         self.ars_cd = -99                  # месяц последнего залпа
@@ -942,6 +943,33 @@ class Room:
 # ------------------------------------------------------------------ обработка сообщений
 async def handle(room: Room, p: Player, msg: dict):
     kind = msg.get("type")
+
+    if kind == "military_state" and room.state == "running":
+        # Ограничиваем размер и состав пакета: сервер пересылает только визуальное состояние,
+        # а не принимает от клиента изменение экономики/результата войны.
+        raw = msg.get("units", [])
+        if not isinstance(raw, list) or len(raw) > 120:
+            return
+        clean = []
+        allowed = {"inf", "tank", "destroyer", "frigate", "carrier", "submarine", "fighter", "bomber"}
+        for u in raw:
+            if not isinstance(u, dict) or u.get("sub") not in allowed:
+                continue
+            try:
+                x, y = float(u.get("x")), float(u.get("y"))
+                hp, ang = float(u.get("hp", 100)), float(u.get("ang", 0))
+                fuel = float(u.get("fuel", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if not all(math.isfinite(v) for v in (x, y, hp, ang, fuel)) or not (0 <= x <= 1000 and 0 <= y <= 575):
+                continue
+            clean.append({"id": str(u.get("id", ""))[:32], "sub": u["sub"], "x": x, "y": y,
+                          "hp": max(0, min(100, hp)), "ang": ang, "name": clean_name(u.get("name"), "Соединение", 32),
+                          "mission": str(u.get("mission", "idle"))[:12], "fuel": max(0, min(300, fuel))})
+        p.military_state = {"units": clean, "country": p.country, "name": p.name, "updated": time.time()}
+        await room.broadcast({"type": "military_state", "player": p.id, "country": p.country,
+                              "name": p.name, "units": clean}, exclude=p.id)
+        return
 
     if kind == "ping":
         await room.send(p, {"type": "pong", "t": msg.get("t")})
@@ -1932,6 +1960,12 @@ async def nations_socket(ws: WebSocket, code: str):
                                     **room.lobby_info(),
                                     "wars": [room.war_pub(w) for w in room.wars.values()], "relations": room.relations_for(me), "relation_programs": room.programs_for(me), "embassies": room.embassies_for(me), "claims": room.claims_for(me), "border_cases": room.border_cases_for(me), "ideology_cases": room.ideology_cases_for(me), "security_cases": room.security_cases_for(me), "war_grounds": room.grounds_for(me), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
                                     "crisis_response": bool(room.global_crisis and me.crisis_response == room.global_crisis.get("id"))})
+                # При повторном входе новый клиент сразу получает актуальные позиции остальных армий.
+                for other in room.players.values():
+                    if other.id != me.id and other.military_state:
+                        await ws.send_json({"type": "military_state", "player": other.id,
+                                            "country": other.country, "name": other.name,
+                                            "units": other.military_state.get("units", [])})
                 if room.state == "paused" and room.auto_paused:
                     room.auto_paused = False
                     room.state = "running"
@@ -1954,6 +1988,10 @@ async def nations_socket(ws: WebSocket, code: str):
     finally:
         if room and me:
             me.connected = False
+            if me.military_state:
+                await room.broadcast({"type": "military_state", "player": me.id, "country": me.country,
+                                      "name": me.name, "units": []}, exclude=me.id)
+                me.military_state = {}
             if room.state == "lobby":
                 room.players.pop(me.id, None)
                 if room.host == me.id:
