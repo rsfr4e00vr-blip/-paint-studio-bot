@@ -331,10 +331,35 @@ function buildWorldNode(){const cl=[],body=[];Object.values(GEO.c).forEach(C=>{c
   if(cur.length>=2&&gs.pts.length>=2){gs.multi=true;gs.moved=999;const a0=c2(gs.pts[0],gs.pts[1]),a1=c2(cur[0],cur[1]),s=a1.d/a0.d,w1=V0.w/s,u1=r.width/w1,wx=V0.x+(a0.x-r.left)/u0,wy=V0.y+(a0.y-r.top)/u0;V1={w:w1,h:w1*asp(),x:wx-(a1.x-r.left)/u1,y:wy-(a1.y-r.top)/u1}}
   else{const dx=cur[0].x-gs.pts[0].x,dy=cur[0].y-gs.pts[0].y;gs.moved=Math.max(gs.moved,Math.abs(dx)+Math.abs(dy));if(gs.moved<=6)return;V1={w:V0.w,h:V0.h,x:V0.x-dx/u0,y:V0.y-dy/u0}}
   gs.V1=wzFit(V1);showT(V0,gs.V1,r);WMAP.busy=Date.now()+1500});
- const up=e=>{if(!ptr.has(e.pointerId))return;const tap=gs&&!gs.multi&&gs.moved<=6&&e.type==='pointerup';ptr.delete(e.pointerId);if(tap){const t=document.elementFromPoint(e.clientX,e.clientY),city=t&&t.closest&&t.closest('[data-city]'),r=t&&t.closest&&t.closest('[data-r]');gs=null;if(city&&window.NovaSystems&&NovaSystems.openCity){NovaSystems.openCity(Number(city.getAttribute('data-city')));if(window.CitySat)CitySat.decorate(city.getAttribute('data-town'));return}const fcity=t&&t.closest&&t.closest('[data-fc]');if(fcity&&window.CitySat){gs=null;CitySat.tapForeign(fcity);return}if(r){H.ccr(r.getAttribute('data-c'),r.getAttribute('data-r'))}return}
+ const up=e=>{if(!ptr.has(e.pointerId))return;const tap=gs&&!gs.multi&&gs.moved<=6&&e.type==='pointerup';ptr.delete(e.pointerId);if(tap){const t=document.elementFromPoint(e.clientX,e.clientY),city=t&&t.closest&&t.closest('[data-city]'),r=t&&t.closest&&t.closest('[data-r]');gs=null;if(city&&window.NovaSystems&&NovaSystems.openCity){NovaSystems.openCity(Number(city.getAttribute('data-city')));if(window.CitySat)CitySat.decorate(city.getAttribute('data-town'));return}const fcity=t&&t.closest&&t.closest('[data-fc]');if(fcity&&window.CitySat){gs=null;CitySat.tapForeign(fcity);return}if(r){H.wmTap(r.getAttribute('data-c'),r.getAttribute('data-r'))}else{H.wmTipClose()}return}
   commit();gs=ptr.size?startG():null};
  svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
  svg.addEventListener('wheel',e=>{e.preventDefault();H.wz(e.deltaY<0?'in':'out')},{passive:false});return n}
+
+/* Тап по области мира: подсветка + кто сейчас владелец */
+H.wmTipClose=()=>{const tp=document.getElementById('wm-tip');if(tp)tp.remove();const g=WMAP.node&&WMAP.node.querySelector('#wm-hl');if(g)g.replaceChildren()};
+H.wmTap=(iso,rid)=>{
+ const C=GEO.c[iso];if(!C||!WMAP.box||!WMAP.node)return;
+ const x=(C.regs||[]).find(q=>q.id===rid)||{id:rid,n:C.name||'Территория',d:C.d};
+ const NS='http://www.w3.org/2000/svg',svg=WMAP.node;
+ let g=svg.querySelector('#wm-hl');if(!g){g=document.createElementNS(NS,'g');g.id='wm-hl';g.setAttribute('pointer-events','none')}svg.appendChild(g);g.replaceChildren();
+ const hl=document.createElementNS(NS,'path');hl.setAttribute('d',x.d||C.d);hl.setAttribute('fill-rule','evenodd');hl.setAttribute('fill','rgba(255,211,77,.30)');hl.setAttribute('stroke','#ffd34d');hl.setAttribute('stroke-width','2.4');hl.setAttribute('vector-effect','non-scaling-stroke');g.appendChild(hl);
+ const nm=String(x.n||C.name||'Территория').replace(/ \(.*\)/,'');
+ let ownTxt='Ничья земля',col='#ccc',orig='',st='';
+ if(C.name){
+  const ow=regionOwner(C,x.n?x:{id:rid,n:C.name});col=ownerColor(ow,C,0);
+  ownTxt=isMe(ow)?myName()+' (вы)':String(ow).startsWith('Вассал: ')?ownerLabel(ow)+' — ваш вассал':ownerLabel(ow);
+  if(!isMe(ow)&&ow!==C.name&&ow!=='Вассал: '+C.name)orig=`<div class="wm-sub">Первоначально: ${esc2(C.name)}</div>`;
+  else if(isMe(ow)&&C.name!==myName())orig=`<div class="wm-sub">Первоначально: ${esc2(C.name)}</div>`;
+ }
+ if((S.wars||[]).some(w=>(w.occ||[]).includes(rid)))st='<div class="wm-st ok">🚩 Занята нашими войсками</div>';
+ if((S.regions||[]).some(r=>(r.geo===rid)&&r.enemyOccupied))st='<div class="wm-st bad">🏴 Занята противником</div>';
+ if(C.name&&(S.wars||[]).some(w=>w.n===C.name))st+='<div class="wm-st bad">⚔️ Идёт война с этой страной</div>';
+ let tp=document.getElementById('wm-tip');if(tp)tp.remove();
+ tp=document.createElement('div');tp.id='wm-tip';tp.className='wm-tip';
+ tp.innerHTML=`<button class="wm-tipx" onclick="H.wmTipClose()">✕</button><b>${esc2(nm)}</b>${C.name&&nm!==C.name?`<div class="wm-sub">${esc2(C.name)}</div>`:''}<div>🏴 Владелец: <b style="color:${col}">${esc2(ownTxt)}</b></div>${orig}${st}${C.name?`<button class="primary wm-open" onclick="H.ccr('${iso}','${rid}')">Открыть страну и провинции</button>`:''}`;
+ WMAP.box.appendChild(tp);
+};
 let WZ={x:0,y:0,w:1000,h:575};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
 function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
@@ -344,10 +369,11 @@ function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot
 function mountWorldMap(){if(!document.getElementById('wm-slot'))return;wmLoad(ok=>{const sl=document.getElementById('wm-slot');if(!sl)return;if(!ok){sl.innerHTML='<p class="muted" style="padding:12px">Не удалось загрузить карту мира (нет интернета или библиотека заблокирована).</p>';return}
  if(!WMAP.box)buildWorldNode();if(sl.firstChild!==WMAP.box)sl.replaceChildren(WMAP.box);sl.classList.toggle('full',!!WMAP.full);const fb=document.getElementById('wfull');if(fb)fb.textContent=WMAP.full?'✕':'⛶';const pc=document.getElementById('province-total');if(pc)pc.textContent=`Провинций на карте: ${Number(window.NOVARIA_PROVINCE_COUNT||0).toLocaleString('ru-RU')}`;updateWorld()})}
 /* --- окно страны: регионы, выбор региона для захвата --- */
-const CC={iso:null,pick:false,war:null,query:''};
-const hcc=iso=>{CC.info=null;CC.iso=iso;CC.pick=false;CC.war=null;CC.sel={};CC.query='';ccDraw()};
-const hpick=n=>{CC.info=null;CC.iso=wi(n).iso;CC.pick=true;CC.war=n;CC.sel={};CC.query='';ccDraw()};
-const hccClose=()=>{CC.info=null;const m=document.getElementById('ccm');if(m)m.remove()};
+const esc2=v=>String(v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const CC={iso:null,pick:false,war:null,query:'',vb:null,vbIso:null};
+const hcc=iso=>{CC.vb=null;CC.info=null;CC.iso=iso;CC.pick=false;CC.war=null;CC.sel={};CC.query='';ccDraw()};
+const hpick=n=>{CC.vb=null;CC.info=null;CC.iso=wi(n).iso;CC.pick=true;CC.war=n;CC.sel={};CC.query='';ccDraw()};
+const hccClose=()=>{CC.vb=null;CC.info=null;const m=document.getElementById('ccm');if(m)m.remove()};
 const warCauseOptions=r=>{
  const out=[['territorial','🗺 Территориальные претензии']];
  if(nearTo(r.name)&&(+r.value||0)<=15)out.push(['border','🚧 Пограничный конфликт']);
@@ -371,81 +397,75 @@ function warCauseControl(i,r,atWar,j){
 const htake=rid=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;CC.sel=CC.sel||{};const Q=quota(CC.war,w);if(CC.sel[rid])delete CC.sel[rid];else{if(Object.keys(CC.sel).length>=Q.q)return toast(`При фронте ${Math.round(Q.p)}% можно взять не больше ${Q.q} обл.`);CC.sel[rid]=1}ccDraw()};
 const hauto=()=>{const w=S.wars.find(x=>x.n===CC.war);if(!w)return;const Q=quota(CC.war,w);CC.sel={};[...(regsOf(CC.war)||[])].filter(x=>!taken()[x.id]).sort((a,b)=>((b.n===w.claimRegion?1:0)-(a.n===w.claimRegion?1:0))||(((w.occ||[]).includes(b.id)?1:0)-((w.occ||[]).includes(a.id)?1:0))||b.s-a.s).slice(0,Q.q).forEach(x=>CC.sel[x.id]=1);ccDraw()};
 const hconfirm=()=>{const n=CC.war,ids=Object.keys(CC.sel||{});if(!ids.length)return toast('Выберите хотя бы одну область');H.ccClose();H.dictate(n,'region',ids)};
-function pickHead(){const w=S.wars.find(x=>x.n===CC.war);if(!w)return '';const Q=quota(CC.war,w),n=Object.keys(CC.sel||{}).length;return `<p><b>Фронт ${Math.round(Q.p)}% → можно взять до ${Q.q} из ${Q.free} свободных областей.</b> Нажимайте области на карте. Выбрано: ${n}/${Q.q}</p><div class="actions"><button class="good" onclick="H.confirm()">🗺 Забрать выбранные (${n})</button><button onclick="H.auto()">⚡ Выбрать крупнейшие</button></div>`}
+function pickHead(){const w=S.wars.find(x=>x.n===CC.war);if(!w)return '';const Q=quota(CC.war,w),n=Object.keys(CC.sel||{}).length;return `<p><b>Фронт ${Math.round(Q.p)}% → можно взять до ${Q.q} из ${Q.free} свободных областей.</b> Нажимайте области на карте (мелкие — приблизьте карту ＋ или щипком). Выбрано: ${n}/${Q.q}</p><div class="actions"><button class="good" onclick="H.confirm()">🗺 Забрать выбранные (${n})</button><button onclick="H.auto()">⚡ Выбрать крупнейшие</button></div>`}
+
+function ccLabelsHtml(reg,v,full,fs0,bigR){
+ if(!reg||reg.length<=1)return '';
+ const k=v.w/full.w,fsz=fs0*k;let set=bigR;
+ if(k<.999){
+  const out=new Set(),pl=[];
+  [...reg].filter(r=>r.cx>=v.x&&r.cx<=v.x+v.w&&r.cy>=v.y&&r.cy<=v.y+v.h).sort((a,b)=>b.s-a.s).forEach(r=>{if(out.size<40&&pl.every(q=>Math.hypot(q.cx-r.cx,q.cy-r.cy)>fsz*4.5)){out.add(r.id);pl.push(r)}});
+  set=out;
+ }
+ return reg.filter(x=>set.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fsz}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fsz/5}px;pointer-events:none">${esc2(x.n.replace(/ \(.*\)/,'').slice(0,22))}</text>`).join('');
+}
+function ccAfterZoom(){
+ const svg=document.getElementById('ccsvg');if(!svg||!CC._ctx)return;
+ const {reg,full,fs,bigR}=CC._ctx,v=CC.vb||full,k=v.w/full.w;
+ const g=document.getElementById('cclab');if(g)g.innerHTML=ccLabelsHtml(reg,v,full,fs,bigR);
+ svg.querySelectorAll('.cchc').forEach(c=>c.setAttribute('r',(12*k).toFixed(2)));
+ svg.querySelectorAll('.cchs').forEach(c=>c.setAttribute('stroke-width',k<.6?0:Math.round(10+18*k)));
+}
+function ccSetVB(v){
+ const full=CC._ctx&&CC._ctx.full,svg=document.getElementById('ccsvg');if(!full||!svg)return;
+ const asp=full.h/full.w;v.w=Math.max(full.w/80,Math.min(full.w,v.w));v.h=v.w*asp;
+ v.x=Math.max(full.x,Math.min(full.x+full.w-v.w,v.x));v.y=Math.max(full.y,Math.min(full.y+full.h-v.h,v.y));
+ CC.vb=v.w>=full.w-1e-6?null:v;CC.vbIso=CC.iso;
+ const u=CC.vb||full;svg.setAttribute('viewBox',`${u.x} ${u.y} ${u.w} ${u.h}`);
+}
+let ccRaf=0;const ccSched=()=>{if(ccRaf)return;ccRaf=requestAnimationFrame(()=>{ccRaf=0;ccAfterZoom()})};
+H.ccz=m=>{
+ const full=CC._ctx&&CC._ctx.full;if(!full)return;
+ if(m==='reset'){CC.vb=null;ccSetVB({...full});ccAfterZoom();return}
+ const v={...(CC.vb||full)},f=m==='in'?.55:1/.55,cx=v.x+v.w/2,cy=v.y+v.h/2;v.w*=f;v.h*=f;v.x=cx-v.w/2;v.y=cy-v.h/2;ccSetVB(v);ccAfterZoom();
+};
+function ccBind(m){
+ const svg=m.querySelector('#ccsvg');if(!svg||!CC._ctx)return;const full=CC._ctx.full;
+ const P=new Map();let g=null,moved=false;
+ const geom=()=>{const r=svg.getBoundingClientRect(),v={...(CC.vb||full)},s=Math.min(r.width/v.w,r.height/v.h);return{r,v,s,ox:(r.width-v.w*s)/2,oy:(r.height-v.h*s)/2}};
+ const base=()=>{g={M:geom(),pts:[...P.values()].map(q=>({x:q.x,y:q.y}))}};
+ svg.addEventListener('click',e=>{if(moved){e.stopPropagation();e.preventDefault();moved=false}},true);
+ svg.addEventListener('wheel',e=>{e.preventDefault();const M=geom(),v=M.v,f=e.deltaY<0?.8:1.25,wx=v.x+(e.clientX-M.r.left-M.ox)/M.s,wy=v.y+(e.clientY-M.r.top-M.oy)/M.s;ccSetVB({x:wx-(wx-v.x)*f,y:wy-(wy-v.y)*f,w:v.w*f,h:v.h*f});ccSched()},{passive:false});
+ svg.addEventListener('pointerdown',e=>{P.set(e.pointerId,{x:e.clientX,y:e.clientY});if(P.size===1)moved=false;base()});
+ svg.addEventListener('pointermove',e=>{
+  if(!P.has(e.pointerId)||!g)return;P.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const cur=[...P.values()],M=g.M,v0=M.v;
+  if(cur.length>=2&&g.pts.length>=2){
+   moved=true;const a0={x:(g.pts[0].x+g.pts[1].x)/2,y:(g.pts[0].y+g.pts[1].y)/2,d:Math.hypot(g.pts[0].x-g.pts[1].x,g.pts[0].y-g.pts[1].y)||1},a1={x:(cur[0].x+cur[1].x)/2,y:(cur[0].y+cur[1].y)/2,d:Math.hypot(cur[0].x-cur[1].x,cur[0].y-cur[1].y)||1};
+   const sc=a1.d/a0.d,w1=v0.w/sc,s1=M.s*sc,wx=v0.x+(a0.x-M.r.left-M.ox)/M.s,wy=v0.y+(a0.y-M.r.top-M.oy)/M.s;
+   ccSetVB({x:wx-(a1.x-M.r.left-M.ox)/s1,y:wy-(a1.y-M.r.top-M.oy)/s1,w:w1,h:w1*full.h/full.w});ccSched();return;
+  }
+  if(!CC.vb)return;
+  const dx=cur[0].x-g.pts[0].x,dy=cur[0].y-g.pts[0].y;
+  if(!moved&&Math.abs(dx)+Math.abs(dy)<=6)return;moved=true;
+  ccSetVB({x:v0.x-dx/M.s,y:v0.y-dy/M.s,w:v0.w,h:v0.h});ccSched();
+ });
+ const up=e=>{P.delete(e.pointerId);if(P.size)base();else{g=null;ccAfterZoom()}};
+ svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+}
 function ccDraw(){const C=GEO.c[CC.iso];if(!C||!C.name){return}const nm=C.name,i=S.relations.findIndex(r=>r.name===nm),r=S.relations[i]||{},W=wi(nm),atWar=S.wars.some(w=>w.n===nm),j=S.just[nm],tk=taken();
  const BB=C.vb||C.bb,pad=14,bw=BB[2]-BB[0],bh=BB[3]-BB[1],vb=`${BB[0]-pad} ${BB[1]-pad} ${bw+2*pad} ${bh+2*pad}`,fs=Math.max(bw,bh*1.5)/(C.regs.length>24?58:C.regs.length>14?44:30),bigR=labelSet(C.regs,fs);
  const reg=C.regs.some(x=>x.d)?C.regs:[{id:C.iso+':0',n:nm,s:100,res:W.res,d:C.d,cx:(C.bb[0]+C.bb[2])/2,cy:(C.bb[1]+C.bb[3])/2}];
+  const full={x:BB[0]-pad,y:BB[1]-pad,w:bw+2*pad,h:bh+2*pad},zv=(CC.vb&&CC.vbIso===CC.iso)?CC.vb:null,vbs=zv?`${zv.x} ${zv.y} ${zv.w} ${zv.h}`:vb,hk=zv?zv.w/full.w:1;CC._ctx={reg,full,fs,bigR};
  const ownOf=x=>{const o=regionOwner(C,x);return(tk[x.id]||r.annexed)&&!isMe(o)&&o===nm?myName():o},ownFill=(x,k)=>{const o=ownOf(x);if(isMe(o))return MYC;if(o==='Вассал: '+nm||(o===nm&&isVas(nm)))return VAS;return o===nm?baseCol(C.iso,k):ownerColor(o,C,0)},ownTxt=o=>isMe(o)?myName()+' (вы)':o==='Вассал: '+nm?nm+' — ваш вассал':ownerLabel(o);
- const svg=`<svg viewBox="${vb}" style="width:100%;max-height:56vh;min-height:220px;background:#0c1a26;border-radius:12px;touch-action:none"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=isMe(ownOf(x)),free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id],fill=sel?'#ffd34d':ownFill(x,k),act=free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:`style="cursor:pointer" onclick="H.ccInfo('${x.id}')"`;return `<path d="${x.d}" fill="${fill}" stroke="${CC.info===x.id?'#ffd34d':'#0b1218'}" stroke-width="${CC.info===x.id?Math.max(1.6,fs/5):Math.max(.7,fs/12)}" ${act}><title>${x.n.replace(/ \(.*\)/,'')} — ${esc2(ownTxt(ownOf(x)))}</title></path>${free?`<path d="${x.d}" fill="none" stroke="transparent" stroke-width="28" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="stroke" onclick="H.take('${x.id}')"/><circle cx="${x.cx}" cy="${x.cy}" r="12" fill="transparent" pointer-events="all" style="cursor:pointer" onclick="H.take('${x.id}')"/>`:''}`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${Math.max(1,fs/9)}" stroke-linejoin="round" style="pointer-events:none"/>${reg.length>1?reg.filter(x=>bigR.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px;pointer-events:none">${x.n.replace(/ \(.*\)/,'').slice(0,22)}</text>`).join(''):''}</svg>`;
+ const svg=`<svg id="ccsvg" viewBox="${vbs}" style="width:100%;max-height:56vh;min-height:220px;background:#0c1a26;border-radius:12px;touch-action:none;user-select:none"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=isMe(ownOf(x)),free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id],fill=sel?'#ffd34d':ownFill(x,k),act=free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:`style="cursor:pointer" onclick="H.ccInfo('${x.id}')"`;return `<path d="${x.d}" fill="${fill}" stroke="${CC.info===x.id?'#ffd34d':'#0b1218'}" stroke-width="${CC.info===x.id?2.6:.8}" vector-effect="non-scaling-stroke" ${act}><title>${x.n.replace(/ \(.*\)/,'')} — ${esc2(ownTxt(ownOf(x)))}</title></path>${free?`<path class="cchs" d="${x.d}" fill="none" stroke="transparent" stroke-width="${hk<.6?0:Math.round(10+18*hk)}" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="stroke" onclick="H.take('${x.id}')"/><circle class="cchc" cx="${x.cx}" cy="${x.cy}" r="${(12*hk).toFixed(2)}" fill="transparent" pointer-events="all" style="cursor:pointer" onclick="H.take('${x.id}')"/>`:''}`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${Math.max(1,fs/9)}" stroke-linejoin="round" style="pointer-events:none"/><g id="cclab">${ccLabelsHtml(reg,zv||full,full,fs,bigR)}</g></svg>`;
  const rows=reg.map(x=>{const ow=ownOf(x),mine=isMe(ow),foreign=!mine&&ow!==nm&&ow!=='Вассал: '+nm,pop=(W.pop||0)*x.s/100,ps=pop>=1?pop.toFixed(1):(pop*1000).toFixed(0)+' тыс.';return `<div class="mini province-row" data-prov-row data-prov-name="${escA(x.n.toLowerCase())}"><b>${mine?'🏴':'🗺'} ${x.n}</b><br>${x.s.toFixed(2)}% страны · ${pop>=1?ps+' млн':ps} · ${resIcons(x.res)}<br>${mine?'<small class="muted">Под вашим контролем</small>':foreign?'<small class="muted">🏴 Владелец: <b style="color:'+ownFill(x,0)+'">'+esc2(ownTxt(ow))+'</b></small>':CC.pick?`<button class="${CC.sel&&CC.sel[x.id]?'good':'danger'} province-pick" onclick="H.take('${x.id}')">${CC.sel&&CC.sel[x.id]?'✔ Выбрана (снять)':'Выбрать провинцию'}</button>`:'<small class="muted">'+(ow==='Вассал: '+nm?'👑 Вассал':'Свободна')+'</small>'}</div>`}).join('');
  const cnt={};reg.forEach((x,k)=>{const o=ownOf(x);(cnt[o]=cnt[o]||{n:0,c:ownFill(x,0)}).n++});
  const legend=Object.keys(cnt).length>1?'<div class="cc-legend" style="display:flex;flex-wrap:wrap;gap:6px 12px;margin:8px 0;font-size:13px">'+Object.entries(cnt).map(([o,v])=>'<span><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:'+v.c+';margin-right:5px;vertical-align:-1px"></i>'+esc2(ownTxt(o))+' · '+v.n+'</span>').join('')+'</div>':'';
  const selR=CC.info&&reg.find(x=>x.id===CC.info),oIso=selR&&(WM[ownerLabel(ownOf(selR))]||{}).iso,ownInfo=(selR?'<div class="cc-owner" style="margin:8px 0;padding:10px 12px;border-radius:10px;background:#0c1a26;border:1px solid '+ownFill(selR,0)+'"><b>'+esc2(selR.n.replace(/ \(.*\)/,''))+'</b><br>Нынешний владелец: <b style="color:'+(isMe(ownOf(selR))?'#9cc4ff':'#fff')+'">'+esc2(ownTxt(ownOf(selR)))+'</b>'+(ownOf(selR)!==nm&&ownOf(selR)!=='Вассал: '+nm?'<br><small class="muted">Первоначальная страна: '+esc2(nm)+'</small>':'')+(oIso&&oIso!==C.iso?'<br><button class="primary" style="margin-top:6px" onclick="H.cc(\''+oIso+'\')">Открыть страну: '+esc2(ownerLabel(ownOf(selR)))+'</button>':'')+'</div>':'');
  let acts='';if(r.self)acts='<span class="muted">🏠 Это ваше государство</span>';else if(!CC.pick){const prog=(S.relPrograms||{})[nm];acts=(prog?`<span class="muted">🤝 Программа активна: ещё ${prog.monthsLeft} мес.</span>`:`<button class="primary" onclick="H.relProgram(${i});ccDraw()">🤝 Улучшать отношения 4 года · 40 ⭐</button> `)+warCauseControl(i,r,atWar,j);}
- const html=`<div class="ccbox"><button class="ccx" onclick="H.ccClose()">✕</button><h3>${nm}</h3><p class="muted">${CONTN[W.cont]||''} · ${r.trait||''} · ${reg.length.toLocaleString('ru-RU')} провинций${r.annexed?' · <b>аннексирована</b>':''}</p>${CC.pick?pickHead():`<p>${mood(r.value||0)} · мощь ${r.power||'—'} · население ${W.pop>=1?W.pop.toFixed(W.pop>=10?0:1)+' млн':Math.round((W.pop||0)*1000)+' тыс.'}</p>`}${ownInfo}${svg}${legend}<div class="actions" style="margin:8px 0">${acts}</div><h4>Провинции</h4><input id="province-search" class="province-search" type="search" value="${escA(CC.query||'')}" placeholder="🔎 Найти провинцию по названию…" oninput="H.ccSearch(this.value)"><div class="province-count" id="province-count">Показано ${reg.length.toLocaleString('ru-RU')} из ${reg.length.toLocaleString('ru-RU')}</div><div class="cards cc-province-list">${rows}</div></div>`;
- let m=document.getElementById('ccm');if(!m){m=document.createElement('div');m.id='ccm';m.className='ccm';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)H.ccClose()})}m.innerHTML=html;hccSearch(CC.query||'');
- /* Тач для телефона/Telegram: pinch + pan + крупные кнопки. Тап по провинции не ломается. */
- (function(){
-  var svg=m.querySelector('svg');if(!svg||svg.getAttribute('data-ccz'))return;svg.setAttribute('data-ccz','1');
-  svg.style.touchAction='none';
-  var vb0=svg.viewBox.baseVal,base={x:vb0.x,y:vb0.y,w:vb0.width,h:vb0.height};
-  var ptr={},gs=null;
-  function rc(){return svg.getBoundingClientRect()}
-  function fit(V){var minW=base.w*0.12,maxW=base.w*2.5;V.w=Math.max(minW,Math.min(maxW,V.w));V.h=V.w*(base.h/base.w);V.x=Math.max(base.x-base.w*0.35,Math.min(base.x+base.w*1.15-V.w,V.x));V.y=Math.max(base.y-base.h*0.35,Math.min(base.y+base.h*1.15-V.h,V.y));return V}
-  function apply(V){svg.setAttribute('viewBox',V.x+' '+V.y+' '+V.w+' '+V.h)}
-  function vals(){var a=[],k;for(k in ptr)if(Object.prototype.hasOwnProperty.call(ptr,k))a.push(ptr[k]);return a}
-  function mid(a,b){return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,d:Math.hypot(a.x-b.x,a.y-b.y)||1}}
-  svg.addEventListener('pointerdown',function(e){
-   if(e.target&&e.target.closest&&e.target.closest('button,input,a'))return;
-   ptr[e.pointerId]={x:e.clientX,y:e.clientY};
-   try{svg.setPointerCapture(e.pointerId)}catch(err){}
-   var cur=vals();
-   gs={V0:{x:svg.viewBox.baseVal.x,y:svg.viewBox.baseVal.y,w:svg.viewBox.baseVal.width,h:svg.viewBox.baseVal.height},pts:cur.slice(),moved:0,multi:cur.length>1};
-  });
-  svg.addEventListener('pointermove',function(e){
-   if(!ptr[e.pointerId]||!gs)return;
-   ptr[e.pointerId]={x:e.clientX,y:e.clientY};
-   var r=rc(),V0=gs.V0,u0=r.width/V0.w,cur=vals(),V1;
-   if(cur.length>=2&&gs.pts.length>=2){
-    gs.multi=true;gs.moved=999;
-    var a0=mid(gs.pts[0],gs.pts[1]),a1=mid(cur[0],cur[1]),s=a1.d/a0.d,w1=V0.w/s,u1=r.width/w1;
-    var wx=V0.x+(a0.x-r.left)/u0,wy=V0.y+(a0.y-r.top)/u0;
-    V1={w:w1,h:w1*(V0.h/V0.w),x:wx-(a1.x-r.left)/u1,y:wy-(a1.y-r.top)/u1};
-   } else {
-    var dx=cur[0].x-gs.pts[0].x,dy=cur[0].y-gs.pts[0].y;
-    gs.moved=Math.max(gs.moved,Math.abs(dx)+Math.abs(dy));
-    if(gs.moved<=12)return;
-    V1={w:V0.w,h:V0.h,x:V0.x-dx/u0,y:V0.y-dy/u0};
-   }
-   apply(fit(V1));
-  });
-  function up(e){
-   if(!ptr[e.pointerId])return;
-   var tap=gs&&!gs.multi&&gs.moved<=12&&e.type==='pointerup';
-   delete ptr[e.pointerId];
-   var left=0,k;for(k in ptr)if(Object.prototype.hasOwnProperty.call(ptr,k))left++;
-   if(left===0){
-    gs=null;
-    if(tap){
-     try{
-      var t=document.elementFromPoint(e.clientX,e.clientY),el=t;
-      while(el&&el!==svg){
-       if(el.getAttribute&&el.getAttribute('onclick')){el.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,clientX:e.clientX,clientY:e.clientY}));break}
-       el=el.parentNode;
-      }
-     }catch(err){}
-    }
-   }
-  }
-  svg.addEventListener('pointerup',up);
-  svg.addEventListener('pointercancel',up);
-  var bar=document.createElement('div');bar.style.cssText='display:flex;gap:8px;margin:8px 0;flex-wrap:wrap';
-  bar.innerHTML='<button type="button" class="ccz-in" style="min-width:44px;min-height:44px;font-size:20px">＋</button><button type="button" class="ccz-out" style="min-width:44px;min-height:44px;font-size:20px">−</button><button type="button" class="ccz-reset" style="min-width:44px;min-height:44px;font-size:18px">⟲</button>';
-  svg.parentNode.insertBefore(bar,svg.nextSibling);
-  bar.querySelector('.ccz-in').onclick=function(){var V=svg.viewBox.baseVal,cx=V.x+V.w/2,cy=V.y+V.h/2,nw=V.w*0.75;apply(fit({x:cx-nw/2,y:cy-nw*(V.h/V.w)/2,w:nw,h:nw*(V.h/V.w)}))};
-  bar.querySelector('.ccz-out').onclick=function(){var V=svg.viewBox.baseVal,cx=V.x+V.w/2,cy=V.y+V.h/2,nw=V.w*1.3;apply(fit({x:cx-nw/2,y:cy-nw*(V.h/V.w)/2,w:nw,h:nw*(V.h/V.w)}))};
-  bar.querySelector('.ccz-reset').onclick=function(){apply({x:base.x,y:base.y,w:base.w,h:base.h})};
- })();
+ const html=`<div class="ccbox"><button class="ccx" onclick="H.ccClose()">✕</button><h3>${nm}</h3><p class="muted">${CONTN[W.cont]||''} · ${r.trait||''} · ${reg.length.toLocaleString('ru-RU')} провинций${r.annexed?' · <b>аннексирована</b>':''}</p>${CC.pick?pickHead():`<p>${mood(r.value||0)} · мощь ${r.power||'—'} · население ${W.pop>=1?W.pop.toFixed(W.pop>=10?0:1)+' млн':Math.round((W.pop||0)*1000)+' тыс.'}</p>`}${ownInfo}<div class="ccmapw">${svg}<div class="cczoom"><button onclick="H.ccz('in')">＋</button><button onclick="H.ccz('out')">−</button><button onclick="H.ccz('reset')">⟲</button></div></div><small class="muted">Колесо мыши, щипок двумя пальцами или кнопки ＋ − — приблизить карту; перетаскивайте, чтобы двигать. Так можно выбрать даже самые мелкие области.</small>${legend}<div class="actions" style="margin:8px 0">${acts}</div><h4>Провинции</h4><input id="province-search" class="province-search" type="search" value="${escA(CC.query||'')}" placeholder="🔎 Найти провинцию по названию…" oninput="H.ccSearch(this.value)"><div class="province-count" id="province-count">Показано ${reg.length.toLocaleString('ru-RU')} из ${reg.length.toLocaleString('ru-RU')}</div><div class="cards cc-province-list">${rows}</div></div>`;
+ let m=document.getElementById('ccm');if(!m){m=document.createElement('div');m.id='ccm';m.className='ccm';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)H.ccClose()})}const sc0=m.scrollTop;m.innerHTML=html;m.scrollTop=sc0;hccSearch(CC.query||'');try{ccBind(m)}catch(e){console.warn('ccBind',e)}
 }
 /* --- карта страны игрока (настоящий контур Украины, области от центров) --- */
 function cmBuild(){if(WMAP.cm!==undefined)return WMAP.cm;WMAP.cm=null;const C=GEO.c.UKR;if(!C)return null;
@@ -848,7 +868,7 @@ function damagePlayerFactory(regionName,power,w,side){
  log(msg);if(w)warNews(w,f.hp<=0?'🏭':'⚠️',msg);if(f.hp<=0){S.milFactories=S.milFactories.filter(x=>x.id!==f.id);return{destroyed:true,type:f.type,region:regionName}}
  return{destroyed:false,type:f.type,region:regionName,hp:f.hp}
 }
-function recordWarAttack(w,side,k,reg,down){if(!w||!reg)return;w.attacks=w.attacks||[];w.attacks.unshift({side,k,regId:reg.geo||reg.id||'',region:reg.name||reg.n||'область',down:!!down,month:S.year*12+S.month});w.attacks=w.attacks.slice(0,16)}
+function recordWarAttack(w,side,k,reg,down){if(!w||!reg)return;w.attacks=w.attacks||[];w.attacks.unshift({id:Date.now()+Math.floor(Math.random()*1e4),side,k,regId:reg.geo||reg.id||'',region:String(reg.name||reg.n||'область').replace(/ \(.*\)/,''),down:!!down,month:S.year*12+S.month});w.attacks=w.attacks.slice(0,30);try{baRefresh()}catch(e){}}
 function enemyRegs(n){const c=(rel(n)||{}),tk=c.regTaken||[];const rg=regsOf(n);
  if(rg)return rg.filter(x=>!taken()[x.id]).map(x=>({id:x.id,n:x.n,s:x.s||10,res:String(x.res||'')}));
  const R=WORLD.REGS[n];const L=R?R.map(x=>({n:x.n,s:x.s||10,res:String(x.res||'')})):WORLD.GEN.map(x=>({n:x[0]+' · '+n,s:x[1],res:String(x[2]||'')}));
@@ -1225,7 +1245,7 @@ if(t&&TG[k]&&atWar()){
  // Это условная игровая модель, а не реальные денежные оценки.
  const econ=w.enemyEcon||(w.enemyEcon={gdp:100,fx:100,damage:0,months:0,hitGdp:0,hitFx:0,hitMoney:0,hits:0});
  const hit=(p,pw)=>{
-  w.p=Math.max(0,Math.min(100,w.p+p*wt));
+  {const mk=S.year*12+S.month;if(w.stK!==mk){w.stK=mk;w.stP=0}const gain=Math.max(0,Math.min(p*wt*.4,5-(w.stP||0)));w.stP=(w.stP||0)+gain;w.p=Math.max(0,Math.min(100,w.p+gain))}
   if(en){en.power=Math.max(1,en.power-pw*wt);en.value=clamp(en.value-(t==='civ'?10:5),-100,100)}
  };
  let ER=null,PV=null;const where=` · область «${rn}»${rnd0?' (случайная)':''}`;armsFxMap(k,w.n,reg,rn);
@@ -1755,7 +1775,7 @@ function ch(o,sc){
    case'loy':S.regions.forEach(r=>r.loyalty=clamp(r.loyalty+v));break;
    case'infra':S.regions.forEach(r=>r.infra=clamp(r.infra+v));break;
    case'dep':dl(v);break;
-   case'peace':if(v)peaceAll(true);break;
+   case'peace':if(v){const cand=(S.wars||[]).filter(w=>(w.m||0)>=8&&enemyWill(w)<=70).sort((a,b)=>enemyWill(a)-enemyWill(b))[0];if(cand)peaceWith(cand.n)}break;
    case'gdp':S.gdp=Math.max(100,S.gdp+v);break;
    case'gdp%':S.gdp=Math.max(100,S.gdp*(1+v/100));break;case'fxs':fxShock(v/100);break;
    case'money':S.money+=v;if(S.money<0){S.debt+=-S.money;S.money=0}break;
@@ -2112,9 +2132,9 @@ E('officerreform','Реформа военного командования','В
  O('Провести реформу',{money:-500,training:5,morale:2,equipment:-1},'Командование обновлено, армия получила новый стандарт подготовки.'),
  O('Отложить реформу',{money:100,morale:-1,approval:-1},'Расходы отложены, недовольство офицеров осталось.')],{when:()=>!S.war||S.wars.length>0}),
 /* ---------- ВОЙНА ---------- */
-E('ceasefire','Предложение перемирия','Враг предлагает прекратить огонь.',[
+E('ceasefire','Предложение перемирия','Измотанный войной противник предлагает прекратить огонь. Мир заключается только с ним, остальные войны продолжаются.',[
  O('Принять перемирие',{peace:1,approval:1,legitimacy:-1,morale:-1},'Огонь прекращён.'),
- O('Продолжить войну',{morale:2,threat:2,approval:-1},'Мы идём до конца.')],{w:()=>S.war?2:0,when:()=>S.wars&&S.wars.length>0}),
+ O('Продолжить войну',{morale:2,threat:2,approval:-1},'Мы идём до конца.')],{w:()=>S.war?2:0,when:()=>S.wars&&S.wars.some(w=>(w.m||0)>=8&&enemyWill(w)<=70)}),
 E('hero','Герой войны','Солдат совершил подвиг.',[
  O('Наградить публично',{morale:3,approval:1},'Народ воодушевлён.',100),
  O('Скромно отметить',{morale:1}  ,'Награда вручена тихо.')],{when:()=>S.war}),
@@ -2732,7 +2752,7 @@ function startWar(name,def,cause,goal,region){
  if(!goal||!(GD&&GD.GOALS[goal]))goal=def?aiGoalVsPlayer(name,cause||'territorial'):(GD?GD.defaultGoal(cause):'tribute');
  if(def&&goal==='territory'&&!region){try{const n=S.aiWorld.nations.find(x=>x.name===name),cl=n&&n.claims&&n.claims[S.name||S.me||'Игрок'];region=cl&&cl.region||''}catch(e){region=''}}
  const gl=GD&&GD.GOALS[goal]?GD.GOALS[goal].label:'';
- S.wars.push({n:name,p:def?40:50,m:0,won:false,def:!!def,cause:cause||'territorial',causeLabel:label,goal,goalLabel:gl,claimRegion:region||''});S.war=true;
+ S.wars.push({n:name,p:def?40:50,m:0,won:false,def:!!def,enPow0:(rel(name)||{}).power||50,cause:cause||'territorial',causeLabel:label,goal,goalLabel:gl,claimRegion:region||''});S.war=true;
  S.threat=clamp(S.threat+5);log(`⚔️ Начата война: ${name}${def?' (нападение на нас)':''}. Основание: ${label}. ${def?'Цель противника':'Цель войны'}: ${gl}${region?` («${region}»)`:''}.`);
 }
 /* ------------------------ РЕАКЦИЯ МИРА НА АГРЕССИЮ ------------------------ */
@@ -2854,9 +2874,37 @@ function regimePanel(){
  const q=n=>encodeURIComponent(n).replace(/'/g,'%27'),call=(n,a)=>`H.regime(decodeURIComponent('${q(n)}'),'${a}')`;
  return card('🏛 Дружественные правительства',`<p class="muted">После войны со сменой власти новое правительство дружит с вами, платит торговую выгоду и держится на лояльности. Низкая лояльность ведёт к контрперевороту.</p><div class="vgrid">${names.map(n=>{const c=rel(n)||{},g=R[n];return `<div class="vcard"><div class="vhead"><span class="vface">🏛</span><div><b>${n}</b><small>${c.ideology||''} · мощь ${c.power||0}</small></div></div>${bar('Лояльность режима',g.loyalty)}<div class="actions"><button class="primary" onclick="${call(n,'support')}">🤝 Поддержать · 250</button><button onclick="${call(n,'release')}">🕊 Отпустить</button></div></div>`}).join('')}</div>`);
 }
+
+/* ===== Воля противника к войне и условия мира ===== */
+function enemyWill(w){
+ const c=rel(w.n)||{power:50},p0=Math.max(1,w.enPow0||c.power||50);
+ const loss=clamp((p0-(c.power||0))/p0,0,1),front=clamp(((w.p||50)-50)/50,0,1),dur=clamp((w.m||0)/18,0,1),enc=clamp((w.encirclement||0)/5,0,1),occ=clamp(((w.occ||[]).length)/6,0,1),eco=clamp(((w.enemyEcon&&w.enemyEcon.damage)||0)/60,0,1);
+ const ex=loss*.30+front*.22+dur*.18+enc*.10+occ*.10+eco*.10;
+ return Math.round(clamp(100-ex*100,0,100));
+}
+function dictOk(w){return !!(w.won||((w.p||0)>=60&&(w.m||0)>=6&&enemyWill(w)<=50))}
+function dictWhy(w){const wl=enemyWill(w);return `Противник ещё не сломлен: воля к войне ${wl}% (нужно ≤ 50%), война идёт ${w.m||0} мес. (нужно ≥ 6) и перевес от 60%. Давите фронтом, окружением, ударами по экономике — одной-двумя атаками враг не сдаётся.`}
+function peaceWith(name){
+ const c=rel(name);S.wars=S.wars.filter(x=>x.n!==name);S.war=S.wars.length>0||!!S.martial;
+ if(c)c.value=clamp((c.value||0)+8,-100,100);
+ log('🕊 Заключён мир с '+name+' по обоюдному согласию.');
+}
+function groundClash(w,d){
+ if(Math.abs(d)<.8||Math.random()>.55)return;
+ if(d<0){
+  const reg=(S.regions||[]).filter(r=>!r.enemyOccupied).sort(()=>Math.random()-.5)[0];if(!reg)return;
+  recordWarAttack(w,'enemy','inf',reg,false);warNews(w,'🪖',`${w.n} атакует область «${reg.name}»: бои на рубеже «${w.frontLine||'фронт'}»`);
+  if(Math.abs(d)>1.6)fxPush({kind:'inf',rev:1,k:'inf',enemy:w.n,regId:reg.geo,title:`🪖 ${w.n} атакует: «${reg.name}»`,sub:'Наземное наступление противника'});
+ }else{
+  const regs=enemyRegs(w.n),reg=regs.length?regs[Math.floor(Math.random()*regs.length)]:null;if(!reg)return;
+  recordWarAttack(w,'ours','inf',reg,false);warNews(w,'🪖',`Наши войска атакуют область «${String(reg.n).replace(/ \(.*\)/,'')}»`);
+  if(d>1.6)fxPush({kind:'inf',k:'inf',enemy:w.n,regId:reg.id,title:`🪖 Наступление на ${w.n}`,sub:`Область «${String(reg.n).replace(/ \(.*\)/,'')}»`});
+ }
+}
 function warTick(){
  S.wars.forEach(w=>{
   const c=rel(w.n);if(!c){w.dead=1;return}
+   if(w.enPow0==null)w.enPow0=c.power;
   w.m++;
   normCmd(w);
   if(!w.aiPlanMonth||w.aiPlanMonth!==S.year*12+S.month){
@@ -2883,27 +2931,28 @@ function warTick(){
   if(cmd.air==='patrol'&&airReady>0){w.airDefense=clamp((w.airDefense||0)+Math.min(3,airReady*.18),0,30)}
   if(cmd.navy==='blockade'&&navyReady>0){w.blockade=clamp((w.blockade||0)+Math.min(2.2,navyReady*.14),0,25);enemyEcoStrike(w,'raid',Math.min(.9,navyReady*.03),1,null)}
   if(cmd.navy==='escort'&&navyReady>0)w.supply=clamp(opSupply+Math.min(8,navyReady*.35),12,100);
-  w.p=clamp(w.p+d,0,100);w.aid=aid;w.mine=Math.round(my);w.theirs=Math.round(en);const a0=S.army;w.frontLine=w.frontLine||'Центральный фронт';if(w.m%4===0)w.frontLine=pick(FRONTS);w.encirclement=w.encirclement||0;
+  w.p=clamp(w.p+d,0,100);w.lastD=d;w.aid=aid;w.mine=Math.round(my);w.theirs=Math.round(en);const a0=S.army;w.frontLine=w.frontLine||'Центральный фронт';if(w.m%4===0)w.frontLine=pick(FRONTS);w.encirclement=w.encirclement||0;
   if(w.p>68&&supply>55&&Math.random()<.12){w.encirclement=clamp(w.encirclement+1,0,5);if(w.encirclement===1||w.encirclement===5)log(`⭕ Окружение войск ${w.n}: ${w.encirclement}/5.`)}else if(w.p<45)w.encirclement=Math.max(0,w.encirclement-1);
   const dc=DOCS[S.doc],lossK=(1+Math.max(0,-d)/10)*(dc?dc.loss:1)*(1-advSum('loss'));
   S.army=Math.max(5000,S.army-Math.round((rnd(250,800)*lossK*(en/(my+en))*2+(supply<35?260:0)+w.encirclement*90)*myLS()));
   w.lost=(w.lost||0)+Math.max(0,a0-S.army);w.kills=(w.kills||0)+Math.round((Math.max(0,d)*rnd(260,640)+rnd(80,260))*enLS(w.n));battleEvent(w,d,c);ch({money:-120-(100-supply)*2},false);S.approval=clamp(S.approval+(w.m<=12&&w.p>=40?.35:-.12));S.fuel=clamp(S.fuel-(supply<45?3:1));S.ammo=clamp(S.ammo-(supply<45?3:1));
   if(dc&&dc.ammoS)S.ammo=clamp(S.ammo+dc.ammoS);if(dc&&dc.fuelC)S.fuel=clamp(S.fuel-dc.fuelC);
   c.power=Math.max(10,Math.round(c.power-Math.max(0,d)*(.35+w.encirclement*.12)+Math.max(0,-d)*.1+(d>0?Math.max(1,c.power*.012):0)));
-  warCasualties(w,a0);occupyTick(w);
+  warCasualties(w,a0);occupyTick(w);try{groundClash(w,d)}catch(e){}
   /* ИИ не только обороняется: при успехе он занимает наши области, а при переломе фронта мы их освобождаем. */
   S.enemyOccupied=S.enemyOccupied||{};
   const enemyHeld=Object.keys(S.enemyOccupied).filter(k=>S.enemyOccupied[k]===w.n);
   if(d < -1.8 && w.p < 48 && S.regions.length && Math.random()<.42){
    const target=(S.regions.filter(r=>!r.enemyOccupied).sort((a,b)=>(b.industry*.55+b.infra*.25+b.pop/1000000*.2)-(a.industry*.55+a.infra*.25+a.pop/1000000*.2))[0]);
-   if(target){const share=clamp(target.pop/Math.max(1,S.pop),.015,.18),loss=Math.max(1,S.gdp*share*.22);target.enemyOccupied=true;target.enemyOccupiedBy=w.n;target.occGdpLoss=loss;S.enemyOccupied[target.name]=w.n;S.gdp=Math.max(100,S.gdp-loss);S.money=Math.max(0,S.money-30);S.stability=clamp(S.stability-1.2);warNews(w,'🏴',`${target.name}: противник занял область! Регион временно потерян, ВВП страны снизился.`);log(`🏴 ${w.n} захватила область «${target.name}». ВВП −${fmt(loss)} млрд; регион отмечен как оккупированный.`)}
+   if(target){const share=clamp(target.pop/Math.max(1,S.pop),.015,.18),loss=Math.max(1,S.gdp*share*.22);target.enemyOccupied=true;try{recordWarAttack(w,'enemy','inf',target,false);fxPush({kind:'inf',rev:1,k:'inf',enemy:w.n,regId:target.geo,title:`🪖 ${w.n} занимает «${target.name}»`,sub:'Область занята противником'})}catch(e){}target.enemyOccupiedBy=w.n;target.occGdpLoss=loss;S.enemyOccupied[target.name]=w.n;S.gdp=Math.max(100,S.gdp-loss);S.money=Math.max(0,S.money-30);S.stability=clamp(S.stability-1.2);warNews(w,'🏴',`${target.name}: противник занял область! Регион временно потерян, ВВП страны снизился.`);log(`🏴 ${w.n} захватила область «${target.name}». ВВП −${fmt(loss)} млрд; регион отмечен как оккупированный.`)}
   }else if(d > 1.8 && enemyHeld.length && Math.random()<.62){
-   const name=enemyHeld[0],r=S.regions.find(x=>x.name===name);if(r){r.enemyOccupied=false;delete r.enemyOccupiedBy;S.gdp+=Math.max(0,r.occGdpLoss||0);delete r.occGdpLoss;delete S.enemyOccupied[name];S.stability=clamp(S.stability+.5);warNews(w,'🚩',`${name}: наши войска освободили область и восстановили её экономику.`);log(`🚩 Освобождена область «${name}» от войск ${w.n}; экономика региона восстановлена.`)}
+   const name=enemyHeld[0],r=S.regions.find(x=>x.name===name);if(r){r.enemyOccupied=false;try{recordWarAttack(w,'ours','inf',r,false);fxPush({kind:'inf',k:'inf',enemy:w.n,regId:r.geo,title:`🚩 Освобождена «${r.name}»`,sub:'Контрнаступление'})}catch(e){}delete r.enemyOccupiedBy;S.gdp+=Math.max(0,r.occGdpLoss||0);delete r.occGdpLoss;delete S.enemyOccupied[name];S.stability=clamp(S.stability+.5);warNews(w,'🚩',`${name}: наши войска освободили область и восстановили её экономику.`);log(`🚩 Освобождена область «${name}» от войск ${w.n}; экономика региона восстановлена.`)}
   }
   warEnemyCiv(w,d);enemyEcoTick(w,c,d);darkTickEnemy(w);enemyStrikes(w,c);branchTick(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(window.PVO){PVO.monthly(c,true);PVO.myMonthly(S);const nn1=aiNationOf(w.n);if(nn1)nn1.aa=c.aa}else if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
   if(w.m%3===0&&supply<30)log(`🚚 Критический кризис снабжения на фронте с ${w.n}: наступление замедлено.`);if(d>0&&w.m%6===0)log(`🪖 ${w.n} проводит мобилизацию, чтобы удержать фронт.`);c.value=clamp(c.value-.8,-100,100);
-  if(w.p>=100){w.won=true;w.wm=0;log(`🏆 Победа над государством ${w.n}! Выбери плоды победы во вкладке «Штаб».`);say('Мы победили в войне!','🎉');toast('🏆 Победа над '+w.n+'!');pause()}
-  else if((w.p>=92&&(w.encirclement||0)>=3)||(w.p>=88&&(w.m||0)>=12&&(w.supply||75)<40)||(w.p>=85&&(w.m||0)>=18&&(w.kills||0)>(c.power||50)*50)||(w.p>=90&&(w.encirclement||0)>=4)){
+  const surOK=(w.m||0)>=6&&enemyWill(w)<=50;if(w.p>=100&&!surOK)w.p=96;
+   if(w.p>=100){w.won=true;w.wm=0;log(`🏆 Победа над государством ${w.n}! Выбери плоды победы во вкладке «Штаб».`);say('Мы победили в войне!','🎉');toast('🏆 Победа над '+w.n+'!');pause()}
+  else if(surOK&&((w.p>=92&&(w.encirclement||0)>=3)||(w.p>=88&&(w.m||0)>=12&&(w.supply||75)<40)||(w.p>=85&&(w.m||0)>=18&&(w.kills||0)>(c.power||50)*50)||(w.p>=90&&(w.encirclement||0)>=4))){
    w.p=100;w.won=true;w.wm=0;
    var reasons=[];if((w.m||0)>=12)reasons.push('затяжная война');if((w.encirclement||0)>=3)reasons.push('окружение');if((w.supply||75)<40)reasons.push('снабжение');if((w.kills||0)>(c.power||50)*50)reasons.push('потери');
    log('🏳️ '+w.n+' запросил капитуляцию ('+(reasons.join(', ')||'истощение')+').');toast('Противник капитулирует');pause()}
@@ -2914,7 +2963,7 @@ function warTick(){
    if(w.def){aiGoalReward(w.n,w.goal==='tribute'?.6:1.2);if(w.goal==='territory')enemyTakesRegion(w);else if(w.goal==='regime'){log(`🏛 ${w.n} добивается смены власти в нашей стране.`);setTimeout(()=>{if(!S.out&&!S.campaignOver)ouster('Враг потребовал смены власти после поражения в войне с '+w.n)},50)}}
   }
  });
- S.wars=S.wars.filter(w=>!w.dead);
+ S.wars=S.wars.filter(w=>!w.dead);try{baRefresh()}catch(e){}
 }
 H.warOrder=(name,order)=>{const w=S.wars.find(x=>x.n===name);if(!w)return;w.order=['attack','defend','balanced'].includes(order)?order:'balanced';if(w.order==='attack')armyAttack(name);log(`📯 Приказ фронту против ${name}: ${{attack:'наступать',defend:'держать оборону',balanced:'сбалансированные действия'}[w.order]}.`);save();render()};
 /* Быстрые штабные шаблоны: один тап настраивает несколько родов войск без ручного выбора каждого пункта. */
@@ -3061,25 +3110,28 @@ function peaceAll(free){
 function offerPeaceOne(name){
  var w=S.wars.find(function(x){return x.n===name});if(!w){toast('Нет войны с этой страной');return}
  var c=rel(name)||{power:50,aggr:0.5};
- var months=w.m||0, front=w.p||50, supply=w.supply!=null?w.supply:75, enc=w.encirclement||0;
- var enLoss=w.kills||0, ecoLoss=(w.eco&&w.eco.loss)||0;
- var armyRatio=(w.mine||warPower(w))/Math.max(1,w.theirs||c.power*1.4);
- var score=clamp(months/18,0,1.4)*1.1+clamp(enLoss/Math.max(1,c.power*80),0,1.5)*1.3+(supply<35?1.2:supply<55?0.7:0)+(enc>=4?1.3:enc>=2?0.6:0)+(front>=85?1.4:front>=70?0.9:front>=55?0.4:front<=25?-1.2:0)+(armyRatio>1.4?0.5:armyRatio<0.7?-0.6:0)+(ecoLoss>12?0.4:0)-(c.aggr||0.4)*0.5;
- if(score>=1.35 || (score>=2.0 && (front>=80||enc>=3||months>=14))){
+ var now=S.year*12+S.month;
+ if(w.peaceNext&&now<w.peaceNext){toast(name+' не станет говорить о мире ещё '+(w.peaceNext-now)+' мес.');return}
+ var months=w.m||0,front=w.p||50,will=enemyWill(w);
+ var stale=months>=14&&front>=40&&front<=60;
+ var chance=clamp((62-will)/62,0,1)*0.9+(stale?0.25:0)-((c.aggr||0.4)-0.4)*0.3;
+ var accept=false,reason='';
+ if(months<4){reason='слишком рано: переговоры возможны не раньше 4-го месяца войны'}
+ else if(front<=35&&will>45){reason='противник побеждает на фронте и не видит причин останавливаться'}
+ else if(will>62&&!stale){reason='воля противника к войне ещё высока ('+will+'%)'}
+ else if(Math.random()<chance){accept=true}
+ else{reason='противник обдумал предложение, но решил продолжать ('+will+'% воли к войне)'}
+ if(accept){
   var pay=front>70?0:Math.min(S.money,400+c.power*8);
   if(pay>0){S.money-=pay;ch({approval:-1},false)}
-  log('🕊 '+name+' согласился на мир'+(pay?' (контрибуция '+fmt(pay)+' млн)':'')+'.');
-  S.wars=S.wars.filter(function(x){return x.n!==name});S.war=S.wars.length>0||!!S.martial;
-  c.value=clamp((c.value||0)+8,-100,100);
-  toast('🕊 Мир с '+name+' заключён');
- } else if(score>=0.75){
-  log('❌ '+name+' предложил встречные условия, но пока отказался от вашего варианта (фронт '+Math.round(front)+'%).');
-  toast(name+' отклонил условия — война продолжается');
+  peaceWith(name);
+  if(pay>0)log('💰 Условия мира: контрибуция '+fmt(pay)+' млн.');
+  say('Мир с '+name+' заключён по согласию обеих сторон.','🕊');toast('🕊 Мир с '+name+' заключён');
+ }else{
+  w.peaceNext=now+(months<4?1:2);
   c.value=clamp((c.value||0)-2,-100,100);
- } else {
-  log('❌ '+name+' отказался от мира (фронт '+Math.round(front)+'%, месяц '+months+').');
-  toast(name+' отказался от мира');
-  c.value=clamp((c.value||0)-3,-100,100);
+  log('❌ '+name+' отклонил мир: '+reason+'.');
+  say(name+' отказался от мира: '+reason+'.','❌');toast(name+' отказался от мира');
  }
  save();render();
 }
@@ -3259,8 +3311,8 @@ function warCard(w){
  <div class="worders"><button class="${ord==='attack'?'on atk':''}" onclick="H.warOrder(${nm},'attack')">⚔ Наступать</button><button class="${ord==='balanced'?'on bal':''}" onclick="H.warOrder(${nm},'balanced')">⚖ Баланс</button><button class="${ord==='defend'?'on def':''}" onclick="H.warOrder(${nm},'defend')">🛡 Оборона</button></div><div class="actions"><button onclick="armyAttack(${nm})">🪖 Показать атаку пехоты на карте</button><button onclick="H.warMap(${nm},'ours')">🗺 Карта наших ударов</button><button onclick="H.warMap(${nm},'enemy')">🛡 Карта ударов врага</button></div>
   ${warPlanHtml(w)}
  ${(w.blog&&w.blog.length)?`<ul class="wlog">${w.blog.map(x=>`<li>${x}</li>`).join('')}</ul>`:'<p class="muted wnolog">Боевые донесения появятся в ходе войны.</p>'}
- ${(w.won||w.p>=60)?`<div class="wwin"><p><b>${w.won?'🏆 Полная победа!':'💪 Перевес на фронте'}</b> Решите, чем закончить войну${w.won?` (иначе через ${3-(w.wm||0)} мес. — контрибуция)`:''}:</p><div class="actions"><button class="good" onclick="H.dictate(${nm},'tribute')">💰 Контрибуция</button><button class="primary" onclick="H.dictate(${nm},'puppet')">👑 Вассал</button>${(w.won||w.p>=(w.goal==='territory'?60:70))?`<button class="danger" onclick="H.dictate(${nm},'region')">🗺 ${w.goal==='territory'?'Захватить территорию':'Области'} · до ${quota(w.n,w).q}</button>`:`<small class="muted">Области — от ${w.goal==='territory'?60:70}%</small>`}${w.goal==='regime'?`<button class="danger" onclick="H.dictate(${nm},'regime')">🏛 Сменить власть</button>`:''}${w.won?`<button class="danger" onclick="H.dictate(${nm},'annex')">🏴 Захватить всю страну</button>`:''}</div></div>`:''}</article>`}
-function warBoard(){return S.wars.length?`<div class="wglobal"><b>🎖 Общее управление фронтами</b><small class="muted">Приказ меняет режим всех текущих войн сразу. Индивидуальные планы ниже останутся отдельными.</small><div class="actions"><button class="danger" onclick="H.warAllOrder('attack')">⚔ Наступать везде</button><button onclick="H.warAllOrder('balanced')">⚖ Сбалансировать</button><button onclick="H.warAllOrder('defend')">🛡 Оборона везде</button></div></div><div class="wboard">${S.wars.map(warCard).join('')}</div>`:''}
+ ${(dictOk(w))?`<div class="wwin"><p><b>${w.won?'🏆 Полная победа!':'💪 Перевес на фронте'}</b> Решите, чем закончить войну${w.won?` (иначе через ${3-(w.wm||0)} мес. — контрибуция)`:''}:</p><div class="actions"><button class="good" onclick="H.dictate(${nm},'tribute')">💰 Контрибуция</button><button class="primary" onclick="H.dictate(${nm},'puppet')">👑 Вассал</button>${(w.won||w.p>=(w.goal==='territory'?60:70))?`<button class="danger" onclick="H.dictate(${nm},'region')">🗺 ${w.goal==='territory'?'Захватить территорию':'Области'} · до ${quota(w.n,w).q}</button>`:`<small class="muted">Области — от ${w.goal==='territory'?60:70}%</small>`}${w.goal==='regime'?`<button class="danger" onclick="H.dictate(${nm},'regime')">🏛 Сменить власть</button>`:''}${w.won?`<button class="danger" onclick="H.dictate(${nm},'annex')">🏴 Захватить всю страну</button>`:''}</div></div>`:(w.p>=60?`<div class="wwin"><small class="muted">🛡 ${dictWhy(w)}</small></div>`:'')}</article>`}
+function warBoard(){return S.wars.length?`<div class="wglobal"><b>🎖 Общее управление фронтами</b><div class="actions"><button class="danger" onclick="H.battleActions()">⚔ Окно боевых действий</button></div><small class="muted">Приказ меняет режим всех текущих войн сразу. Индивидуальные планы ниже останутся отдельными.</small><div class="actions"><button class="danger" onclick="H.warAllOrder('attack')">⚔ Наступать везде</button><button onclick="H.warAllOrder('balanced')">⚖ Сбалансировать</button><button onclick="H.warAllOrder('defend')">🛡 Оборона везде</button></div></div><div class="wboard">${S.wars.map(warCard).join('')}</div>`:''}
 const warPanel=()=>S.wars.length?`<section class="panel wide"><h2>⚔️ Война</h2>${warBoard()}</section>`:'';
 function aiResPanel(){const R=window.AIRES;if(!R)return '';const m=R.summary(S);if(!m.total)return '';
  return card('⛽ Ресурсы стран и закупки ИИ',`<p class="muted">У каждой страны свои недра: нефть, газ и руда истощаются. Когда запасы падают, ${m.nn?'<b>нейросеть</b> страны':'страна (по простому правилу)'} решает, что докупить на рынке; бедная недрами страна тратит деньги, а при нехватке теряет стабильность и мощь. Заводам нужны сталь и топливо — без них оружие приходится покупать.</p><div class="cards">${R.KEYS.map(k=>`<div class="mini"><b>${R.ICON[k]} ${R.NAME[k]}</b><small>в дефиците: ${m.short[k]} из ${m.total} стран · недра исчерпаны у ${m.empty[k]}</small><small>куплено нейросетью: ${m.buys[k]} · цена ×${m.price[k].toFixed(2)}</small></div>`).join('')}</div><p class="muted">Опыт закупок: ${m.steps} решений · любопытство ${Math.round(m.eps*100)}%.${m.rows.length?' Чаще всего полезно: '+m.rows.sort((a,b)=>b.avg-a.avg).slice(0,2).map(x=>({wait:'ждать',food:'еда',fuel:'топливо',energy:'энергия',steel:'сталь'}[x.k]||x.k)).join(', ')+'.':''}</p>`)}
@@ -3353,27 +3405,53 @@ H.peace=function(){
  if(blocked())return;
  if(!S.wars.length)return toast('Нет активных войн');
  if(S.wars.length===1){offerPeaceOne(S.wars[0].n);return}
- var names=S.wars.map(function(w){return w.n});
- var pick=names[0];
- if(names.length>1){
-  var msg='Войны: '+names.join(', ')+'. Предложить мир первому противнику ('+pick+')?';
-  if(!dialog(msg,'Предложить мир','Отмена',function(){offerPeaceOne(pick)},function(){}))return;
- } else offerPeaceOne(pick);
+ var m=document.getElementById('pcpop');if(m)m.remove();
+ m=document.createElement('div');m.id='pcpop';m.className='ba-modal';
+ m.innerHTML='<div class="ba-box"><button class="ba-x" onclick="document.getElementById(\'pcpop\').remove()">✕</button><h3>🕊 С кем вести переговоры?</h3><p class="muted">Мир заключается только если согласен противник.</p>'+S.wars.map(function(w){var q=encodeURIComponent(w.n).replace(/'/g,'%27');return '<button class="primary ba-wide" onclick="document.getElementById(\'pcpop\').remove();H.peaceTo(decodeURIComponent(\''+q+'\'))">🕊 '+esc2(w.n)+' · фронт '+Math.round(w.p)+'%</button>'}).join('')+'</div>';
+ m.addEventListener('click',function(e){if(e.target===m)m.remove()});
+ document.body.appendChild(m);
 };
+H.peaceTo=function(n){if(blocked())return;offerPeaceOne(n);baRefresh()};
 H.spoils=(n,m)=>{spoils(n,m);save();render()};
-H.battleActions=function(){
+/* ===== Всплывающее окно боевых действий ===== */
+const BA={n:null,open:false};
+function baWar(){return S.wars.find(x=>x.n===BA.n)||S.wars[0]}
+function baRefresh(){if(BA.open)baDraw()}
+const baName=a=>a.k==='inf'?'🪖 Пехота':(ARMS[a.k]?ARMS[a.k].ic+' '+ARMS[a.k].n:String(a.k||'удар'));
+H.baClose=()=>{BA.open=false;const m=document.getElementById('bapop');if(m)m.remove()};
+H.baPick=n=>{BA.n=n;baDraw()};
+H.baReplay=(n,id)=>{const w=S.wars.find(x=>x.n===n),a=w&&(w.attacks||[]).find(x=>String(x.id)===String(id));if(!a)return toast('Запись устарела');const en=a.side==='enemy';strikeScene({kind:a.k==='inf'?'inf':'strike',rev:en,k:a.k,enemy:n,regId:a.regId,shots:[{regId:a.regId,down:a.down}],title:`${en?'⚠️ Атака врага':'🎯 Наша атака'}: ${baName(a)}`,sub:`Область «${a.region}»${a.down?' · сбито':''}`})};
+H.baInf=n=>{if(!S.wars.some(x=>x.n===n))return;armyAttack(n)};
+function baDraw(){
+ const w=baWar();if(!w){H.baClose();return}
+ BA.n=w.n;BA.open=true;
+ const c=rel(w.n)||{power:50},will=enemyWill(w),p=Math.round(w.p||50),d=+w.lastD||0,q=encodeURIComponent(w.n).replace(/'/g,'%27'),N=`decodeURIComponent('${q}')`;
+ const inten=Math.abs(d)>3?3:Math.abs(d)>1.2?2:1,dir=d>=0?'win':'lose';
+ const tabs=S.wars.length>1?'<div class="ba-tabs">'+S.wars.map(x=>{const qq=encodeURIComponent(x.n).replace(/'/g,'%27');return `<button class="${x.n===w.n?'on':''}" onclick="H.baPick(decodeURIComponent('${qq}'))">${esc2(x.n)}</button>`}).join('')+'</div>':'';
+ const atk=(w.attacks||[]).slice().sort((a,b)=>((b.month||0)-(a.month||0))||((b.id||0)-(a.id||0))).slice(0,14);
+ const rows=atk.length?atk.map(a=>`<div class="ba-row ${a.side}"><span class="ba-tag">${a.side==='enemy'?'ВРАГ':'МЫ'}</span><div><b>${baName(a)}</b><small>→ «${esc2(a.region)}» · ${a.k==='inf'?'наземный бой':a.down?'🛡 сбито':'💥 попадание'}</small></div><button onclick="H.baReplay(${N},'${a.id}')" title="Показать на карте">▶</button></div>`).join(''):'<p class="muted">Пока ударов не было. Начните наступление или используйте арсенал — каждая атака появится здесь и будет показана на карте.</p>';
+ const news=(w.news||[]).slice(0,6).map(n=>`<div class="ba-news">${esc2(n.m||'')} ${esc2(n.t||'')}<small>${esc2(n.d||'')}</small></div>`).join('');
+ const html=`<div class="ba-box"><button class="ba-x" onclick="H.baClose()">✕</button><h3>⚔ Боевые действия — ${esc2(w.n)}</h3>${tabs}
+ <div class="ba-scene i${inten} ${dir}" style="--p:${p}%"><div class="ba-track"><div class="ba-me"></div><div class="ba-line"></div></div>
+  <span class="ba-u me u1">🪖</span><span class="ba-u me u2">🚜</span><span class="ba-u me u3">✈️</span><span class="ba-u en e1">🪖</span><span class="ba-u en e2">🚜</span><span class="ba-u en e3">🚀</span>
+  <i class="ba-boom b1">💥</i><i class="ba-boom b2">💥</i><i class="ba-boom b3">🔥</i><div class="ba-lab"><b>Мы</b><b>Фронт ${p}%</b><b>${esc2(w.n)}</b></div></div>
+ <div class="ba-stats"><span>🕒 ${w.m||0} мес.</span><span>🧠 воля врага ${will}%</span><span>🚚 снабжение ${Math.round(w.supply||75)}%</span><span>⭕ окружение ${w.encirclement||0}/5</span></div>
+ <div class="actions"><button class="danger" onclick="H.baInf(${N})">⚔ Атака пехоты</button><button onclick="H.warMap(${N},'enemy')">▶ Удары врага</button><button onclick="H.warMap(${N},'ours')">▶ Наши удары</button><button class="primary" onclick="H.peaceTo(${N})">🕊 Предложить мир</button></div>
+ <h4>Атаки (нажмите ▶, чтобы увидеть на карте)</h4><div class="ba-list">${rows}</div>${news?'<h4>Сводки с фронта</h4>'+news:''}
+ <p class="muted">Мир возможен, только если противник согласен: он отказывается, пока его воля к войне высока.</p></div>`;
+ let m=document.getElementById('bapop');const old=m&&m.querySelector('.ba-box'),st=old?old.scrollTop:0;
+ if(!m){m=document.createElement('div');m.id='bapop';m.className='ba-modal';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)H.baClose()})}
+ m.innerHTML=html;const nb=m.querySelector('.ba-box');if(nb)nb.scrollTop=st;
+}
+H.battleActions=function(name){
  if(blocked())return;
  if(!S.wars.length)return toast('Нет активных войн');
- var w=S.wars[0];
- var lines=[];
- (w.news||[]).slice(0,8).forEach(function(n){lines.push((n.m||'')+' '+(n.t||''))});
- (w.attacks||[]).slice(0,6).forEach(function(a){lines.push((a.side==='enemy'?'Враг':'Мы')+': '+(a.k||'удар')+' → '+(a.region||'?'))});
- var text=lines.length?lines.join('\n'):'Пока нет записей об ударах. Используйте кнопки на карте фронта.';
- dialog('⚔ Боевые действия — '+w.n+'\n\n'+text,'Атака пехоты','Закрыть',function(){armyAttack(w.n)},function(){});
+ if(typeof name==='string'&&S.wars.some(x=>x.n===name))BA.n=name;
+ baDraw();
 };
 const hccSearch=q=>{CC.query=String(q||'');const term=CC.query.trim().toLocaleLowerCase('ru'),rows=[...document.querySelectorAll('#ccm [data-prov-row]')];let shown=0;rows.forEach(e=>{const ok=!term||String(e.getAttribute('data-prov-name')||'').includes(term);e.hidden=!ok;if(ok)shown++});const c=document.getElementById('province-count');if(c)c.textContent=`Показано ${shown.toLocaleString('ru-RU')} из ${rows.length.toLocaleString('ru-RU')}`};
 H.ccr=(iso,rid)=>{hcc(iso);CC.info=rid;ccDraw();const el=document.querySelector('#ccm .cc-owner');if(el&&el.scrollIntoView)try{el.scrollIntoView({block:'nearest'})}catch(e){}};H.ccInfo=id=>{CC.info=CC.info===id?null:id;ccDraw()};Object.assign(H,{chooser:hchooser,chf:hchf,startAs:hstartAs,wz:hwz,cc:hcc,pick:hpick,ccClose:hccClose,take:htake,auto:hauto,confirm:hconfirm,ccSearch:hccSearch});
-H.dictate=(n,m,rid)=>{const w=S.wars.find(x=>x.n===n);if(!w)return;if(!w.won&&w.p<60)return toast('Диктовать условия можно при перевесе на фронте от 60%');if(m==='regime'&&w.goal!=='regime')return toast('Для смены власти нужно было выбрать цель войны «Смена власти» при начале кризиса');if(m==='region'&&!w.won&&w.p<(w.goal==='territory'?60:70))return toast('Отторгнуть область можно при перевесе от '+(w.goal==='territory'?60:70)+'%');if(m==='annex'&&!w.won)return toast('Полный захват — только при полной победе (100%)');if(m==='region'){const Q=quota(n,w);if(!Q.free)return toast('В этой стране не осталось свободных регионов');if(!rid&&regsOf(n))return H.pick(n);const ids=Array.isArray(rid)?rid.slice(0,Q.q):Array.from({length:Q.q},()=>null),pop0=S.pop;ids.forEach((id,k)=>spoils(n,'region',id,k<ids.length-1));S.wars=S.wars.filter(x=>x.n!==n);S.war=S.wars.length>0||!!S.martial;log(`🗺 Итог войны с ${n}: отнято областей — ${ids.length} (фронт ${Math.round(Q.p)}%), население +${fmt(S.pop-pop0)}.`);save();render();return}spoils(n,m,rid);save();render()};
+H.dictate=(n,m,rid)=>{const w=S.wars.find(x=>x.n===n);if(!w)return;if(!dictOk(w))return toast(dictWhy(w));if(m==='regime'&&w.goal!=='regime')return toast('Для смены власти нужно было выбрать цель войны «Смена власти» при начале кризиса');if(m==='region'&&!w.won&&w.p<(w.goal==='territory'?60:70))return toast('Отторгнуть область можно при перевесе от '+(w.goal==='territory'?60:70)+'%');if(m==='annex'&&!w.won)return toast('Полный захват — только при полной победе (100%)');if(m==='region'){const Q=quota(n,w);if(!Q.free)return toast('В этой стране не осталось свободных регионов');if(!rid&&regsOf(n))return H.pick(n);const ids=Array.isArray(rid)?rid.slice(0,Q.q):Array.from({length:Q.q},()=>null),pop0=S.pop;ids.forEach((id,k)=>spoils(n,'region',id,k<ids.length-1));S.wars=S.wars.filter(x=>x.n!==n);S.war=S.wars.length>0||!!S.martial;log(`🗺 Итог войны с ${n}: отнято областей — ${ids.length} (фронт ${Math.round(Q.p)}%), население +${fmt(S.pop-pop0)}.`);save();render();return}spoils(n,m,rid);save();render()};
 /* ================= НОВЫЕ СИСТЕМЫ: ПОЛИТИКА, РАЗВЕДКА, МИРОВЫЕ КРИЗИСЫ ================= */
 function politicalSystemTick(){
  const P=S.polSys||(S.polSys={protest:12,lastUnrest:-99,lastCampaign:-99,lastCabinet:-99});
