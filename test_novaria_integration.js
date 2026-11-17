@@ -5,6 +5,8 @@ assert(html.includes('src="/novaria_worldsystems.js?v=4"'),'game page must load 
 assert(html.includes('/novaria_worldsystems.css?v=4'),'game page must load responsive styles');
 assert(app.includes('@app.get("/novaria_worldsystems.js")'),'server must expose infrastructure module');
 assert(app.includes('@app.get("/novaria_worldsystems.css")'),'server must expose infrastructure styles');
+assert(html.includes('src="/province_grid.js?v=1"'),'game page must load the province grid before the game engine');
+assert(app.includes('@app.get("/province_grid.js")'),'server must expose the province grid helper');
 const ctx={window:{},console};vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/novaria_worldsystems.js','utf8'),ctx);
 const NS=ctx.window.NovaSystems;
 const S={name:'Legacy',year:3,month:4,money:9000,gdp:8000,debt:1000,pop:1200000,energy:80,food:65,steel:65,industry:60,employment:87,approval:55,stability:60,coupRisk:12,tech:45,regions:[{name:'Старый регион',pop:1200000,assets:[{id:'old-power',type:'power',name:'Старая электростанция',condition:40,baseCost:200,history:[]}]}]};

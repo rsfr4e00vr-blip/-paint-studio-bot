@@ -1,0 +1,14 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const ctx={window:{},console};vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/province_grid.js','utf8'),ctx);
+const G=ctx.window.NovariaProvinceGrid;assert(G,'province grid helper exposed');
+const C={iso:'ZZ',name:'Тестовая страна',area:1000,rings:[[[0,0],[10,0],[10,10],[0,10]]],regs:[]};
+for(let y=0;y<10;y++)for(let x=0;x<10;x++)C.regs.push({id:`ZZ:${C.regs.length}`,n:`Область ${C.regs.length+1}`,s:1,res:'g',cell:[[x,y],[x+1,y],[x+1,y+1],[x,y+1]],cx:x+.5,cy:y+.5,parentId:`ZZ:${C.regs.length}`,parentName:`Область ${C.regs.length+1}`});
+const out=G.expand({ZZ:C},3000);
+assert.equal(out.before,100);assert.equal(out.after,3000,'should generate the requested 3000 provinces');
+assert.equal(C.regs.length,3000);assert(C.regs.every(r=>r.cell.length>=3&&r.d.startsWith('M')));
+assert.equal(new Set(C.regs.map(r=>r.id)).size,3000,'province ids must be unique');
+const grouped=new Map();C.regs.forEach(r=>grouped.set(r.parentName,(grouped.get(r.parentName)||0)+r.s));
+assert.equal(grouped.size,100,'parent administrative areas must remain traceable');
+for(const v of grouped.values())assert(Math.abs(v-1)<1e-6,'province population shares must sum to parent share');
+console.log(`OK: ${out.before} -> ${out.after} provinces, unique IDs, valid cells and preserved parent shares`);
