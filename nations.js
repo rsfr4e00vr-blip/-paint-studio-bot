@@ -24,7 +24,7 @@ const LKEY=(c)=>'novariaMP:'+c+':'+(typeof me!=='undefined'&&me&&me.id?me.id:'')
 
 const AIO={aggr:{calm:'спокойный',normal:'обычный',high:'агрессивный',extreme:'беспощадный'},nn:{off:'выключена',std:'обычная',fast:'быстро учится'},ars:{none:'нет (страны вырабатывают и покупают сами)',small:'небольшой запас'}};
 const aiv=()=>Object.assign({aggr:'normal',nn:'std',ars:'none'},room.ai||{});
-let lastReportSentAt=0;
+let lastReportSentAt=0,lastProvinceReportSig="";
 let ws=null,me={id:null,host:false},room={code:'',state:'idle',players:[],month:0,length:180,speed:'normal',diff:'normal',host:null};
 let standings=[],mods={},wars=[],relations={},relationPrograms={},embassies={},claims={},borderCases={},ideologyCases={},securityCases={},warGrounds={},feed=[],chat=[],active=false,sentElim=false,lastTick=0,view='setup',finalData=null,pending=null,warArm=null,peaceOffer=null,retry=0,leaving=false;
 const orig={};
@@ -133,13 +133,13 @@ function resume(){
   send({type:'sync'});
 }
 function enterMP(){
-  active=true;document.body.classList.add('mp');
+  lastProvinceReportSig="";active=true;document.body.classList.add('mp');
   ['play','pause','stop','step'].forEach(id=>{const e=$('#'+id);if(e)e.onclick=()=>NG.toast('В мультиплеере время идёт одновременно у всех')});
   if(typeof window.resetGame==='function'){orig.reset=orig.reset||window.resetGame;window.resetGame=()=>NG.toast('В мультиплеере нельзя начать заново')}
   if(typeof window.importSave==='function'){orig.imp=orig.imp||window.importSave;window.importSave=()=>NG.toast('В мультиплеере загрузка сохранений отключена')}
 }
 function leaveMP(){
-  leaving=true;active=false;document.body.classList.remove('mp');
+  lastProvinceReportSig="";leaving=true;active=false;document.body.classList.remove('mp');
   ['play','pause','stop','step'].forEach(id=>{const e=$('#'+id);if(e)e.onclick=orig[id]});
   const sp=$('#speed');if(sp)sp.onchange=orig.speed;
   if(orig.reset)window.resetGame=orig.reset;if(orig.imp)window.importSave=orig.imp;
@@ -182,7 +182,9 @@ function report(force=false){
   const S=NG.S;if(!S||!active)return;
   const nowAt=Date.now();if(!force&&nowAt-lastReportSentAt<500)return;lastReportSentAt=nowAt;
   let power=1;try{power=NG.warPower(null)}catch(e){}
-  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,infl:S.inflation,rate:S.cbRate??5,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70,pvo:S.aa||0,pp:S.pp||0,infra:window.NovaSystems?NovaSystems.totals(S).health:100,infra_critical:window.NovaSystems?NovaSystems.totals(S).critical:100,infra_count:window.NovaSystems?NovaSystems.totals(S).count:0,cities:(S.regions||[]).filter(r=>r.city).length,steel:S.steel||0,fuel:S.fuel||0,energy:S.energy||0,ars:Object.fromEntries(Object.keys(ARSW).map(k=>[k,Math.max(0,Math.min(30,Math.floor(S[k]||0)))]))},regions:(S.regions||[]).map((r,i)=>({id:r.geo||r.id||'',name:r.name||('Область '+(i+1))})).filter(r=>r.id&&r.name).slice(0,200),factories:S.milFactories||[],factory_builds:S.factoryBuilds||[]});
+  const mapRows=window.NOVARIA_MAP_REGIONS&&window.NOVARIA_MAP_REGIONS(S.me||S.name),provinceRows=(mapRows&&mapRows.length?mapRows:(S.regions||[]).map((r,i)=>({id:r.geo||r.id||'',name:r.name||('Область '+(i+1))}))).filter(r=>r.id&&r.name).slice(0,3000),provinceSig=provinceRows.map(r=>r.id+':'+r.name).join('|');
+  const packet={type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,infl:S.inflation,rate:S.cbRate??5,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70,pvo:S.aa||0,pp:S.pp||0,infra:window.NovaSystems?NovaSystems.totals(S).health:100,infra_critical:window.NovaSystems?NovaSystems.totals(S).critical:100,infra_count:window.NovaSystems?NovaSystems.totals(S).count:0,cities:(S.regions||[]).filter(r=>r.city).length,steel:S.steel||0,fuel:S.fuel||0,energy:S.energy||0,ars:Object.fromEntries(Object.keys(ARSW).map(k=>[k,Math.max(0,Math.min(30,Math.floor(S[k]||0)))]))},factories:S.milFactories||[],factory_builds:S.factoryBuilds||[]};
+  if(force||provinceSig!==lastProvinceReportSig){packet.regions=provinceRows;lastProvinceReportSig=provinceSig}send(packet);
 }
 function saveLocal(){try{localStorage.setItem(LKEY(room.code),JSON.stringify(NG.S))}catch(e){}}
 function addMoney(d){const S=NG.S;if(d>=0)S.money+=d;else{const n=-d;if(S.money>=n)S.money-=n;else{S.debt+=n-S.money;S.money=0}}}

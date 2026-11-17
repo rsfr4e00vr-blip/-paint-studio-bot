@@ -729,7 +729,7 @@ class Room:
         return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"],
                 "cause": w.get("cause"), "cause_label": WAR_CAUSES.get(w.get("cause"), ""), "reason": w.get("reason", ""), "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {}), "sect": {pid: {k: round(v, 1) for k, v in self.players[pid].sect.items()} for pid in (w["a"], w["d"]) if pid in self.players},
                 "goal": w.get("goal", "tribute"), "goal_label": WAR_GOALS.get(w.get("goal", "tribute"), ""), "claim_region": w.get("claim_region", ""),
-                "regions": {pid: list(self.players[pid].regions[:200]) for pid in (w["a"], w["d"]) if pid in self.players},
+                "regions": {pid: list(self.players[pid].regions[:3000]) for pid in (w["a"], w["d"]) if pid in self.players},
                 "attacks": [dict(x) for x in w.get("attacks", [])[-16:]]}
 
     async def process_embassies(self):
@@ -1132,7 +1132,7 @@ async def on_report(room: Room, p: Player, msg: dict):
     regions = msg.get("regions") if isinstance(msg.get("regions"), list) else []
     clean_regions = []
     seen_regions = set()
-    for item in regions[:200]:
+    for item in regions[:3000]:
         if not isinstance(item, dict):
             continue
         rid = "".join(ch for ch in str(item.get("id", "")) if ch.isalnum() or ch in ":_-.")[:100]

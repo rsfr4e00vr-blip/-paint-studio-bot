@@ -764,6 +764,11 @@ def regions_js():
     return FileResponse(BASE / "regions.js", media_type="application/javascript")
 
 
+@app.get("/province_grid.js")
+def province_grid_js():
+    return FileResponse(BASE / "province_grid.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/game.js")
 def game_js():
     return FileResponse(BASE / "game.js", media_type="application/javascript")
