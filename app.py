@@ -656,6 +656,11 @@ def multiplayer_css():
     return FileResponse(BASE / "multiplayer.css", media_type="text/css")
 
 
+@app.get("/city_sat.js")
+def city_sat_js():
+    return FileResponse(BASE / "city_sat.js", media_type="application/javascript")
+
+
 @app.get("/multiplayer.js")
 def multiplayer_js():
     return FileResponse(BASE / "multiplayer.js", media_type="application/javascript")

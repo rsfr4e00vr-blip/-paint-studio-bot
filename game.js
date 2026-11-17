@@ -212,25 +212,69 @@ function regionOwner(C,r){const mp=mpRegionOwner(C,r);if(mp)return mp;const nm=C
 function ownerColor(owner,C,i){if(owner==='Вассал: '+C.name)return VAS;if(isMe(owner))return MYC;const w=WORLD.map[owner];return baseCol(w?(w.iso||w.name):owner,i)}
 function regFill(C,r,i){const owner=regionOwner(C,r);if(isMe(owner))return MYC;return owner===C.name?baseCol(C.iso,i):ownerColor(owner,C,i)}
 const ownSig=()=>JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).join(',')+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+myName()+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.regionOwners||{})+'|'+JSON.stringify(S.lostTo||{})+'|'+JSON.stringify(S.mpTerritories||{});
-function cityDamageSignature(){return (S.regions||[]).map(r=>(r.name||'')+':'+(r.assets||[]).map(a=>Math.round(Number(a.condition)||0)).join(',')).join('|')}
+function cityDamageSignature(){return (S.regions||[]).map(r=>(r.name||'')+':'+(r.assets||[]).map(a=>Math.round(Number(a.condition)||0)).join(',')+JSON.stringify(Object.fromEntries(Object.entries(r.townHit||{}).map(([k,v])=>[k,Math.round(v)])))).join('|')+'|'+(S.wars||[]).map(w=>Math.round(Object.values(w.regEco||{}).reduce((a,b)=>a+b,0))+':'+Math.round(Object.values(w.dmg||{}).reduce((a,d)=>a+d.infra+d.civ+d.mil,0))).join(',')}
+/* ---------- города в областях: у каждой области несколько городов (число зависит от населения) ---------- */
+const TWC={},TWPOS={};
+const hstr=s=>{let h=0;s=String(s);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h};
+function townSpots(rings,cx,cy,rad,n,key){
+ const out=[[cx,cy]],h=hstr(key)%7;
+ for(let i=1;i<n;i++){let ok=null;for(let a=0;a<6&&!ok;a++){const ang=i*2.39996+h+a*.9,rr=rad*Math.sqrt(i/n)*(1-a*.12),x=cx+Math.cos(ang)*rr,y=cy+Math.sin(ang)*rr*.85;if(inside(x,y,rings))ok=[x,y]}
+  out.push(ok||[cx+Math.cos(i*2.4)*rad*.12,cy+Math.sin(i*2.4)*rad*.12])}
+ return out}
+function ownTownsOf(ri){
+ const r=(S.regions||[])[ri];if(!r)return[];
+ const pop=Math.max(1000,Number(r.pop)||1e6),country=String(r.from||S.me||S.name||''),key=(r.geo||r.name)+'#'+ri+'#'+Math.round(Math.log10(pop)*4);
+ if(!TWC[key]){const w=wi(country);TWC[key]=CitySat.towns(r.geo||r.name,r.name,pop,country,w.cont,r.city&&r.city.name)}
+ return TWC[key]}
+/* удар врага по области: страдает конкретный город + объекты инфраструктуры (их потом можно чинить) */
+function townStrike(reg,t,f){
+ const ri=S.regions.indexOf(reg);if(ri<0||!window.CitySat)return;
+ const tw=ownTownsOf(ri);if(!tw.length)return;
+ let tot=0;const wts=tw.map(x=>{const v=(t==='mil'||t==='infra')?1+x.fate*2:Math.max(1,x.pop);tot+=v;return v});
+ let q=Math.random()*tot,ix=0;for(;ix<wts.length-1&&q>wts[ix];ix++)q-=wts[ix];
+ reg.townHit=reg.townHit||{};reg.townHit[tw[ix].name]=Math.min(95,(reg.townHit[tw[ix].name]||0)+14+12*(f||1));
+ if(window.NovaSystems&&NovaSystems.damageAsset&&Array.isArray(reg.assets)){
+  const pool=(t==='mil'?['industry','warehouse','airport']:t==='infra'?['power','water','transport','bridge','communications']:['housing','hospital','education']).sort(()=>Math.random()-.5).slice(0,2);
+  pool.forEach(ty=>{const ai=reg.assets.findIndex(a=>a.type===ty);if(ai>=0)NovaSystems.damageAsset(S,ri,ai,4+9*(f||1),'Удар врага')})}
+}
+function townDecay(){(S.regions||[]).forEach(r=>{const h=r.townHit;if(!h)return;Object.keys(h).forEach(k=>{h[k]*=.9;if(h[k]<1)delete h[k]});if(!Object.keys(h).length)delete r.townHit})}
 function drawCityMarkers(svg){
- const NS='http://www.w3.org/2000/svg';let layer=svg.querySelector('#city-markers');if(!layer){layer=document.createElementNS(NS,'g');layer.id='city-markers';layer.setAttribute('pointer-events','none');svg.appendChild(layer)}layer.replaceChildren();
+ if(!window.CitySat)return;
+ const NS='http://www.w3.org/2000/svg';let layer=svg.querySelector('#city-markers');if(!layer){layer=document.createElementNS(NS,'g');layer.id='city-markers';layer.setAttribute('pointer-events','none');svg.appendChild(layer)}
+ const items=[],mine={};
+ /* 1) наши области: все города области, состояние — из объектов инфраструктуры + прямые попадания */
  (S.regions||[]).forEach((r,ri)=>{
   let C=null,gr=null;
   if(r.geo){const k=String(r.geo).lastIndexOf(':');C=GEO.c[String(r.geo).slice(0,k)];gr=C&&C.regs.find(x=>x.id===r.geo)}
   if(!gr){const country=String(r.from||S.me||S.name||'');const w=wi(country);C=w&&GEO.c[w.iso];if(C)gr=C.regs.find(x=>String(x.n||'').replace(/ \(.*\)$/,'')===String(r.name||'').replace(/ \(.*\)$/,''))}
   if(!C||!gr)return;const q=regClip(C,gr);if(!q||!Number.isFinite(q.cx)||!Number.isFinite(q.cy))return;
-  const assets=Array.isArray(r.assets)?r.assets:[],avg=assets.reduce((v,a)=>v+(Number(a.condition)||0),0)/Math.max(1,assets.length),bad=assets.filter(a=>(Number(a.condition)||0)<70).length;
-  const icon=avg>=90?'🏙':avg>=70?'🏘':avg>=40?'🏚':'💥',city=String(r.city&&r.city.name||r.name||'Город');
-  const g=document.createElementNS(NS,'g');g.setAttribute('data-city',String(ri));g.setAttribute('pointer-events','all');g.setAttribute('class','nova-city-marker '+(avg<40?'is-ruined':avg<70?'is-damaged':''));g.setAttribute('transform',`translate(${q.cx.toFixed(2)} ${q.cy.toFixed(2)})`);g.style.cursor='pointer';
-  const ring=document.createElementNS(NS,'circle');ring.setAttribute('r','5.6');ring.setAttribute('fill','#101b27');ring.setAttribute('stroke',avg>=75?'#8de0a1':avg>=40?'#ffc56b':'#ff6666');ring.setAttribute('stroke-width','1.5');
-  const glyph=document.createElementNS(NS,'text');glyph.setAttribute('text-anchor','middle');glyph.setAttribute('dominant-baseline','central');glyph.setAttribute('font-size','6.2');glyph.textContent=icon;
-  const title=document.createElementNS(NS,'title');title.textContent=`${city} · состояние инфраструктуры ${Math.round(avg)}% · повреждено объектов: ${bad}. Нажмите, чтобы открыть город и восстановление.`;
-  g.append(ring,glyph,title);
-  if(bad){const damage=document.createElementNS(NS,'text');damage.setAttribute('x','7');damage.setAttribute('y','-5');damage.setAttribute('text-anchor','start');damage.setAttribute('font-size','4.4');damage.setAttribute('font-weight','800');damage.setAttribute('fill',avg<40?'#ff7777':'#ffc56b');damage.setAttribute('stroke','#111923');damage.setAttribute('stroke-width','1.1');damage.setAttribute('paint-order','stroke');damage.textContent='!'+bad;g.appendChild(damage)}
-  if(WZ.w<GEO.W*.72){const label=document.createElementNS(NS,'text');label.setAttribute('y','10');label.setAttribute('text-anchor','middle');label.setAttribute('class','nova-city-label');label.textContent=city.length>18?city.slice(0,17)+'…':city;g.appendChild(label)}
-  layer.appendChild(g);
+  const assets=Array.isArray(r.assets)?r.assets:[],avg=assets.length?assets.reduce((v,a)=>v+(Number(a.condition)||0),0)/assets.length:100,bad=assets.filter(a=>(Number(a.condition)||0)<70).length;
+  const tw=ownTownsOf(ri),pk='o'+gr.id+'#'+tw.length;
+  if(!TWPOS[pk])TWPOS[pk]=townSpots(q.polys,q.cx,q.cy,Math.min(q.w,q.h)*.34,tw.length,gr.id);
+  mine[gr.id]=1;const names=tw.map(x=>x.name);
+  tw.forEach((t,i)=>{const p=TWPOS[pk][i]||[q.cx,q.cy];
+   items.push({id:gr.id+':'+i,x:p[0],y:p[1],cond:CitySat.townCond(avg,t.fate,(r.townHit||{})[t.name]),name:t.name,sub:r.name,pop:t.pop,cty:C.name,own:ri,main:i===0,bad,others:names.filter(x=>x!==t.name).join(', '),sz:.75+.5*Math.min(1,Math.log10(Math.max(1e4,t.pop)/1e4)/3)})});
  });
+ /* 2) все остальные страны: у каждой области свои города, состояние зависит от ударов по области в войне */
+ Object.values(GEO.c).forEach(C=>{
+  if(!C||!C.regs||!C.name)return;
+  const war=(S.wars||[]).find(x=>x.n===C.name),W0=wi(C.name),cpop=(Number(W0.pop)||5)*1e6;
+  C.regs.forEach(r=>{
+   if(mine[r.id]||!Number.isFinite(r.cx)||!Number.isFinite(r.cy))return;
+   let cond=100;
+   if(war){const n=String(r.n||''),n0=n.replace(/ \(.*\)/,''),d=(war.dmg||{})[n]||(war.dmg||{})[n0],e=(war.regEco||{})[n]||(war.regEco||{})[n0]||0;cond=100-Math.min(98,e*1.1+(d?d.infra*4+d.civ*6+d.mil*2:0))}
+   const rp=Math.max(2e4,cpop*(r.s||100/Math.max(1,C.regs.length))/100),key='f'+r.id+'#'+Math.round(Math.log10(rp)*4);
+   if(!TWC[key]){TWC[key]=CitySat.towns(r.id,r.n,rp,C.name,W0.cont,null);
+    let rad=Math.min(r.cell&&r.cell.length>2?Math.min(rbox(r.cell)[2]-rbox(r.cell)[0],rbox(r.cell)[3]-rbox(r.cell)[1]):12,(C.bb[2]-C.bb[0]),(C.bb[3]-C.bb[1]))*.28;
+    TWPOS[key]=townSpots(C.rings,r.cx,r.cy,rad,TWC[key].length,r.id)}
+   const tw=TWC[key];
+   tw.forEach((t,i)=>{const p=TWPOS[key][i];items.push({id:r.id+':'+i,x:p[0],y:p[1],cond:CitySat.townCond(cond,t.fate,0),name:t.name,sub:String(r.n||'').replace(/ \(.*\)/,'')||C.name,pop:t.pop,cty:C.name,sz:.75+.5*Math.min(1,Math.log10(Math.max(1e4,t.pop)/1e4)/3)})});
+  });
+ });
+ /* ранг в стране по числу жителей: чем дальше камера, тем меньше городов показываем */
+ const by={};items.forEach(c=>(by[c.cty]=by[c.cty]||[]).push(c));
+ Object.values(by).forEach(a=>{a.sort((p,q)=>(q.pop||0)-(p.pop||0));a.forEach((c,i)=>c.rk=i)});
+ CitySat.setItems(items);CitySat.refresh(svg,WZ,GEO.W);
 }
 function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=ownSig()+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',')+'|'+cityDamageSignature();if(WMAP.usig===sig)return;WMAP.usig=sig;
  if(!WMAP.el){WMAP.el={r:{},o:{}};svg.querySelectorAll('[data-r]').forEach(e=>WMAP.el.r[e.getAttribute('data-r')]=e);svg.querySelectorAll('[data-o]').forEach(e=>WMAP.el.o[e.getAttribute('data-o')]=e)}
@@ -285,14 +329,14 @@ function buildWorldNode(){const cl=[],body=[];Object.values(GEO.c).forEach(C=>{c
   if(cur.length>=2&&gs.pts.length>=2){gs.multi=true;gs.moved=999;const a0=c2(gs.pts[0],gs.pts[1]),a1=c2(cur[0],cur[1]),s=a1.d/a0.d,w1=V0.w/s,u1=r.width/w1,wx=V0.x+(a0.x-r.left)/u0,wy=V0.y+(a0.y-r.top)/u0;V1={w:w1,h:w1*asp(),x:wx-(a1.x-r.left)/u1,y:wy-(a1.y-r.top)/u1}}
   else{const dx=cur[0].x-gs.pts[0].x,dy=cur[0].y-gs.pts[0].y;gs.moved=Math.max(gs.moved,Math.abs(dx)+Math.abs(dy));if(gs.moved<=6)return;V1={w:V0.w,h:V0.h,x:V0.x-dx/u0,y:V0.y-dy/u0}}
   gs.V1=wzFit(V1);showT(V0,gs.V1,r);WMAP.busy=Date.now()+1500});
- const up=e=>{if(!ptr.has(e.pointerId))return;const tap=gs&&!gs.multi&&gs.moved<=6&&e.type==='pointerup';ptr.delete(e.pointerId);if(tap){const t=document.elementFromPoint(e.clientX,e.clientY),city=t&&t.closest&&t.closest('[data-city]'),r=t&&t.closest&&t.closest('[data-r]');gs=null;if(city&&window.NovaSystems&&NovaSystems.openCity){NovaSystems.openCity(Number(city.getAttribute('data-city')));return}if(r)H.cc(r.getAttribute('data-c'));return}
+ const up=e=>{if(!ptr.has(e.pointerId))return;const tap=gs&&!gs.multi&&gs.moved<=6&&e.type==='pointerup';ptr.delete(e.pointerId);if(tap){const t=document.elementFromPoint(e.clientX,e.clientY),city=t&&t.closest&&t.closest('[data-city]'),r=t&&t.closest&&t.closest('[data-r]');gs=null;if(city&&window.NovaSystems&&NovaSystems.openCity){NovaSystems.openCity(Number(city.getAttribute('data-city')));if(window.CitySat)CitySat.decorate(city.getAttribute('data-town'));return}const fcity=t&&t.closest&&t.closest('[data-fc]');if(fcity&&window.CitySat){gs=null;CitySat.tapForeign(fcity);return}if(r)H.cc(r.getAttribute('data-c'));return}
   commit();gs=ptr.size?startG():null};
  svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
  svg.addEventListener('wheel',e=>{e.preventDefault();H.wz(e.deltaY<0?'in':'out')},{passive:false});return n}
 let WZ={x:0,y:0,w:1000,h:575};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
 function wzFit(v){v.w=Math.max(40,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
-function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
+function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
 const hwz=m=>{if(!WMAP.node)return;if(m==='full'){WMAP.full=!WMAP.full;const sl=document.getElementById('wm-slot');if(sl)sl.classList.toggle('full',!!WMAP.full);document.body.style.overflow=WMAP.full?'hidden':'';const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';return wzApply()}if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
 function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted">Нажмите на любой регион: откроется страна с её областями. Синие регионы — ваши (и своя страна, и захваченное выглядят одинаково). Перетаскивайте и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}
 function mountWorldMap(){if(!document.getElementById('wm-slot'))return;wmLoad(ok=>{const sl=document.getElementById('wm-slot');if(!sl)return;if(!ok){sl.innerHTML='<p class="muted" style="padding:12px">Не удалось загрузить карту мира (нет интернета или библиотека заблокирована).</p>';return}
@@ -601,7 +645,7 @@ function monetaryTick(){
  if(S.antiInflationFund>0&&inf>9&&!atWar()){const use=Math.min(90,S.antiInflationFund);S.antiInflationFund-=use;S.inflation=Math.max(0,S.inflation-use*.0018)}
 }
 
-function monthTick(){if(S.campaignOver)return;const __g0=S.gdp;try{EconCore.begin(S)}catch(e){}darkTick();S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.lastInc=inc;S.lastExp=exp;S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{try{EconCore.debtService(S)}catch(e){S.debt=Math.max(0,S.debt-20)}S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}const regionalProductivity=S.regions.length?S.regions.reduce((a,r)=>a+(Number(r.productivity)||.75)*Math.max(1,r.pop||1),0)/S.regions.reduce((a,r)=>a+Math.max(1,r.pop||1),0):.75;S.regions.forEach(r=>{r.regionalGDP=Math.max(0,Math.round(S.gdp*(r.pop/Math.max(1,S.pop))*(Number(r.productivity)||.75)));r.productivity=clamp((Number(r.productivity)||.75)+(r.infra-50)/10000+(r.industry-50)/16000-(r.unrest/10000),.35,1.35)});S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)+(regionalProductivity-.75)*.0008));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}EconCore.stage(S,'diplomacy',()=>{if(window.ECODIP)ECODIP.tick(S)});EconCore.stage(S,'addons',()=>addonTick());EconCore.stage(S,'currency',()=>fxTick());EconCore.stage(S,'systemic',()=>{if(window.SystemicSim)SystemicSim.tick(S)});EconCore.stage(S,'novariaWorld',()=>{if(window.NovaSystems){NovaSystems.tick(S);if(S.aiEconomicGovernor)NovaSystems.aiPlan(S)}});EconCore.stage(S,'interdep',()=>{if(window.InterDep)InterDep.tickPlayer(S,atWar())});EconCore.stage(S,'warEcon',()=>warEconTick(__g0));try{const __pw=S.econ&&S.econ.war0;if(!atWar()&&__pw&&__pw.over&&!__pw.done){const __floor=__g0*1.003;if(S.gdp<__floor){S.gdp=__floor;__pw.supported=(__pw.supported||0)+1}}}catch(e){}try{EconCore.settle(S,__g0,atWar())}catch(e){console.error('EconCore.settle',e)}try{const __w=EconCore.explain(S,true);if(__w)log(__w)}catch(e){}log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
+function monthTick(){if(S.campaignOver)return;const __g0=S.gdp;try{EconCore.begin(S)}catch(e){}darkTick();try{townDecay()}catch(e){}S.month++;if(S.month>=12){S.month=0;S.year++}let inc=income(),exp=expenses();S.lastInc=inc;S.lastExp=exp;S.money+=inc-exp;if(S.money<0){S.debt+=Math.abs(S.money);S.money=0;S.stability=clamp(S.stability-1);S.inflation=clamp(S.inflation+.6,0,100)}else{try{EconCore.debtService(S)}catch(e){S.debt=Math.max(0,S.debt-20)}S.stability=clamp(S.stability+(S.money>4000?.12:(S.money>1000?0:-.15))+(66-S.stability)*.012)}const regionalProductivity=S.regions.length?S.regions.reduce((a,r)=>a+(Number(r.productivity)||.75)*Math.max(1,r.pop||1),0)/S.regions.reduce((a,r)=>a+Math.max(1,r.pop||1),0):.75;S.regions.forEach(r=>{r.regionalGDP=Math.max(0,Math.round(S.gdp*(r.pop/Math.max(1,S.pop))*(Number(r.productivity)||.75)));r.productivity=clamp((Number(r.productivity)||.75)+(r.infra-50)/10000+(r.industry-50)/16000-(r.unrest/10000),.35,1.35)});S.gdp=Math.max(100,S.gdp*(1+(S.tech/22000)*1.525/(1+S.gdp/80000)+(S.employment-90)/10000-(S.inflation/20000)+(regionalProductivity-.75)*.0008));S.pop=Math.max(100000,Math.round(S.pop*(1+(S.food-50)/1000000)));S.inflation=clamp(S.inflation+(S.money<1000?.3:-.15),0,100);S.food=clamp(S.food+(Math.random()*4-2)+(S.food<55?.5:0)-(S.war?2:0));S.fuel=clamp(S.fuel+(Math.random()*3-1.5)+(S.fuel<45?.4:0)-(S.war?3:0));S.energy=clamp(S.energy+(Math.random()*2-1));S.approval=clamp(S.approval+((S.money>3000?.1:-.2)+(S.inflation<10?.05:-.12))*difficulty().approval+(58-S.approval)*.02);S.legitimacy=clamp(S.legitimacy+(S.approval>50?.06:-.1)+(68-S.legitimacy)*.01);S.coupRisk=clamp(S.coupRisk+((S.stability<35?1.2:-.15)+(S.approval<25?.6:0))*difficulty().coup);S.regions.forEach(r=>{r.unrest=clamp(r.unrest+((S.stability<40?1:-.3)+(Math.random()-.5))*difficulty().unrest);r.loyalty=clamp(r.loyalty+(S.approval>50?.2:-.2));});if(S.war){S.ammo=clamp(S.ammo-2);S.equipment=clamp(S.equipment-.7);S.morale=clamp(S.morale-.4);S.threat=clamp(S.threat+1)}let my=S.parties.find(p=>p.name===S.playerParty);S.parties.forEach(p=>{let drift=(S.approval-50)*0.018+(S.stability-50)*0.008+(Math.random()-.5)*1.2;if(p.name===S.playerParty)p.support=clamp(p.support+drift*difficulty().playerDrift,2,75);else p.support=clamp(p.support-drift/(Math.max(1,S.parties.length-1))*difficulty().rivalPressure+(Math.random()-.5)*.7*difficulty().rivalPressure,2,75)});if(S.election>0)S.election--;if(S.election===0){runElection();if(S.campaignOver)return}if(S.coupRisk>85&&Math.random()<.08){S.stability=clamp(S.stability-15);S.coupRisk=25;log('Попытка переворота сорвана, правительство ослаблено!')}EconCore.stage(S,'diplomacy',()=>{if(window.ECODIP)ECODIP.tick(S)});EconCore.stage(S,'addons',()=>addonTick());EconCore.stage(S,'currency',()=>fxTick());EconCore.stage(S,'systemic',()=>{if(window.SystemicSim)SystemicSim.tick(S)});EconCore.stage(S,'novariaWorld',()=>{if(window.NovaSystems){NovaSystems.tick(S);if(S.aiEconomicGovernor)NovaSystems.aiPlan(S)}});EconCore.stage(S,'interdep',()=>{if(window.InterDep)InterDep.tickPlayer(S,atWar())});EconCore.stage(S,'warEcon',()=>warEconTick(__g0));try{const __pw=S.econ&&S.econ.war0;if(!atWar()&&__pw&&__pw.over&&!__pw.done){const __floor=__g0*1.003;if(S.gdp<__floor){S.gdp=__floor;__pw.supported=(__pw.supported||0)+1}}}catch(e){}try{EconCore.settle(S,__g0,atWar())}catch(e){console.error('EconCore.settle',e)}try{const __w=EconCore.explain(S,true);if(__w)log(__w)}catch(e){}log(`Завершён месяц. Бюджет: ${fmt(inc)} млн доходов, ${fmt(exp)} млн расходов.`);let mp=S.parties.find(p=>p.name===S.playerParty);S.history.push(snap());if(S.history.length>500)S.history=S.history.filter((_,i)=>i%2==0||i==S.history.length-1);save();render(true)}
 window.exportSave=()=>{
  try{
   const payload={...S,exportVersion:1,exportedAt:new Date().toISOString()};
@@ -927,7 +971,7 @@ function enemyStrikes(w,c){
   let caught=false;
   if(air){if(pool>0){pool-=act.decoy?1.2:1;caught=Math.random()<pI}}else caught=Math.random()<pI;
   if(caught){stopped++;if(window.PopAI)PopAI.hit(S,reg.name,t,.3*f);log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
-  hits++;shows.push({w:act.w,reg,down:false,f});if(window.PopAI)PopAI.hit(S,reg.name,t,f);
+  hits++;try{townStrike(reg,t,f)}catch(e){}shows.push({w:act.w,reg,down:false,f});if(window.PopAI)PopAI.hit(S,reg.name,t,f);
   let shift=0,r=0;const ES=myEcoStrike(w,t,f,reg);shows[shows.length-1].eco=ES.pct;
   if(t==='mil'){
    shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f*myLS());S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
