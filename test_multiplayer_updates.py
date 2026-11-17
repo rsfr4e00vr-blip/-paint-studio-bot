@@ -54,6 +54,21 @@ async def run_checks():
     assert order["preset"] == "pressure"
     assert order["air"] == "strategic" and order["troops"] == 12_345
 
+    # Infrastructure is now synchronized to the server, bounded, persisted in standings,
+    # and its damage reduces the multiplayer income modifier and welfare score.
+    await ns.on_report(room, a, {"rep": {"gdp": 42000, "money": 9000, "debt": 0, "stab": 68, "appr": 61,
+        "legit": 70, "trust": 70, "power": 100, "pop": 8200000, "infra": 40,
+        "infra_critical": 25, "infra_count": 60, "cities": 12}})
+    assert a.rep["infra"] == 40 and a.rep["infra_critical"] == 25
+    assert a.rep["infra_count"] == 60 and a.rep["cities"] == 12
+    damaged_mod = room.income_mod(a)
+    assert damaged_mod["infrastructure"] == -0.075
+    assert damaged_mod["total"] < room.income_mod(b)["total"]
+    assert a.pub()["infra"] == 40 and a.pub()["infra_count"] == 60
+    await ns.on_report(room, a, {"rep": {"infra": 999, "infra_critical": -20, "infra_count": 9999999, "cities": -4}})
+    assert a.rep["infra"] == 100 and a.rep["infra_critical"] == 0
+    assert a.rep["infra_count"] == 100000 and a.rep["cities"] == 0
+
     # Tick carries shared crisis, per-player responses and embassy state.
     await room.tick()
     tick = next(x for x in ws_a.messages if x.get("type") == "tick")

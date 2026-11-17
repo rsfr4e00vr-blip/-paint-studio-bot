@@ -1,8 +1,8 @@
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const html=fs.readFileSync(__dirname+'/game.html','utf8');
 const app=fs.readFileSync(__dirname+'/app.py','utf8');
-assert(html.includes('src="/novaria_worldsystems.js?v=3"'),'game page must load infrastructure module');
-assert(html.includes('/novaria_worldsystems.css?v=3'),'game page must load responsive styles');
+assert(html.includes('src="/novaria_worldsystems.js?v=4"'),'game page must load infrastructure module');
+assert(html.includes('/novaria_worldsystems.css?v=4'),'game page must load responsive styles');
 assert(app.includes('@app.get("/novaria_worldsystems.js")'),'server must expose infrastructure module');
 assert(app.includes('@app.get("/novaria_worldsystems.css")'),'server must expose infrastructure styles');
 const ctx={window:{},console};vm.createContext(ctx);vm.runInContext(fs.readFileSync(__dirname+'/novaria_worldsystems.js','utf8'),ctx);
