@@ -14,6 +14,12 @@ const SPEC={
  fighter:{kind:'air',name:'Истребители',icon:'✈️',spd:24,rg:16,px:28,range:170,cost:{money:950}},
  bomber:{kind:'air',name:'Бомбардировщики',icon:'🛩️',spd:17,rg:7,px:32,range:230,cost:{money:1450}}
 };
+/* цена части для ИИ-страны: казна (m), сталь/топливо/энергия (s,f,e — запасы 0–100), личный состав (man) */
+const ECOST={
+ inf:{m:100,s:2,f:1,e:1,man:.8}, tank:{m:300,s:5,f:4,e:3,man:.5},
+ destroyer:{m:950,s:9,f:6,e:4}, submarine:{m:1150,s:10,f:6,e:5},
+ fighter:{m:475,s:5,f:5,e:4}, bomber:{m:725,s:7,f:6,e:5}
+};
 /* урон в секунду: DM[кто][по кому] */
 const DM={
  inf:{land:5,sea:0,air:.6}, tank:{land:8,sea:0,air:0},
@@ -204,7 +210,7 @@ function aiThink(){
  const alive=new Set(wars.map(w=>w.n));
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
  wars.forEach(w=>{
-  const mine=MM.units.filter(u=>u.own===w.n),pw=Math.max(20,Number(w.enPow0)||50);
+  const mine=MM.units.filter(u=>u.own===w.n),nat=env.enemyNation&&env.enemyNation(w.n),pw=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
   const cap={land:2+Math.floor(pw/28),sea:1+(pw>55?1:0),air:2+(pw>60?1:0)};
   const cnt=k=>mine.filter(u=>kindOf(u)===k).length;
   MM.spawnT=MM.spawnT||{};MM.spawnT[w.n]=(MM.spawnT[w.n]||0)-1.5;
@@ -212,11 +218,32 @@ function aiThink(){
    const sp=env.enemySpawn&&env.enemySpawn(w.n);
    if(sp){
     const defi={land:(cap.land-cnt('land'))/cap.land,sea:(cap.sea-cnt('sea'))/cap.sea,air:(cap.air-cnt('air'))/cap.air};
-    const pick=Object.keys(defi).filter(k=>defi[k]>0).sort((x,y)=>defi[y]-defi[x]||(x==='sea'?-1:1))[0]||'';
-    if(pick==='land'){const su=Math.random()<.6?'inf':'tank';const q=snap('land',sp.x+rnd(-6,6),sp.y+rnd(-6,6),8);if(q>=0){const c=cellPt(q);mk(w.n,su,c[0],c[1],{name:'Армия противника',base:null})}}
-    else if(pick==='sea'){const q=snap('sea',sp.x,sp.y,45);if(q>=0){const c=cellPt(q);mk(w.n,Math.random()<.4?'submarine':'destroyer',c[0],c[1],{name:'Флот противника'})}}
-    else if(pick==='air'){const su=cnt('air')%2?'bomber':'fighter';const b={x:sp.x,y:sp.y,own:w.n,px:sp.x,py:sp.y};mk(w.n,su,sp.x,sp.y,{name:'Авиация противника',base:b})}
-    MM.spawnT[w.n]=22}
+    /* перебираем роды войск по нехватке; если для одного нет места (нет выхода к морю), берём следующий */
+    let pick='',sub=null,nm='',spot=null;
+    const cands=Object.keys(defi).filter(k=>defi[k]>0).sort((x,y)=>defi[y]-defi[x]||(x==='sea'?-1:1));
+    for(const k of cands){
+     if(k==='land'){const q=snap('land',sp.x+rnd(-6,6),sp.y+rnd(-6,6),8);if(q>=0)spot=cellPt(q)}
+     else if(k==='sea'){const q=snap('sea',sp.x,sp.y,45);if(q>=0)spot=cellPt(q)}
+     else spot=[sp.x,sp.y];
+     if(spot){pick=k;break}}
+    if(pick==='land'){sub=Math.random()<.6?'inf':'tank';nm='Армия противника'}
+    else if(pick==='sea'){sub=Math.random()<.4?'submarine':'destroyer';nm='Флот противника'}
+    else if(pick==='air'){sub=cnt('air')%2?'bomber':'fighter';nm='Авиация противника'}
+    /* расходы: враг платит казной, сталью, топливом, энергией и людьми, как игрок */
+    let paid=true,why='';
+    if(sub&&nat){const c=ECOST[sub],rs=nat.rs&&nat.rs.st;
+     if((Number(nat.treasury)||0)<c.m)why='казна пуста';
+     else if(rs&&(rs.steel<c.s||rs.fuel<c.f||rs.energy<c.e))why=rs.steel<c.s?'нет стали':rs.fuel<c.f?'нет топлива':'нет энергии';
+     else if(c.man&&(Number(nat.manpower)||0)<c.man+1)why='нет людей';
+     if(why)paid=false;
+     else{nat.treasury-=c.m;if(rs){rs.steel-=c.s;rs.fuel-=c.f;rs.energy-=c.e}if(c.man)nat.manpower-=c.man}}
+    if(sub&&!paid){MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog[w.n]||-999)>90){MM.shortLog[w.n]=MM.t;say('📉 '+w.n+' не может пополнить '+(pick==='sea'?'флот':pick==='air'?'авиацию':'армию')+': '+why)}}
+    else if(sub){
+     if(pick==='air'){const b={x:sp.x,y:sp.y,own:w.n,px:sp.x,py:sp.y};mk(w.n,sub,spot[0],spot[1],{name:nm,base:b})}
+     else mk(w.n,sub,spot[0],spot[1],{name:nm,base:null})}
+    /* промышленность определяет темп: слабая индустрия — медленнее */
+    const ind=nat&&Number(nat.industry)>0?Math.max(.4,Math.min(3,Number(nat.industry))):1;
+    MM.spawnT[w.n]=(paid?22:30)/ind}
   }
  });
  /* поведение */

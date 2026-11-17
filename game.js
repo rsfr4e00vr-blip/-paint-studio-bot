@@ -4458,6 +4458,7 @@ window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
   blockadeTarget(x,y){let best=null,bd=28*28;for(const C of Object.values(GEO.c)){const w=(S.wars||[]).find(z=>z.n===C.name&&!z.won);if(!w)continue;for(const r of C.regs||[]){if(!Number.isFinite(r.cx)||!Number.isFinite(r.cy))continue;const d=(r.cx-x)**2+(r.cy-y)**2;if(d<bd){bd=d;best={id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),country:C.name,x:r.cx,y:r.cy,enemyWar:true}}}}return best},
   blockadeRegion(ra,u){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.blockade=w.blockade||{};w.blockade[ra.id]=Math.min(100,(Number(w.blockade[ra.id])||0)+1);w.blockadePower=Math.min(100,(Number(w.blockadePower)||0)+.35);w.blockadeLast=ra.name;w.p=Math.min(100,(Number(w.p)||50)+.12);WMAP.usig=''},
   enemyRaid(ra){S.stability=clamp(S.stability-1.5);S.approval=clamp(S.approval-1);log('⚠️ Противник занял область «'+ra.name+'».');save()},
+  enemyNation(name){const W=S.aiWorld;return W&&Array.isArray(W.nations)?(W.nations.find(x=>x.name===name)||null):null},
   enemySpawn(name){let C=null;try{C=GEO.c[wi(name).iso]}catch(e){}const rs=C&&(C.regs||[]).filter(q=>Number.isFinite(q.cx));if(!rs||!rs.length)return null;const r=rs[Math.floor(Math.random()*rs.length)];return{x:r.cx,y:r.cy}},
   lostUnit(u){if(u.pid&&Array.isArray(S.militaryUnits))S.militaryUnits=S.militaryUnits.filter(x=>x.id!==u.pid)}}}};
 
