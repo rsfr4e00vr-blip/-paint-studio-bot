@@ -168,3 +168,7 @@ input[type=range]{min-height:34px;accent-color:var(--gold)}
 /* Country labels follow changing territory ownership. */
 .territory-country-label{font:700 7px/1 system-ui,sans-serif;letter-spacing:.2px;fill:#fff;paint-order:stroke;stroke:#07111c;stroke-width:2px;stroke-linejoin:round;opacity:.94;vector-effect:non-scaling-stroke}
 .wmnode svg.far #territory-labels{display:none}
+
+/* Карта мира: компактные кнопки зума, чтобы колонка не вылезала за карту на телефоне */
+.wzoom{display:flex;flex-direction:column;gap:4px;padding:4px!important;max-height:calc(100% - 12px)}
+.wzoom button{width:34px!important;height:34px!important;min-height:34px!important;padding:0!important;border-radius:9px!important;font-size:17px!important;line-height:1}

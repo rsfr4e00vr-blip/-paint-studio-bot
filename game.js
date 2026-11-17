@@ -177,13 +177,13 @@ function regClip(C,r){
  let polys=[];
  if(r.cell&&r.cell.length>2){const cb=rbox(r.cell);
   C.polys.forEach(p=>p.forEach(ring=>{const b=rbox(ring);if(b[2]<cb[0]||b[0]>cb[2]||b[3]<cb[1]||b[1]>cb[3])return;const o=clipRing(ring,r.cell);if(o.length>2)polys.push(o)}))}
- if(!polys.length)polys=[].concat(...C.polys);
+ let fb=false;if(!polys.length){polys=[].concat(...C.polys);fb=!!(r.cell&&r.cell.length>2)}
  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;polys.forEach(rg=>{const b=rbox(rg);x0=Math.min(x0,b[0]);y0=Math.min(y0,b[1]);x1=Math.max(x1,b[2]);y1=Math.max(y1,b[3])});
  const w=x1-x0,h=y1-y0,N=14,pts=[];let sx=0,sy=0;
  for(let i=0;i<N;i++)for(let j=0;j<N;j++){const x=x0+(i+.5)*w/N,y=y0+(j+.5)*h/N;if(inside(x,y,polys)){pts.push([x,y]);sx+=x;sy+=y}}
  let cx=(x0+x1)/2,cy=(y0+y1)/2;
  if(pts.length){cx=sx/pts.length;cy=sy/pts.length;if(!inside(cx,cy,polys)){let bd=1e18;pts.forEach(q=>{const d=(q[0]-cx)**2+(q[1]-cy)**2;if(d<bd){bd=d;sx=q[0];sy=q[1]}});cx=sx;cy=sy}}
- return r._k={polys,d:polys.map(ringD).join(''),x0,y0,x1,y1,w,h,cx,cy}}
+ return r._k={polys,d:polys.map(ringD).join(''),x0,y0,x1,y1,w,h,cx,cy,fb}}
 function geoOf(el){const id=el&&el.getAttribute&&el.getAttribute('data-r');if(!id)return null;const i=id.lastIndexOf(':'),C=GEO.c[id.slice(0,i)];if(!C)return null;const r=C.regs[+id.slice(i+1)];return r&&r.id===id?regClip(C,r):null}
 function regsOf(name){const W=wi(name);const C=GEO.c[W.iso];return C&&C.regs.length&&GEO.st==='ready'?C.regs:null}
 /* --- раскраска --- */
@@ -194,16 +194,42 @@ function regCount(n){const r=regsOf(n);return r?r.length:(WORLD.REGS[n]||WORLD.G
 function quota(n,w){const tot=regCount(n),c=rel(n)||{},rg=regsOf(n),free=rg?rg.filter(x=>!taken()[x.id]).length:Math.max(0,tot-(c.regTaken||[]).length),p=w.won?100:w.p,share=Math.max(0,(p-60)/40);return{tot,free,p,q:Math.min(free,Math.max(1,Math.round(tot*share*.6),(w.occ||[]).length)+(w.goal==='territory'&&!w.def?1:0))}}
 function baseCol(iso,i){let h=0;for(const ch of iso)h=(h*31+ch.charCodeAt(0))%360;return `hsl(${h},38%,${33+(i%4)*3}%)`}
 function mpRegionOwner(C,r){const shared=S.mpTerritories||{},key=C.name+'|'+r.n;if(shared[key])return shared[key];const cap=(S.captured||[]).find(x=>x&&x.from===C.name&&(x.name===r.n||x.name===r.n+' ('+C.name+')'));if(cap)return S.me||S.name||'Игрок';return null}
-function regionOwner(C,r){const mp=mpRegionOwner(C,r);if(mp)return mp;const nm=C.name,rc=nm&&S.relations.find(x=>x.name===nm),aiOwner=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm];if(aiOwner)return aiOwner;if(rc&&rc.self)return S.me||S.name||'Игрок';if(taken()[r.id]||(rc&&rc.annexed))return S.me||S.name||'Игрок';if(rc&&isVas(nm))return 'Вассал: '+nm;return nm}
-function ownerColor(owner,C,i){if(owner==='Вассал: '+C.name)return VAS;if(owner===(S.me||S.name||'Игрок'))return MYC;const w=WORLD.map[owner];return baseCol(w?(w.iso||w.name):owner,i)}
-function regFill(C,r,i){const owner=regionOwner(C,r);return owner===C.name?baseCol(C.iso,i):ownerColor(owner,C,i)}
-function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).length+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',')+'|'+(S.me||'')+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.mpTerritories||{});if(WMAP.usig===sig)return;WMAP.usig=sig;
+function myName(){return S.me||S.name||'Игрок'}
+const isMe=o=>!!o&&o===myName();
+/* Единый источник правды: кто сейчас владеет областью. Им пользуются карта мира, «Моя держава» и окно страны.
+   Порядок: общий список мультиплеера → моя страна → области, которые я захватил → ИИ-владелец → аннексия → вассал → исходная страна. */
+function regionOwner(C,r){const mp=mpRegionOwner(C,r);if(mp)return mp;const nm=C.name,me=myName(),rc=nm&&S.relations.find(x=>x.name===nm),aiOwner=S.aiWorld&&S.aiWorld.owners&&S.aiWorld.owners[nm];
+ if(nm&&(nm===me||(rc&&rc.self)))return me;
+ if(taken()[r.id])return me;
+ if(aiOwner)return aiOwner;
+ if(rc&&rc.annexed)return me;
+ if(rc&&isVas(nm))return 'Вассал: '+nm;
+ return nm}
+function ownerColor(owner,C,i){if(owner==='Вассал: '+C.name)return VAS;if(isMe(owner))return MYC;const w=WORLD.map[owner];return baseCol(w?(w.iso||w.name):owner,i)}
+function regFill(C,r,i){const owner=regionOwner(C,r);if(isMe(owner))return MYC;return owner===C.name?baseCol(C.iso,i):ownerColor(owner,C,i)}
+const ownSig=()=>JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).join(',')+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+myName()+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.mpTerritories||{});
+function updateWorld(){const svg=WMAP.node;if(!svg)return;const sig=ownSig()+'|'+S.wars.map(w=>w.n+':'+(w.occ||[]).join('+')).join(',');if(WMAP.usig===sig)return;WMAP.usig=sig;
  if(!WMAP.el){WMAP.el={r:{},o:{}};svg.querySelectorAll('[data-r]').forEach(e=>WMAP.el.r[e.getAttribute('data-r')]=e);svg.querySelectorAll('[data-o]').forEach(e=>WMAP.el.o[e.getAttribute('data-o')]=e)}
  Object.values(GEO.c).forEach(C=>{C.regs.forEach((r,i)=>{const e=WMAP.el.r[r.id];if(e){e.setAttribute('fill',regFill(C,r,i));const changed=regionOwner(C,r)!==C.name;e.setAttribute('stroke',changed?'#f5d889':'rgba(0,0,0,.38)');e.setAttribute('stroke-width',changed?'1.15':'.35')}});const o=WMAP.el.o[C.iso];if(o){const w=C.name&&S.wars.some(x=>x.n===C.name);o.setAttribute('stroke',w?'#ff5c66':'#0b1218');o.setAttribute('stroke-width',w?'1.6':'.7');o.setAttribute('class',w?'warpulse':'')}});
  drawOcc(svg);drawTerritoryLabels(svg)}
+/* Подписи территорий: у каждого владельца отдельная подпись на каждом связном куске земли.
+   Подпись стоит внутри самих областей (а не в центре страны) и пересчитывается при каждой смене границ. */
+function ownerClusters(items,eps){const n=items.length,p=items.map((_,i)=>i),f=i=>{while(p[i]!==i){p[i]=p[p[i]];i=p[i]}return i};
+ for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){const a=items[i].q,b=items[j].q;if(a.x0<=b.x1+eps&&b.x0<=a.x1+eps&&a.y0<=b.y1+eps&&b.y0<=a.y1+eps){const x=f(i),y=f(j);if(x!==y)p[x]=y}}
+ const m={};items.forEach((it,i)=>{const k=f(i);(m[k]||(m[k]=[])).push(it)});return Object.values(m)}
+function clusterSpot(g){let wt=0,x=0,y=0,bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
+ g.forEach(v=>{const q=v.q,a=Math.max(.5,q.w*q.h);wt+=a;x+=q.cx*a;y+=q.cy*a;bx0=Math.min(bx0,q.x0);by0=Math.min(by0,q.y0);bx1=Math.max(bx1,q.x1);by1=Math.max(by1,q.y1)});
+ x/=wt;y/=wt;
+ if(!g.some(v=>inside(x,y,v.q.polys))){let bd=1e18,nx=x,ny=y;g.forEach(v=>{const d=(v.q.cx-x)**2+(v.q.cy-y)**2;if(d<bd){bd=d;nx=v.q.cx;ny=v.q.cy}});x=nx;y=ny}
+ return{x,y,w:bx1-bx0,h:by1-by0}}
+const ownerLabel=o=>isMe(o)?myName():String(o).startsWith('Вассал: ')?String(o).slice(8):String(o);
 function drawTerritoryLabels(svg){
  const NS='http://www.w3.org/2000/svg';let g=svg.querySelector('#territory-labels');if(!g){g=document.createElementNS(NS,'g');g.id='territory-labels';g.setAttribute('pointer-events','none');svg.appendChild(g)}g.replaceChildren();
- Object.values(GEO.c).forEach(C=>{const groups={};(C.regs||[]).forEach(r=>{if(!r.d)return;const q=regClip(C,r);if(!q||!Number.isFinite(q.cx)||!Number.isFinite(q.cy))return;const owner=regionOwner(C,r);(groups[owner]||(groups[owner]=[])).push({r,q})});Object.entries(groups).forEach(([owner,regs])=>{if(!regs.length)return;let weight=0,x=0,y=0;regs.forEach(v=>{const a=Math.max(1,+v.r.s||v.q.w*v.q.h||1);weight+=a;x+=v.q.cx*a;y+=v.q.cy*a});const label=owner.startsWith('Вассал: ')?owner.slice(8):owner;const t=document.createElementNS(NS,'text');t.setAttribute('x',x/weight);t.setAttribute('y',y/weight);t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','central');t.setAttribute('class','territory-country-label');t.textContent=label.length>18?label.slice(0,17)+'…':label;g.appendChild(t)})});
+ const groups={};
+ Object.values(GEO.c).forEach(C=>{(C.regs||[]).forEach(r=>{if(!r.d)return;const q=regClip(C,r);if(!q||q.fb||!Number.isFinite(q.cx)||!Number.isFinite(q.cy))return;const o=regionOwner(C,r);(groups[o]||(groups[o]=[])).push({C,r,q})})});
+ Object.entries(groups).forEach(([owner,items])=>{const label=ownerLabel(owner);if(!label)return;
+  ownerClusters(items,1.2).forEach(cl=>{const sp=clusterSpot(cl),txt=label.length>18?label.slice(0,17)+'…':label,fs=Math.max(2.4,Math.min(9,sp.w/(txt.length*.62)));
+   const t=document.createElementNS(NS,'text');t.setAttribute('x',sp.x);t.setAttribute('y',sp.y);t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','central');t.setAttribute('class','territory-country-label');t.setAttribute('style','font-size:'+fs.toFixed(2)+'px');t.textContent=txt;g.appendChild(t)})})
 }
 function drawOcc(svg){
  const NS='http://www.w3.org/2000/svg',ids=[].concat(...S.wars.map(w=>w.occ||[]));
@@ -279,8 +305,8 @@ function pickHead(){const w=S.wars.find(x=>x.n===CC.war);if(!w)return '';const Q
 function ccDraw(){const C=GEO.c[CC.iso];if(!C||!C.name){return}const nm=C.name,i=S.relations.findIndex(r=>r.name===nm),r=S.relations[i]||{},W=wi(nm),atWar=S.wars.some(w=>w.n===nm),j=S.just[nm],tk=taken();
  const BB=C.vb||C.bb,pad=14,bw=BB[2]-BB[0],bh=BB[3]-BB[1],vb=`${BB[0]-pad} ${BB[1]-pad} ${bw+2*pad} ${bh+2*pad}`,fs=Math.max(bw,bh*1.5)/(C.regs.length>24?58:C.regs.length>14?44:30),bigR=labelSet(C.regs,fs);
  const reg=C.regs.some(x=>x.d)?C.regs:[{id:C.iso+':0',n:nm,s:100,res:W.res,d:C.d,cx:(C.bb[0]+C.bb[2])/2,cy:(C.bb[1]+C.bb[3])/2}];
- const svg=`<svg viewBox="${vb}" style="width:100%;max-height:46vh;background:#0c1a26;border-radius:12px"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=tk[x.id]||r.annexed,free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id];return `<path d="${x.d}" fill="${sel?'#ffd34d':mine?MYC:isVas(nm)?VAS:baseCol(C.iso,k)}" stroke="#0b1218" stroke-width="${fs/14}" ${free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:''}><title>${x.n}</title></path>`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${fs/9}" stroke-linejoin="round" style="pointer-events:none"/>${reg.length>1?reg.filter(x=>bigR.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px;pointer-events:none">${x.n.replace(/ \(.*\)/,'').slice(0,22)}</text>`).join(''):''}</svg>`;
- const rows=reg.map(x=>{const mine=tk[x.id]||r.annexed,pop=(W.pop||0)*x.s/100,ps=pop>=1?pop.toFixed(1):(pop*1000).toFixed(0)+' тыс.';return `<div class="mini"><b>${mine?'🏴':'🗺'} ${x.n}</b><br>${x.s.toFixed(0)}% страны · ${pop>=1?ps+' млн':ps} · ${resIcons(x.res)}<br>${mine?'<small class="muted">Под вашим контролем</small>':CC.pick?`<button class="${CC.sel&&CC.sel[x.id]?'good':'danger'}" onclick="H.take('${x.id}')">${CC.sel&&CC.sel[x.id]?'✔ Выбрана (снять)':'Выбрать область'}</button>`:'<small class="muted">Свободен</small>'}</div>`}).join('');
+ const svg=`<svg viewBox="${vb}" style="width:100%;max-height:46vh;background:#0c1a26;border-radius:12px"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=tk[x.id]||r.annexed||isMe(regionOwner(C,x)),free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id];return `<path d="${x.d}" fill="${sel?'#ffd34d':mine?MYC:isVas(nm)?VAS:baseCol(C.iso,k)}" stroke="#0b1218" stroke-width="${fs/14}" ${free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:''}><title>${x.n}</title></path>`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${fs/9}" stroke-linejoin="round" style="pointer-events:none"/>${reg.length>1?reg.filter(x=>bigR.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px;pointer-events:none">${x.n.replace(/ \(.*\)/,'').slice(0,22)}</text>`).join(''):''}</svg>`;
+ const rows=reg.map(x=>{const mine=tk[x.id]||r.annexed||isMe(regionOwner(C,x)),pop=(W.pop||0)*x.s/100,ps=pop>=1?pop.toFixed(1):(pop*1000).toFixed(0)+' тыс.';return `<div class="mini"><b>${mine?'🏴':'🗺'} ${x.n}</b><br>${x.s.toFixed(0)}% страны · ${pop>=1?ps+' млн':ps} · ${resIcons(x.res)}<br>${mine?'<small class="muted">Под вашим контролем</small>':CC.pick?`<button class="${CC.sel&&CC.sel[x.id]?'good':'danger'}" onclick="H.take('${x.id}')">${CC.sel&&CC.sel[x.id]?'✔ Выбрана (снять)':'Выбрать область'}</button>`:'<small class="muted">Свободен</small>'}</div>`}).join('');
  let acts='';if(r.self)acts='<span class="muted">🏠 Это ваше государство</span>';else if(!CC.pick){const prog=(S.relPrograms||{})[nm];acts=(prog?`<span class="muted">🤝 Программа активна: ещё ${prog.monthsLeft} мес.</span>`:`<button class="primary" onclick="H.relProgram(${i});ccDraw()">🤝 Улучшать отношения 4 года · 40 ⭐</button> `)+warCauseControl(i,r,atWar,j);}
  const html=`<div class="ccbox"><button class="ccx" onclick="H.ccClose()">✕</button><h3>${nm}</h3><p class="muted">${CONTN[W.cont]||''} · ${r.trait||''}${r.annexed?' · <b>аннексирована</b>':''}</p>${CC.pick?pickHead():`<p>${mood(r.value||0)} · мощь ${r.power||'—'} · население ${W.pop>=1?W.pop.toFixed(W.pop>=10?0:1)+' млн':Math.round((W.pop||0)*1000)+' тыс.'}</p>`}${svg}<div class="actions" style="margin:8px 0">${acts}</div><div class="cards">${rows}</div></div>`;
  let m=document.getElementById('ccm');if(!m){m=document.createElement('div');m.id='ccm';m.className='ccm';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)H.ccClose()})}m.innerHTML=html}
@@ -306,17 +332,29 @@ function cmSvg(){if(S.me&&S.me!=='Новария')return cmGeneric();const c=cmB
  return `<svg class="hoimap" viewBox="0 0 ${c.W} ${c.H}"><defs><clipPath id="ukc"><path d="${c.d}"/></clipPath></defs><g clip-path="url(#ukc)">${P}</g><path d="${c.d}" fill="none" stroke="#e8d8a0" stroke-width="2.2" stroke-linejoin="round"/>${T}<circle cx="${c.cap[0]}" cy="${c.cap[1]}" r="6" fill="#d9a62e" stroke="#101418" stroke-width="2"><title>Столица</title></circle><text x="14" y="${c.H-14}" class="maptxt2" style="fill:#e8d8a0;font-size:14px">${nc?`Захвачено: ${nc} (см. карту мира и список ниже)`:'Цвет области — лояльность'}</text></svg>`}
 setTimeout(()=>wmLoad(()=>{}),300);setTimeout(()=>{try{if(!localStorage.getItem('novariaSave')&&!window.__NG_MP)H.chooser()}catch(e){}},700);
 function mountCountryMap(){wmLoad(ok=>{if(!ok)return;const old=document.querySelector('svg.hoimap');if(!old)return;let s=null;try{s=cmSvg()}catch(e){}if(!s)return;const t=document.createElement('div');t.innerHTML=s;old.replaceWith(t.firstChild)})}
-function empireRows(){const o=[];Object.values(GEO.c).forEach(C=>{if(!C.name)return;const rc=S.relations.find(x=>x.name===C.name);let k=null;if(rc&&rc.self)k='me';else if((rc&&rc.annexed)||(S.captured||[]).some(z=>z.full&&z.from===C.name))k='ann';else if(C.regs.some(r=>taken()[r.id])||(S.captured||[]).some(z=>z.from===C.name))k='part';else if(isVas(C.name))k='vas';if(k)o.push([C,k])});return o}
-function empireSvg(){const rows=empireRows();if(!rows.length)return '<p class="muted">Своя вымышленная страна не лежит на карте мира. Когда захватите области или сделаете страну вассалом, они появятся здесь.</p>';let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;rows.forEach(([C])=>{const b=C.vb||C.bb;x0=Math.min(x0,b[0]);y0=Math.min(y0,b[1]);x1=Math.max(x1,b[2]);y1=Math.max(y1,b[3])});const pw=Math.max(40,(x1-x0)*.12),ph=Math.max(25,(y1-y0)*.12);x0-=pw;x1+=pw;y0-=ph;y1+=ph;const sw=(x1-x0)/900,fs=(x1-x0)/38;let P='',T='',nA=0,nV=0,nC=0;
- Object.values(GEO.c).forEach(C=>{const b=C.bb;if(!b||b[2]<x0||b[0]>x1||b[3]<y0||b[1]>y1)return;const hit=rows.find(r=>r[0]===C);if(!hit){P+=`<path d="${C.d}" fill="#1b2733" stroke="#0b1218" stroke-width="${sw}"/>`;return}const k=hit[1];
-  const cols=C.regs.map((r,i)=>{const rn=r.n&&r.n.replace(/ \(.*\)/,'');const captured=(S.captured||[]).some(z=>z.from===C.name&&(z.full||String(z.name||'').replace(/^Земли /,'').replace(/ \(.*\)/,'')===rn));return k==='me'||k==='ann'?MYC:k==='vas'?VAS:(taken()[r.id]||captured)?MYC:'#26323f'});
-  if(C.regs.some(r=>r.d))P+=`<g clip-path="url(#ec-${C.iso})"><defs><clipPath id="ec-${C.iso}"><path d="${C.d}"/></clipPath></defs>${C.regs.map((r,i)=>r.d?`<path d="${r.d}" fill="${cols[i]}" stroke="rgba(0,0,0,.35)" stroke-width="${sw*.5}"><title>${r.n.replace(/ \(.*\)/,'')}</title></path>`:'').join('')}</g>`;else P+=`<path d="${C.d}" fill="${cols[0]}"/>`;
-  P+=`<path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${sw*1.3}" stroke-linejoin="round"/>`;
-  const n=C.regs.filter(r=>k==='me'||k==='ann'||k==='vas'||taken()[r.id]).length;if(k==='ann')nC++;if(k==='vas'){nV+=C.regs.length}if(k==='part'||k==='ann')nA+=k==='ann'?C.regs.length:n;
-  if(k!=='me'){const bb=C.vb||C.bb;T+=`<text x="${(bb[0]+bb[2])/2}" y="${(bb[1]+bb[3])/2}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px">${C.name.slice(0,16)}${k==='vas'?' 👑':''}</text>`}});
- return `<svg viewBox="${x0} ${y0} ${x1-x0} ${y1-y0}" style="width:100%;max-height:50vh;background:#0c1a26;border-radius:12px">${P}${T}</svg><div class="maplegend"><span><i style="background:${MYC}"></i>моя страна и захваченные области (${nA})</span><span><i style="background:${VAS}"></i>вассалы (${nV} обл.)</span></div>`}
+function empireSvg(){
+ const me=myName(),own=[],rowIso={};
+ Object.values(GEO.c).forEach(C=>{if(!C.name)return;C.regs.forEach((r,i)=>{const o=regionOwner(C,r),vas=String(o).startsWith('Вассал: ');if(isMe(o)||vas){own.push({C,r,i,o,vas,q:regClip(C,r)});rowIso[C.iso]=1}})});
+ const shown=own.filter(v=>!v.q.fb);
+ if(!own.length)return '<p class="muted">Своя вымышленная страна не лежит на карте мира. Когда захватите области или сделаете страну вассалом, они появятся здесь.</p>';
+ let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;(shown.length?shown:own).forEach(v=>{const q=v.q;x0=Math.min(x0,q.x0);y0=Math.min(y0,q.y0);x1=Math.max(x1,q.x1);y1=Math.max(y1,q.y1)});
+ const pw=Math.max(30,(x1-x0)*.1),ph=Math.max(18,(y1-y0)*.1);x0-=pw;x1+=pw;y0-=ph;y1+=ph;
+ const sw=(x1-x0)/900,fs0=(x1-x0)/38,esc2=v=>String(v).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+ let P='',T='',nA=0,nV=0;const rest={};
+ Object.values(GEO.c).forEach(C=>{const b=C.bb;if(!b||b[2]<x0||b[0]>x1||b[3]<y0||b[1]>y1)return;
+  if(!rowIso[C.iso]){P+=`<path d="${C.d}" fill="#1b2733" stroke="#0b1218" stroke-width="${sw}"/>`;return}
+  C.regs.forEach((r,i)=>{const o=regionOwner(C,r),q=regClip(C,r),vas=String(o).startsWith('Вассал: '),mine=isMe(o);if(mine&&C.name!==me)nA++;if(vas)nV++;if(!q||!q.d||q.fb)return;
+   P+=`<path d="${q.d}" fill-rule="evenodd" fill="${mine?MYC:vas?VAS:'#26323f'}" stroke="rgba(0,0,0,.35)" stroke-width="${sw*.5}"><title>${esc2((r.n||C.name).replace(/ \(.*\)/,''))}${mine?' — '+esc2(me):vas?' — вассал':' — '+esc2(ownerLabel(o))}</title></path>`;
+   if(!mine&&!vas&&q.cx>x0&&q.cx<x1&&q.cy>y0&&q.cy<y1)(rest[o]||(rest[o]=[])).push({C,r,q})});
+  P+=`<path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${sw*1.3}" stroke-linejoin="round" pointer-events="none"/>`});
+ const lab=(txt,sp)=>{const t=txt.length>18?txt.slice(0,17)+'…':txt,f=Math.max(fs0*.45,Math.min(fs0,sp.w/(t.length*.62)));return `<text x="${sp.x}" y="${sp.y}" text-anchor="middle" dominant-baseline="central" style="font-size:${f}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${f/5}px;pointer-events:none">${esc2(t)}</text>`};
+ const mineItems=shown.filter(v=>!v.vas),vasByC={};shown.filter(v=>v.vas).forEach(v=>(vasByC[v.C.iso]||(vasByC[v.C.iso]=[])).push(v));
+ ownerClusters(mineItems,1.2).forEach(cl=>{T+=lab(me,clusterSpot(cl))});
+ Object.values(vasByC).forEach(a=>ownerClusters(a,1.2).forEach(cl=>{T+=lab(a[0].C.name+' 👑',clusterSpot(cl))}));
+ Object.entries(rest).forEach(([o,items])=>ownerClusters(items,1.2).forEach(cl=>{T+=lab(ownerLabel(o),clusterSpot(cl))}));
+ return `<svg viewBox="${x0} ${y0} ${x1-x0} ${y1-y0}" style="width:100%;max-height:50vh;background:#0c1a26;border-radius:12px">${P}${T}</svg><div class="maplegend"><span><i style="background:${MYC}"></i>моя страна и захваченные области (захвачено: ${nA})</span><span><i style="background:${VAS}"></i>вассалы (${nV} обл.)</span><span><i style="background:#26323f"></i>не захвачено</span></div>`}
 function empireCard(){return card('🧭 Моя держава','<div class="emp-slot"><p class="muted">Строится карта…</p></div><p class="muted">Захваченные и аннексированные области закрашиваются вашим цветом. Вассалы — светлым оттенком, и у них закрашены все области страны.</p>')}
-function mountEmpire(){const sl=document.querySelector('.emp-slot');if(!sl)return;wmLoad(ok=>{const e=document.querySelector('.emp-slot');if(!e)return;const sig=JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).length+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+(S.puppets||[]).join(',')+'|'+(S.me||'');if(e.dataset.sig===sig&&e.firstChild&&e.querySelector('svg'))return;e.dataset.sig=sig;e.innerHTML=ok?empireSvg():'<p class="muted">Не удалось загрузить карту мира (нужен интернет).</p>'})}
+function mountEmpire(){const sl=document.querySelector('.emp-slot');if(!sl)return;wmLoad(ok=>{const e=document.querySelector('.emp-slot');if(!e)return;const sig=ownSig();if(e.dataset.sig===sig&&e.firstChild&&e.querySelector('svg'))return;e.dataset.sig=sig;e.innerHTML=ok?empireSvg():'<p class="muted">Не удалось загрузить карту мира (нужен интернет).</p>'})}
 function capList(){const c=S.captured||[];if(!c.length)return card('🗺 Захваченные территории','<p class="muted">Пока ничего не захвачено. Победите в войне — и отнятые области или аннексированные страны появятся здесь и на карте.</p>');
  const reg=c.filter(z=>!z.full),ann=c.filter(z=>z.full),tp=c.reduce((a,z)=>a+(z.pop||0),0);
  const row=z=>`<div class="mini ${z.full?'':''}"><b>${z.full?'🏴':'🗺'} ${String(z.name).replace(/^Земли /,'')}</b>${z.full?'Аннексия страны':'Отторгнутая область'} · у: ${z.from}<br>${(z.regs&&z.regs.length)?'Области: '+z.regs.join(', ')+'<br>':''}Население: ${fmt(z.pop||0)}<br>Ресурсы: ${resIcons(z.res)||'—'} ${[...new Set(String(z.res||'').split(''))].map(k=>RLAB[k]).filter(Boolean).join(', ')}</div>`;
