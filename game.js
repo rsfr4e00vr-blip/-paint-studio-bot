@@ -297,12 +297,9 @@ function clusterSpot(g){let wt=0,x=0,y=0,bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
  return{x,y,w:bx1-bx0,h:by1-by0}}
 const ownerLabel=o=>isMe(o)?myName():String(o).startsWith('Вассал: ')?String(o).slice(8):String(o);
 function drawTerritoryLabels(svg){
- const NS='http://www.w3.org/2000/svg';let g=svg.querySelector('#territory-labels');if(!g){g=document.createElementNS(NS,'g');g.id='territory-labels';g.setAttribute('pointer-events','none');svg.appendChild(g)}g.replaceChildren();
- const groups={};
- Object.values(GEO.c).forEach(C=>{(C.regs||[]).forEach(r=>{if(!r.d||!Number.isFinite(r.cx)||!Number.isFinite(r.cy))return;const b=r.cell&&r.cell.length>2?rbox(r.cell):[r.cx-1,r.cy-1,r.cx+1,r.cy+1],q={cx:r.cx,cy:r.cy,x0:b[0],y0:b[1],x1:b[2],y1:b[3],w:b[2]-b[0],h:b[3]-b[1],polys:[r.cell||[]]};const o=regionOwner(C,r);(groups[o]||(groups[o]=[])).push({C,r,q})})});
- Object.entries(groups).forEach(([owner,items])=>{const label=ownerLabel(owner);if(!label)return;
-  ownerClusters(items,1.2).forEach(cl=>{const sp=clusterSpot(cl),txt=label.length>18?label.slice(0,17)+'…':label,fs=Math.max(2.4,Math.min(9,sp.w/(txt.length*.62)));
-   const t=document.createElementNS(NS,'text');t.setAttribute('x',sp.x);t.setAttribute('y',sp.y);t.setAttribute('text-anchor','middle');t.setAttribute('dominant-baseline','central');t.setAttribute('class','territory-country-label');t.setAttribute('style','font-size:'+fs.toFixed(2)+'px');t.textContent=txt;g.appendChild(t)})})
+ /* Названия стран скрыты на обзорной карте; границы, цвета и интерактивность остаются. */
+ let g=svg.querySelector('#territory-labels');
+ if(g)g.replaceChildren();
 }
 function drawOcc(svg){
  const NS='http://www.w3.org/2000/svg',ids=[].concat(...S.wars.map(w=>w.occ||[]));
@@ -378,7 +375,7 @@ function pickHead(){const w=S.wars.find(x=>x.n===CC.war);if(!w)return '';const Q
 function ccDraw(){const C=GEO.c[CC.iso];if(!C||!C.name){return}const nm=C.name,i=S.relations.findIndex(r=>r.name===nm),r=S.relations[i]||{},W=wi(nm),atWar=S.wars.some(w=>w.n===nm),j=S.just[nm],tk=taken();
  const BB=C.vb||C.bb,pad=14,bw=BB[2]-BB[0],bh=BB[3]-BB[1],vb=`${BB[0]-pad} ${BB[1]-pad} ${bw+2*pad} ${bh+2*pad}`,fs=Math.max(bw,bh*1.5)/(C.regs.length>24?58:C.regs.length>14?44:30),bigR=labelSet(C.regs,fs);
  const reg=C.regs.some(x=>x.d)?C.regs:[{id:C.iso+':0',n:nm,s:100,res:W.res,d:C.d,cx:(C.bb[0]+C.bb[2])/2,cy:(C.bb[1]+C.bb[3])/2}];
- const svg=`<svg viewBox="${vb}" style="width:100%;max-height:56vh;min-height:220px;background:#0c1a26;border-radius:12px;touch-action:manipulation"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=tk[x.id]||r.annexed||isMe(regionOwner(C,x)),free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id],fill=sel?'#ffd34d':mine?MYC:isVas(nm)?VAS:baseCol(C.iso,k),act=free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:'';return `<path d="${x.d}" fill="${fill}" stroke="#0b1218" stroke-width="${Math.max(.7,fs/12)}" ${act}><title>${x.n}</title></path>${free?`<path d="${x.d}" fill="none" stroke="transparent" stroke-width="8" vector-effect="non-scaling-stroke" pointer-events="stroke" onclick="H.take('${x.id}')"/>`:''}`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${Math.max(1,fs/9)}" stroke-linejoin="round" style="pointer-events:none"/>${reg.length>1?reg.filter(x=>bigR.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px;pointer-events:none">${x.n.replace(/ \(.*\)/,'').slice(0,22)}</text>`).join(''):''}</svg>`;
+ const svg=`<svg viewBox="${vb}" style="width:100%;max-height:56vh;min-height:220px;background:#0c1a26;border-radius:12px;touch-action:manipulation"><defs><clipPath id="ccc"><path d="${C.d}"/></clipPath></defs><g clip-path="url(#ccc)">${reg.map((x,k)=>{const mine=tk[x.id]||r.annexed||isMe(regionOwner(C,x)),free=CC.pick&&!mine,sel=CC.sel&&CC.sel[x.id],fill=sel?'#ffd34d':mine?MYC:isVas(nm)?VAS:baseCol(C.iso,k),act=free?`style="cursor:pointer" onclick="H.take('${x.id}')"`:'';return `<path d="${x.d}" fill="${fill}" stroke="#0b1218" stroke-width="${Math.max(.7,fs/12)}" ${act}><title>${x.n}</title></path>${free?`<path d="${x.d}" fill="none" stroke="transparent" stroke-width="20" stroke-linecap="round" vector-effect="non-scaling-stroke" pointer-events="stroke" onclick="H.take('${x.id}')"/>`:''}`}).join('')}</g><path d="${C.d}" fill="none" stroke="#e8d8a0" stroke-width="${Math.max(1,fs/9)}" stroke-linejoin="round" style="pointer-events:none"/>${reg.length>1?reg.filter(x=>bigR.has(x.id)).map(x=>`<text x="${x.cx}" y="${x.cy}" text-anchor="middle" style="font-size:${fs}px;font-weight:700;fill:#fff;paint-order:stroke;stroke:#0b1218;stroke-width:${fs/5}px;pointer-events:none">${x.n.replace(/ \(.*\)/,'').slice(0,22)}</text>`).join(''):''}</svg>`;
  const rows=reg.map(x=>{const mine=tk[x.id]||r.annexed||isMe(regionOwner(C,x)),pop=(W.pop||0)*x.s/100,ps=pop>=1?pop.toFixed(1):(pop*1000).toFixed(0)+' тыс.';return `<div class="mini province-row" data-prov-row data-prov-name="${escA(x.n.toLowerCase())}"><b>${mine?'🏴':'🗺'} ${x.n}</b><br>${x.s.toFixed(2)}% страны · ${pop>=1?ps+' млн':ps} · ${resIcons(x.res)}<br>${mine?'<small class="muted">Под вашим контролем</small>':CC.pick?`<button class="${CC.sel&&CC.sel[x.id]?'good':'danger'} province-pick" onclick="H.take('${x.id}')">${CC.sel&&CC.sel[x.id]?'✔ Выбрана (снять)':'Выбрать провинцию'}</button>`:'<small class="muted">Свободна</small>'}</div>`}).join('');
  let acts='';if(r.self)acts='<span class="muted">🏠 Это ваше государство</span>';else if(!CC.pick){const prog=(S.relPrograms||{})[nm];acts=(prog?`<span class="muted">🤝 Программа активна: ещё ${prog.monthsLeft} мес.</span>`:`<button class="primary" onclick="H.relProgram(${i});ccDraw()">🤝 Улучшать отношения 4 года · 40 ⭐</button> `)+warCauseControl(i,r,atWar,j);}
  const html=`<div class="ccbox"><button class="ccx" onclick="H.ccClose()">✕</button><h3>${nm}</h3><p class="muted">${CONTN[W.cont]||''} · ${r.trait||''} · ${reg.length.toLocaleString('ru-RU')} провинций${r.annexed?' · <b>аннексирована</b>':''}</p>${CC.pick?pickHead():`<p>${mood(r.value||0)} · мощь ${r.power||'—'} · население ${W.pop>=1?W.pop.toFixed(W.pop>=10?0:1)+' млн':Math.round((W.pop||0)*1000)+' тыс.'}</p>`}${svg}<div class="actions" style="margin:8px 0">${acts}</div><h4>Провинции</h4><input id="province-search" class="province-search" type="search" value="${escA(CC.query||'')}" placeholder="🔎 Найти провинцию по названию…" oninput="H.ccSearch(this.value)"><div class="province-count" id="province-count">Показано ${reg.length.toLocaleString('ru-RU')} из ${reg.length.toLocaleString('ru-RU')}</div><div class="cards cc-province-list">${rows}</div></div>`;
@@ -1508,7 +1505,7 @@ function armFx(k,mode){
  }catch(e){}
 }
 const mq=()=>S.mfg||(S.mfg=[]);
-const mSlots=()=>Math.max(1,Math.floor((S.mil||0)/3));
+const mSlots=()=>99; // Арсенал открыт: производственные линии не требуют военных заводов.
 const mCost=k=>{const A=ARMS[k];return{m:Math.round(A.c*.6),st:Math.max(1,Math.round(A.c/200)),eq:Math.ceil((A.eq||0)/2),need:0}};
 window.make=k=>{
  if(blocked())return;const A=ARMS[k];if(!A||k==='petard')return;
@@ -1525,7 +1522,7 @@ window.make=k=>{
 window.makeCancel=i=>{const q=mq(),it=q[i];if(!it)return;const A=ARMS[it.k];S.money+=Math.round(mCost(it.k).m*.5);q.splice(i,1);log(`🏭 Производство отменено: ${A.n.toLowerCase()} (возвращено 50% денег)`);save();render()};
 function mfgTick(){
  const q=mq();if(!q.length)return;
- const step=(S.mil||0)>=12?2:1;
+ const step=2; // Скорость производства не зависит от количества военных заводов.
  for(let i=q.length-1;i>=0;i--){
   const it=q[i];it.left-=step;
   if(it.left<=0){const A=ARMS[it.k];S[it.k]=(S[it.k]||0)+1;q.splice(i,1);log(`🏭 Готово: ${A.n.toLowerCase()} сошла с конвейера`);say(`${A.n} — новая единица на вооружении`,A.ic);toast(`${A.ic} Произведено: ${A.n}`);armFx(it.k,'buy')}
@@ -1559,7 +1556,7 @@ function armsCard(){
  const q=S.qty||1,tt=S.tt||'mil',war=atWar();
  const seg=(arr,cur,fn)=>`<div class="seg">${arr.map(([v,l])=>`<button class="${v===cur?'on':''}" onclick="${fn}(${typeof v==='number'?v:"'"+v+"'"})">${l}</button>`).join('')}</div>`;
  const ctl=`<div class="mini armctl"><small class="muted">Сколько покупать и стрелять за один тык</small>${seg([[1,'×1'],[10,'×10'],[20,'×20']],q,'setQty')}${war?`<small class="muted">Куда бить</small>${seg([['mil','🎯 Военные'],['infra','🏗 Инфра'],['civ','🏘 Граждане'],['pvo','📡 ПВО врага']],tt,'setTT')}<small class="muted">💥 Бить по экономике врага: отрасли связаны цепочкой — удар по энергосети гасит топливо, заводы и оборонку</small>${seg(window.InterDep?InterDep.TKEYS.map(x=>[x,InterDep.TARGETS[x].n]):[],tt,'setTT')}`:''}</div>`;
- const rows=ARMK.map(k=>{const A=ARMS[k],have=S[k]||0,lock=A.mil&&S.mil<A.mil,sh=Math.max(1,Math.min(q,have)),fireOk=war&&TG0[k];
+ const rows=ARMK.map(k=>{const A=ARMS[k],have=S[k]||0,lock=false,sh=Math.max(1,Math.min(q,have)),fireOk=war&&TG0[k];
   return`<div class="mini arm"><div class="armhead"><b>${A.ic} ${A.n}</b><span class="armcnt">${fmt(have)}</span></div><small class="muted">${A.t}${A.eq?` · −${A.eq} воор.`:''}</small>
   <div class="armbtns"><button onclick="buy('${k}',${q})">${lock?'🔒 ':''}Купить${q>1?' ×'+q:''}<br><small>${fmt(A.c*q)} млн</small></button>${war?`<button class="danger${have?'':' dim'}" onclick="salvo('${k}')">🔥 Огонь${sh>1?' ×'+sh:''}<br><small>${({mil:'военные',infra:'инфраструктура',civ:'гражданские'}[tt]||'цели')}</small></button>`:''}</div></div>`}).join('');
  return card('💣 Арсенал',tgtPanel()+ctl+`<p class="muted">Производство размещается и управляется во вкладке «Военные заводы» → «Военно-промышленный комплекс». Здесь можно покупать готовое вооружение и применять его во время войны.</p><div class="cards armlist">${rows}</div><details class="fold hint" data-fold="armhint"><summary>ℹ Подсказки</summary><p class="muted">Во время войны выберите тип цели и количество залпа, затем нажмите «Огонь». Производство оружия ведётся специализированными предприятиями в промышленности. В мирное время кнопки стрельбы не показываются; военные учения доступны отдельно во вкладке армии.</p></details>`)}
