@@ -90,3 +90,10 @@ input[type=range]{min-width:100px;flex:1}
 .nova-history{max-height:220px;overflow:auto;padding:8px;background:#121922;border-radius:8px;font-size:12px}
 .nova-history div{padding:4px 0;border-bottom:1px solid #29343e}
 @media(max-width:600px){.nova-asset{align-items:flex-start;flex-direction:column}.nova-asset button{width:100%}.nova-summary{font-size:12px}}
+/* Novaria v2 infrastructure status on the map tab */
+.nova-map-summary{margin-top:12px}
+.nova-map-row{display:grid;grid-template-columns:minmax(110px,1fr) auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(150,180,205,.14);font-size:12px}
+.nova-map-row i{grid-column:1/-1;height:7px;border-radius:8px;background:#354657;overflow:hidden}
+.nova-map-row em{display:block;height:100%;background:linear-gradient(90deg,#a94e48,#d5a64b,#6d9b70)}
+.nova-asset-info{min-width:0;flex:1}
+@media(max-width:600px){.nova-map-row{grid-template-columns:1fr}.nova-map-row span{font-size:11px}}
