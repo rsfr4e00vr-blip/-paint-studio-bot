@@ -16,7 +16,7 @@ function aiCfgSelects(){const A=window.AIARS;if(!A)return '';const sel=selectedA
 function aiCfgCard(){const A=window.AIARS;if(!A)return '';const c=A.cfg(S);
  return card('🤖 ИИ-противники',`<p>Выберите перед стартом: насколько агрессивны страны, учится ли их нейросеть и есть ли у них оружие в начале. По умолчанию арсенала нет — страны сами <b>вырабатывают</b> оружие на заводах и <b>покупают</b> его за деньги (дороже, но быстрее). Работает для <b>новой кампании</b>.</p>${aiCfgSelects()}<div class="mini"><b>Сейчас в игре:</b> агрессия — ${A.AGGR[c.aggr].n}; нейросеть — ${A.NNM[c.nn]}; стартовый арсенал — ${A.ARSM[c.ars]}.</div><button class="primary" onclick="resetGame()">Начать новую кампанию с этими настройками</button>`)}
 window.setDifficulty=v=>{selectedDifficulty=DIFFICULTIES[v]?v:'normal';toast('Для применения сложности начни новую кампанию')};
-function save(){if(window.__NG_MP){if(window.NGMP&&window.NGMP.saveLocal)window.NGMP.saveLocal();return}if(window.__salv)return;try{localStorage.setItem('novariaSave',JSON.stringify(S))}catch(e){toast('Не удалось сохранить: память устройства заполнена')}}
+function save(){if(window.__NG_MP){if(window.NGMP&&window.NGMP.saveLocal)window.NGMP.saveLocal();if(window.NGMP&&window.NGMP.reportState)window.NGMP.reportState();return}if(window.__salv)return;try{localStorage.setItem('novariaSave',JSON.stringify(S))}catch(e){toast('Не удалось сохранить: память устройства заполнена')}}
 function toast(t){if(window.__salv)return;let n=$('#notice');n.textContent=t;n.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>n.style.display='none',2400)}
 function log(t){if(window.__salv&&window.__salv.mute)return;S.log.unshift(`Год ${S.year}, ${months[S.month]}: ${t}`);S.log=S.log.slice(0,100)}
 const IC={
@@ -1550,13 +1550,14 @@ window.salvo=(k,n,t)=>{
  save();render();
 };
 function armsCard(){
+ if(window.__NG_MP)return ''; // в сетевой игре склад и залпы управляются сервером во вкладке «Мультиплеер»
  const q=S.qty||1,tt=S.tt||'mil',war=atWar();
  const seg=(arr,cur,fn)=>`<div class="seg">${arr.map(([v,l])=>`<button class="${v===cur?'on':''}" onclick="${fn}(${typeof v==='number'?v:"'"+v+"'"})">${l}</button>`).join('')}</div>`;
  const ctl=`<div class="mini armctl"><small class="muted">Сколько покупать и стрелять за один тык</small>${seg([[1,'×1'],[10,'×10'],[20,'×20']],q,'setQty')}${war?`<small class="muted">Куда бить</small>${seg([['mil','🎯 Военные'],['infra','🏗 Инфра'],['civ','🏘 Граждане'],['pvo','📡 ПВО врага']],tt,'setTT')}<small class="muted">💥 Бить по экономике врага: отрасли связаны цепочкой — удар по энергосети гасит топливо, заводы и оборонку</small>${seg(window.InterDep?InterDep.TKEYS.map(x=>[x,InterDep.TARGETS[x].n]):[],tt,'setTT')}`:''}</div>`;
  const rows=ARMK.map(k=>{const A=ARMS[k],have=S[k]||0,lock=A.mil&&S.mil<A.mil,sh=Math.max(1,Math.min(q,have)),fireOk=war&&TG0[k];
   return`<div class="mini arm"><div class="armhead"><b>${A.ic} ${A.n}</b><span class="armcnt">${fmt(have)}</span></div><small class="muted">${A.t}${A.eq?` · −${A.eq} воор.`:''}</small>
-  <div class="armbtns"><button onclick="buy('${k}',${q})">${lock?'🔒 ':''}Купить${q>1?' ×'+q:''}<br><small>${fmt(A.c*q)} млн</small></button>${k==='petard'?'<span></span>':`<button class="good" onclick="make('${k}')">🏭 Произвести<br><small>${mCost(k).m} млн · ${A.mt||2} мес.</small></button>`}<button class="danger${have?'':' dim'}" onclick="salvo('${k}')">${fireOk?'🔥 Огонь'+(sh>1?' ×'+sh:''):'Применить'}<br><small>${fireOk?({mil:'военные',infra:'инфраструктура',civ:'гражданские'}[tt]):'учения'}</small></button></div></div>`}).join('');
- return card('💣 Арсенал',tgtPanel()+ctl+mfgPanel()+`<div class="cards armlist">${rows}</div><details class="fold hint" data-fold="armhint"><summary>ℹ Подсказки</summary><p class="muted">На войне выбираете тип цели один раз (военные / инфраструктура / граждане) и количество (×1, ×10, ×20) — дальше один тык «🔥 Огонь» делает залп сразу всем выбранным числом (сколько есть на складе). Военные цели — лучший эффект на фронте; инфраструктура бьёт по силе и экономике врага; удары по гражданским дают мировое осуждение и падение легитимности. Каждый снаряд ПВО врага может сбить отдельно. В мирное время стрельба — скандал (кроме парадов и учений). Бомба применяется по одной. Тяжёлое оружие требует военных заводов и вооружения со склада.</p></details>`)}
+  <div class="armbtns"><button onclick="buy('${k}',${q})">${lock?'🔒 ':''}Купить${q>1?' ×'+q:''}<br><small>${fmt(A.c*q)} млн</small></button>${war?`<button class="danger${have?'':' dim'}" onclick="salvo('${k}')">🔥 Огонь${sh>1?' ×'+sh:''}<br><small>${({mil:'военные',infra:'инфраструктура',civ:'гражданские'}[tt]||'цели')}</small></button>`:''}</div></div>`}).join('');
+ return card('💣 Арсенал',tgtPanel()+ctl+`<p class="muted">Производство размещается и управляется во вкладке «Военные заводы» → «Военно-промышленный комплекс». Здесь можно покупать готовое вооружение и применять его во время войны.</p><div class="cards armlist">${rows}</div><details class="fold hint" data-fold="armhint"><summary>ℹ Подсказки</summary><p class="muted">Во время войны выберите тип цели и количество залпа, затем нажмите «Огонь». Производство оружия ведётся специализированными предприятиями в промышленности. В мирное время кнопки стрельбы не показываются; военные учения доступны отдельно во вкладке армии.</p></details>`)}
 /* ---- объединённые вкладки: всё по теме на одной странице, секции сворачиваются ---- */
 const FOLD=window.__fold=window.__fold||{};
 function fold(id,title,html,def){const o=(id in FOLD)?FOLD[id]:!!def;return`<details class="fold" data-fold="${id}" ${o?'open':''}><summary>${title}</summary><div class="foldbody">${html}</div></details>`}
@@ -2349,7 +2350,7 @@ const BUILD={
  silo:{g:'war',n:'Ракетная шахта',c:1200,m:10,t:'Ракеты в арсенале +2 (нужно 8+ воен. заводов)',ic:'🚀'}
 };
 const BGROUPS=[['civ','🏙 Гражданские объекты'],['mil','⚔️ Военные объекты'],['war','🔥 Только во время войны']];
-const atWar=()=>!!(S.wars&&S.wars.length);
+const atWar=()=>!!((S.wars&&S.wars.length)||(S.mpWars&&S.mpWars.length));
 const bcount=k=>(S.bld&&S.bld[k])||0;
 const bslotsN=()=>Math.max(S.bslots,4)+(S.flags.bs?1:0)+advSum('bs');
 H.build=k=>{

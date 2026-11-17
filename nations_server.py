@@ -116,13 +116,13 @@ AI_NN = {"off", "std", "fast"}
 AI_ARS = {"none", "small"}
 AI_DEFAULT = {"aggr": "normal", "nn": "std", "ars": "none"}
 IDEOLOGIES = {"прагматизм", "либеральный курс", "государственный курс", "национальный курс", "традиционализм", "религиозный курс"}
-WAR_CAUSES = {"territorial": "Территориальные претензии", "border": "Пограничный конфликт", "ideology": "Религиозный / идеологический конфликт", "economic": "Экономический конфликт", "security": "Кризис защиты граждан и дипломатической миссии"}
+WAR_CAUSES = {"territorial": "Территориальные претензии", "border": "Пограничный конфликт", "ideology": "Религиозный / идеологический конфликт", "economic": "Экономический конфликт", "security": "Кризис защиты граждан и дипломатической миссии", "aggression": "Прямое объявление войны"}
 
 WAR_GOALS = {"tribute": "Давление и контрибуция", "territory": "Захват территории", "regime": "Смена власти"}
 REGIME_MONTHS = 24        # срок опеки победителя над новым правительством
 REGION_FRONT_GOAL = 60    # при цели «захват территории» область можно взять уже при перевесе 60%
 REGIME_FRONT = 60         # смена власти — от этого перевеса (или при полной победе)
-NEWBIE_SHIELD = 24        # первые 24 мес. нельзя объявлять войну
+NEWBIE_SHIELD = 0         # игроки могут объявлять войну с начала партии; защита после мира остаётся отдельной
 WAR_COOLDOWN = 18         # агрессор ждёт 18 мес. после своей войны
 PEACE_SHIELD = 12         # после войны защитника 12 мес. не трогают
 WAR_MAX_MONTHS = 24       # затяжная война без перевеса заканчивается ничьёй
@@ -1188,16 +1188,20 @@ async def on_report(room: Room, p: Player, msg: dict):
         p.money0 = new["money"]
         p.score_gdp = new["gdp"]
         old = dict(old, power=new["power"], gdp=new["gdp"])
-    months = max(1, room.month - p.last_report)
+    months = max(0, room.month - p.last_report)
     p.last_report = room.month
-    # зачётный ВВП растёт не быстрее 1.2% в месяц (читерский рост в таблицу не попадёт)
+    # Повторные отчёты в одном игровом месяце обновляют показатели, но не дают
+    # дополнительного роста очков/мощи за счёт спама сообщениями.
     cap = p.score_gdp * (GDP_SCORE_CAP ** months)
     p.score_gdp = max(1000.0, min(new["gdp"], cap)) if new["gdp"] >= p.score_gdp else new["gdp"]
-    # мощь тоже ограничена: не более +6% в месяц
-    new["power"] = min(new["power"], old["power"] * (1.06 ** months) + 3)
+    power_cap = old["power"] * (1.06 ** months) + (3 if months else 0)
+    new["power"] = min(new["power"], power_cap)
     p.rep = new
     p.out = bool(msg.get("out"))
     room.compute_score(p)
+    # Таблица стран — общий снимок комнаты. Обновляем её после каждого отчёта,
+    # а не только раз в месяц, чтобы клиенты не показывали устаревшие данные.
+    await room.broadcast({"type": "standings", "standings": [x.pub() for x in room.ranking()]})
 
 
 def partner(room: Room, p: Player, msg: dict):
@@ -1507,10 +1511,19 @@ async def on_war(room: Room, p: Player, msg: dict):
         return
     cause = str(msg.get("cause", ""))
     grounds = room.diplomacy_grounds(p, q)
-    if cause not in WAR_CAUSES or cause not in grounds:
-        available = ", ".join(WAR_CAUSES[k] for k in grounds) or "нет действующих оснований"
-        await room.notice(f"Нельзя объявить войну без конкретного основания. Доступно: {available}.", "warn", p)
-        return
+    direct = cause == "aggression"
+    if direct:
+        direct_cost = 30
+        if p.rep.get("pp", 0) < direct_cost:
+            await room.notice(f"Для прямого объявления войны нужно {direct_cost} политической власти.", "warn", p)
+            return
+        ground = {"severity": 85, "detail": "Прямое объявление войны без дипломатического кризиса"}
+    else:
+        if cause not in WAR_CAUSES or cause not in grounds:
+            available = ", ".join(WAR_CAUSES[k] for k in grounds) or "нет действующих оснований"
+            await room.notice(f"Нельзя объявить войну без конкретного основания. Доступно: {available}.", "warn", p)
+            return
+        ground = grounds[cause]
     if room.month < p.shield_until and room.month < NEWBIE_SHIELD:
         await room.notice(f"Война запрещена до {NEWBIE_SHIELD}-го месяца (защита новичков).", "warn", p)
         return
@@ -1529,7 +1542,6 @@ async def on_war(room: Room, p: Player, msg: dict):
     if p.pacts.get(q.id, 0) > room.month:
         await room.notice("Сначала нужно расторгнуть действующий торговый пакт.", "warn", p)
         return
-    ground = grounds[cause]
     default_goal = "territory" if cause in ("territorial", "border") else "regime" if cause == "ideology" else "tribute"
     goal = str(msg.get("goal") or default_goal)
     if goal not in WAR_GOALS:
@@ -1548,6 +1560,9 @@ async def on_war(room: Room, p: Player, msg: dict):
     if not sudden and not (ultimatum and ultimatum.get("cause") == cause and ultimatum.get("deadline", room.month + 1) <= room.month):
         await room.notice("Сначала выдвиньте ультиматум и дождитесь срока его выполнения. При серьёзной провокации (85/100) война возможна сразу.", "warn", p)
         return
+    if direct:
+        p.rep["pp"] = max(0, p.rep.get("pp", 0) - direct_cost)
+        await room.send(p, {"type": "pp_update", "pp": p.rep["pp"]})
     wid = "w" + "".join(random.choices(string.digits, k=5))
     room.wars[wid] = {"id": wid, "a": p.id, "d": q.id, "p": 50.0, "m": 0, "orders": {},
                       "cause": cause, "reason": ground.get("detail", WAR_CAUSES[cause]),
