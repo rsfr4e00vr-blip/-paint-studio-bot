@@ -73,3 +73,20 @@ input[type=range]{min-width:100px;flex:1}
 .mp-hint{margin:6px 0 2px;padding:8px 10px;border-radius:8px;border:1px dashed rgba(214,178,94,.35);font-size:12px;line-height:1.45;color:#aab7c8;background:rgba(255,255,255,.03)}
 .mp-hint.ok{border-style:solid;border-color:rgba(98,196,140,.55);color:#cfe9da;background:rgba(98,196,140,.08)}
 .mp-hint.warn{border-color:rgba(214,178,94,.6);color:#e8d9ae}
+
+
+/* Novaria integrated recovery systems */
+.nova-summary{display:flex;gap:12px;flex-wrap:wrap;margin:10px 0;padding:12px;background:#171d25;border:1px solid #34414a;border-radius:10px}
+.nova-region{margin:8px 0;padding:10px;background:#121922;border:1px solid #34414a;border-radius:9px}
+.nova-region summary{cursor:pointer}
+.nova-assets{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px;margin-top:10px}
+.nova-asset{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px;background:#1b2530;border-radius:8px}
+.nova-asset small{display:block;color:#aab5bf;font-size:11px;margin-top:3px}
+.nova-asset button{flex:none}
+.nova-meter{height:7px;background:#39434c;border-radius:8px;overflow:hidden;margin-top:6px}
+.nova-meter i{display:block;height:100%;background:#6f9a70}
+.nova-doctrine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.nova-doctrine select{max-width:100%;padding:8px;background:#202a34;color:inherit;border:1px solid #46535e;border-radius:7px}
+.nova-history{max-height:220px;overflow:auto;padding:8px;background:#121922;border-radius:8px;font-size:12px}
+.nova-history div{padding:4px 0;border-bottom:1px solid #29343e}
+@media(max-width:600px){.nova-asset{align-items:flex-start;flex-direction:column}.nova-asset button{width:100%}.nova-summary{font-size:12px}}
