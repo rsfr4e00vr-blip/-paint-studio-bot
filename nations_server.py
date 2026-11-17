@@ -775,6 +775,10 @@ class Room:
                 await self.end_war(w, "cancel")
                 continue
             w["m"] += 1
+            if w.get("won"):
+                # победа одержана: бои прекращены, времени на выбор условий сколько угодно
+                w["wm"] = w.get("wm", 0) + 1
+                continue
             pa = max(1.0, a.rep["power"]) * (0.8 + a.rep["appr"] / 250)
             pd = max(1.0, d.rep["power"]) * 1.15 * (0.8 + d.rep["appr"] / 250)
             # Построенное ПВО усиливает защиту в сетевой войне; значение приходит из игрового отчёта.
@@ -831,17 +835,14 @@ class Room:
             if not w.get("won"):
                 if w["p"] >= 100:
                     w["won"], w["wm"] = a.id, 0
-                    await self.notice(f"🏆 {a.country} полностью разгромил {d.country}! Выбор условий: {WON_GRACE} мес.", "war")
+                    await self.notice(f"🏆 {a.country} полностью разгромил {d.country}! Победитель сам выбирает условия, время не ограничено.", "war")
+                    await self.send(a, {"type": "war_won", "enemy": d.country, "winner": True})
+                    await self.send(d, {"type": "war_won", "enemy": a.country, "winner": False})
                 elif w["p"] <= 0:
                     w["won"], w["wm"] = d.id, 0
-                    await self.notice(f"🏆 {d.country} полностью разгромил {a.country}! Выбор условий: {WON_GRACE} мес.", "war")
-            else:
-                w["wm"] = w.get("wm", 0) + 1
-                if w["wm"] >= WON_GRACE:
-                    win = self.players[w["won"]]
-                    lose = d if win is a else a
-                    await self.resolve(w, win, lose, "tribute")
-                    continue
+                    await self.notice(f"🏆 {d.country} полностью разгромил {a.country}! Победитель сам выбирает условия, время не ограничено.", "war")
+                    await self.send(d, {"type": "war_won", "enemy": a.country, "winner": True})
+                    await self.send(a, {"type": "war_won", "enemy": d.country, "winner": False})
             if not w.get("won") and w["m"] >= WAR_MAX_MONTHS:
                 await self.end_war(w, "draw")
 
