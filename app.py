@@ -769,6 +769,17 @@ def systemic_sim_js():
     return FileResponse(BASE / "systemic_sim.js", media_type="application/javascript")
 
 
+@app.get("/novaria_worldsystems.js")
+def novaria_worldsystems_js():
+    # The game.html page loads this module directly; keep it explicitly routed
+    # rather than relying on a static-file mount that this application does not have.
+    return FileResponse(BASE / "novaria_worldsystems.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+@app.get("/novaria_worldsystems.css")
+def novaria_worldsystems_css():
+    return FileResponse(BASE / "novaria_worldsystems.css", media_type="text/css", headers={"Cache-Control": "no-cache"})
+
+
 @app.get("/economy_core.js")
 def economy_core_js():
     return FileResponse(BASE / "economy_core.js", media_type="application/javascript")

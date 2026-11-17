@@ -1,0 +1,21 @@
+/* Novaria infrastructure and recovery UI — compact, touch-friendly layout. */
+.nova-map-summary,.nova-summary,.nova-region,.nova-asset{min-width:0}
+.nova-map-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(130px,1.2fr);gap:6px 12px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(150,170,190,.13)}
+.nova-map-row span{font-size:12px;color:var(--muted,#9aa8b5);text-align:right}
+.nova-map-row i,.nova-meter{display:block;height:7px;background:rgba(120,140,160,.2);border-radius:8px;overflow:hidden;grid-column:1/-1}
+.nova-map-row i em,.nova-meter i{display:block;height:100%;background:linear-gradient(90deg,#a94e45,#c9a34c,#648f67);border-radius:8px}
+.nova-summary{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.nova-summary>*{padding:8px 10px;border:1px solid rgba(150,170,190,.2);border-radius:8px;font-size:13px}
+.nova-region{margin:8px 0;border:1px solid rgba(150,170,190,.2);border-radius:9px;padding:8px}
+.nova-region>summary{cursor:pointer;padding:5px;line-height:1.5}
+.nova-assets{display:grid;gap:8px;margin-top:8px}
+.nova-asset{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px;background:rgba(100,120,140,.08);border-radius:8px}
+.nova-asset-info{min-width:0}.nova-asset-info small{display:block;color:var(--muted,#9aa8b5);font-size:11px;margin-top:3px;overflow-wrap:anywhere}
+.nova-asset button{min-height:38px;max-width:125px;white-space:normal}
+.nova-priority{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:11px;color:var(--muted,#9aa8b5)}
+.nova-priority button{min-height:28px;padding:3px 8px}
+.nova-history{max-height:240px;overflow:auto;font-size:12px;line-height:1.55}
+.nova-history>div{padding:5px 0;border-bottom:1px solid rgba(150,170,190,.12)}
+.nova-doctrine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
+.nova-doctrine select{min-height:40px;max-width:100%}
+@media(max-width:560px){.nova-map-row{grid-template-columns:1fr}.nova-map-row span{text-align:left}.nova-asset{grid-template-columns:1fr}.nova-asset button{max-width:none;width:100%}.nova-summary>*{flex:1 1 130px}}
