@@ -49,14 +49,15 @@ function qv(b,c,w,t){const k=key(c,w,t);return b.q[k]==null?prior(w,t,c):b.q[k]}
 
 /* ---------- нейросеть тактика ----------
    Вход (11): перевес на фронте, ПВО цели, устойчивость цели, цель=игрок, агрессивность, мощь атакующего,
-   доля видов оружия на складе, накопленный ущерб цели, длительность войны, усталость, смещение.
+   доля видов оружия на складе, накопленный ущерб цели, длительность войны, усталость и доступность сырья.
    Выход (30): Q-оценка каждой пары «оружие × тип цели». Учится после каждого удара по реальному результату. */
 const NIN=11,NH=20,NOUT=WK.length*TARGETS.length,NEUTRAL='even|noaa|firm|p';
 const aidx=(w,t)=>WK.indexOf(w)*TARGETS.length+TARGETS.indexOf(t);
 function feats(o,c){
   let have=0;WK.forEach(k=>{if(c.ars&&(c.ars[k]||0)>=1)have++});
+  const rs=window.AIRES?AIRES.init(c):null,raw=rs?Math.min(rs.st.steel,rs.st.fuel,rs.st.energy)/100:1;
   return [C((o.front-50)/50,-1,1),C((o.defAA||0)/14,0,1),C((o.defStab==null?60:o.defStab)/100,0,1),o.vs==='p'?1:0,o.aggr==null?.5:o.aggr,
-    C((+c.power||20)/150,0,1),have/WK.length,C(o.dmg||0,0,1),C((o.months||0)/24,0,1),C((c.exhaustion||0)/100,0,1),1].map(v=>+v.toFixed(3));
+    C((+c.power||20)/150,0,1),have/WK.length,C(o.dmg||0,0,1),C((o.months||0)/24,0,1),C((c.exhaustion||0)/100,0,1),C(raw,0,1)].map(v=>+v.toFixed(3));
 }
 function net(S){
   if(!window.NN||window.NN.off)return null;
@@ -83,6 +84,16 @@ const COST={cannon:6,drone:4,tank:22,rocket:26,bomb:40,howitzer:14,heli:35,mlrs:
 const BUY_MARKUP=1.6;
 const RATE={cannon:.05,drone:.05,tank:.02,rocket:.015,bomb:.004,howitzer:.025,heli:.012,mlrs:.012,cruise:.01,bomber:.006};
 const NEED={bomb:70,heli:35,mlrs:45,cruise:60,bomber:80,howitzer:25};
+const FACTORIES={
+ drone:{name:'завод дронов',cost:520,months:8,period:1,out:5,steel:1,fuel:1,energy:2,upkeep:2,weapon:'drone'},
+ rocket:{name:'ракетный завод',cost:780,months:11,period:3,out:1,steel:2,fuel:2,energy:3,upkeep:3,weapon:'rocket'},
+ mlrs:{name:'завод РСЗО',cost:900,months:12,period:5,out:1,steel:3,fuel:3,energy:4,upkeep:4,weapon:'mlrs'},
+ howitzer:{name:'артиллерийский завод',cost:680,months:10,period:4,out:1,steel:2,fuel:2,energy:3,upkeep:3,weapon:'howitzer'},
+ tank:{name:'танковый завод',cost:1100,months:14,period:5,out:1,steel:4,fuel:4,energy:5,upkeep:5,weapon:'tank'},
+ cruise:{name:'завод крылатых ракет',cost:1050,months:14,period:6,out:1,steel:4,fuel:4,energy:5,upkeep:5,weapon:'cruise'},
+ bomber:{name:'авиационный завод',cost:1300,months:16,period:8,out:1,steel:5,fuel:5,energy:7,upkeep:7,weapon:'bomber'}
+};
+const FACTORY_TARGET={drone:24,rocket:5,mlrs:4,howitzer:5,tank:3,cruise:3,bomber:2};
 const mIdx=S=>(S&&S.year!=null)?(S.year*12+(S.month||0)):null;
 function weights(S,c){
   const p=Math.max(5,+c.power||20),b=S?brain(S):null,ws=[];let tot=0;
@@ -108,6 +119,30 @@ function stock(c,atWar,S){
 function aaBrain(S){const b=brain(S);return b.aaBuy||(b.aaBuy={n:0,r:0,pn:0})}
 /* обучение докупке ПВО: reward>0, если ПВО сбило удар; <0, если ПВО выбили или оно пропустило удар */
 function learnAA(S,reward){const a=aaBrain(S);a.n++;a.r+=C(reward,-1,1);if(a.n>400){a.n*=.5;a.r*=.5}}
+function factoryRegion(c){
+ const rows=window.WORLD&&WORLD.REGS&&WORLD.REGS[c.name];
+ if(Array.isArray(rows)&&rows.length){const r=rows[Math.floor(Math.random()*rows.length)];return typeof r==='string'?r:(r.n||r.name||c.name)}
+ return c.name||'Столица';
+}
+function manageFactories(S,c,atWar){
+ c.milFactories=Array.isArray(c.milFactories)?c.milFactories:[];c.factoryBuilds=Array.isArray(c.factoryBuilds)?c.factoryBuilds:[];
+ const total=c.milFactories.length+c.factoryBuilds.length,max=Math.max(1,Math.min(7,Math.floor((c.power||10)/28)+1));
+ if(total>=max||Math.random()>(atWar?.72:.48))return;
+ const cash=Number(c.treasury)||0;if(cash<500)return;
+ const rs=window.AIRES?AIRES.init(c):null;
+ const buildCosts=F=>({steel:Math.max(3,Math.ceil(F.steel*2)),fuel:Math.max(1,Math.ceil(F.fuel*1.5)),energy:Math.max(2,Math.ceil(F.energy*1.5))});
+ const b=brain(S),opts=Object.keys(FACTORIES).map(k=>{const F=FACTORIES[k],stock=Number(c.ars&&c.ars[k])||0,def=(FACTORY_TARGET[k]-stock)/Math.max(1,FACTORY_TARGET[k]),cost=buildCosts(F),affordable=!rs||(rs.st.steel>=cost.steel&&rs.st.fuel>=cost.fuel&&rs.st.energy>=cost.energy);let learned=0,n=0;TARGETS.forEach(t=>{const q=b.stat[k+'>'+t];if(q){learned+=q.r;n+=q.n}});const qLearn=n?learned/n:0;const warBias=atWar&&['drone','mlrs','rocket','howitzer'].includes(k)?.18:0;const resourceFit=rs?Math.min(rs.st.steel/Math.max(1,cost.steel),rs.st.fuel/Math.max(1,cost.fuel),rs.st.energy/Math.max(1,cost.energy)):1;return{k,cost,affordable,score:def+qLearn*.12+warBias-F.cost/9000+Math.min(1,resourceFit)*.08-(affordable?0:10)}}).sort((a,b)=>b.score-a.score);
+ const chosen=opts.find(x=>x.affordable),F=chosen&&FACTORIES[chosen.k];if(!F||chosen.score<.12||cash<F.cost*1.05)return;
+ c.treasury-=F.cost;if(rs){AIRES.use(c,'steel',chosen.cost.steel);AIRES.use(c,'fuel',chosen.cost.fuel);AIRES.use(c,'energy',chosen.cost.energy)}c.factoryBuilds.push({type:chosen.k,region:factoryRegion(c),left:F.months,total:F.months});
+ if(S&&S.aiWorld&&Math.random()<.012)S.aiWorld.events.unshift(`🏭 ${c.name} инвестирует в ${F.name}; строительство займёт ${F.months} месяцев`);
+}
+function factoryTick(S,c,atWar){
+ c.milFactories=Array.isArray(c.milFactories)?c.milFactories:[];c.factoryBuilds=Array.isArray(c.factoryBuilds)?c.factoryBuilds:[];
+ c.factoryBuilds=c.factoryBuilds.filter(x=>{x.left=Math.max(0,(x.left||1)-1);if(x.left>0)return true;const F=FACTORIES[x.type];if(!F)return false;c.milFactories.push({type:x.type,region:x.region,hp:100,progress:0});return false});
+ c.milFactories.forEach(f=>{const F=FACTORIES[f.type];if(!F||f.hp<=0)return;f.progress=Math.max(0,Number(f.progress)||0);const rs=window.AIRES?AIRES.init(c):null;const enough=!rs||(rs.st.steel>=F.steel&&rs.st.fuel>=F.fuel&&rs.st.energy>=F.energy);if((c.treasury||0)<F.upkeep||!enough){f.stalled=true;f.stallReason=!enough?'не хватает стали, топлива или энергии':'не хватает денег';return}f.stalled=false;f.stallReason='';f.progress++;if(f.progress>=F.period){f.progress=0;c.treasury=Math.max(0,c.treasury-F.upkeep);if(rs){AIRES.use(c,'steel',F.steel);AIRES.use(c,'fuel',F.fuel);AIRES.use(c,'energy',F.energy)}c.ars[F.weapon]=Math.min(70,(c.ars[F.weapon]||0)+F.out)}});
+ manageFactories(S,c,atWar);
+}
+function damageFactory(S,c,region,power){if(!c)return null;c.milFactories=Array.isArray(c.milFactories)?c.milFactories:[];const a=c.milFactories.filter(f=>f.hp>0&&(!region||f.region===region));if(!a.length)return null;const f=a[Math.floor(Math.random()*a.length)],F=FACTORIES[f.type];f.hp=Math.max(0,(f.hp||100)-Math.round(24+Math.max(.3,power||1)*18));if(f.hp<=0){c.milFactories=c.milFactories.filter(x=>x!==f);return{destroyed:true,name:F?F.name:'военный завод',region:f.region}}return{destroyed:false,name:F?F.name:'военный завод',region:f.region,hp:f.hp}}
 function monthly(S,c,atWar){
   const mi=mIdx(S);if(mi==null||c.arsM===mi)return;c.arsM=mi;
   if(window.AIRES){try{AIRES.tick(S,c,atWar)}catch(e){}}     // сначала ресурсы: добыча, нехватка, закупки сырья
@@ -144,6 +179,7 @@ function monthly(S,c,atWar){
     else break;
   }
   if(funds>0){if(hasTre)c.treasury+=funds*.6;else c.arsFund=Math.min(funds,p*4)}    // неистраченное остаётся в бюджете
+  factoryTick(S,c,atWar);
 }
 /* Производство по заказу стратегического ИИ страны (действие «арсенал»): деньги уже списаны с казны */
 function produce(S,c,units){
@@ -236,5 +272,5 @@ function learnSector(S,act,reward){
   const nt=(window.NN&&!NN.off&&b.nn2)?b.nn2:null;
   if(nt&&act.x&&nt.nin===act.x.length)NN.train(nt,act.x,act.idx,C(reward,-1,1.5),.05);
 }
-window.AIARS={WK,learnAA,pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
+window.AIARS={WK,learnAA,pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,feats,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,FACTORIES,manageFactories,factoryTick,damageFactory,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
 })();

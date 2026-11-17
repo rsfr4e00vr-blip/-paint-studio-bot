@@ -734,6 +734,52 @@ const ARMS={
 const MT={cannon:1,drone:1,howitzer:2,tank:3,heli:3,aa:3,mlrs:4,rocket:4,cruise:5,bomber:7,bomb:9};
 Object.keys(MT).forEach(k=>ARMS[k].mt=MT[k]);
 const ARMK=Object.keys(ARMS);
+/* Военно-промышленные предприятия: каждый завод закреплён за конкретной областью,
+   имеет прочность и производит оружие в склад страны даже в мирное время. */
+const MIL_FACTORY_TYPES={
+ drone:{n:'Завод ударных дронов',ic:'🛩',cost:850,months:10,weapon:'drone',period:1,output:5,steel:1,fuel:1,energy:2,upkeep:3,desc:'5 дронов каждый месяц'},
+ rocket:{n:'Ракетный завод',ic:'🚀',cost:1250,months:14,weapon:'rocket',period:3,output:1,steel:2,fuel:2,energy:3,upkeep:5,desc:'1 ракета каждые 3 месяца'},
+ mlrs:{n:'Завод РСЗО',ic:'🎇',cost:1450,months:15,weapon:'mlrs',period:5,output:1,steel:3,fuel:3,energy:4,upkeep:6,desc:'1 установка РСЗО каждые 5 месяцев'},
+ howitzer:{n:'Артиллерийский завод',ic:'🔫',cost:1100,months:12,weapon:'howitzer',period:4,output:1,steel:2,fuel:2,energy:3,upkeep:4,desc:'1 гаубица каждые 4 месяца'},
+ tank:{n:'Танковый завод',ic:'🛡',cost:1800,months:18,weapon:'tank',period:5,output:1,steel:4,fuel:4,energy:5,upkeep:8,desc:'1 танк каждые 5 месяцев'},
+ cruise:{n:'Завод крылатых ракет',ic:'🛰',cost:1750,months:18,weapon:'cruise',period:6,output:1,steel:4,fuel:4,energy:5,upkeep:8,desc:'1 крылатая ракета каждые 6 месяцев'},
+ bomber:{n:'Авиационный завод',ic:'🛫',cost:2200,months:20,weapon:'bomber',period:8,output:1,steel:5,fuel:5,energy:7,upkeep:10,desc:'1 бомбардировщик каждые 8 месяцев'}
+};
+const factoryId=()=>`mf_${Math.random().toString(36).slice(2,9)}`;
+H.factoryRegion=v=>{S.factoryRegion=String(v||'');save()};
+H.buildFactory=(type,region)=>{
+ if(blocked())return;const T=MIL_FACTORY_TYPES[type];if(!T)return;
+ region=String(region||S.factoryRegion||(S.regions[0]&&S.regions[0].name)||'');
+ if(window.__NG_MP&&window.NGMP&&window.NGMP.buildFactory){window.NGMP.buildFactory(type,region);return}
+ if(!S.regions.some(r=>r.name===region))return toast('Выберите существующую область');
+ if(S.factoryBuilds.length>=3)return toast('Одновременно можно строить не более 3 военных заводов');
+ if(S.money<T.cost)return toast(`Для строительства нужно ${T.cost} млн`);
+ const steelCost=Math.max(3,Math.ceil(T.steel*2)),fuelCost=Math.max(1,Math.ceil(T.fuel*1.5)),energyCost=Math.max(2,Math.ceil(T.energy*1.5));
+ if(S.steel<steelCost)return toast(`Для строительства нужно ${steelCost} стали`);
+ if(S.fuel<fuelCost)return toast(`Для строительства нужно ${fuelCost} топлива`);
+ if(S.energy<energyCost)return toast(`Для строительства нужно ${energyCost} энергии`);
+ S.money-=T.cost;S.steel=clamp(S.steel-steelCost);S.fuel=clamp(S.fuel-fuelCost);S.energy=clamp(S.energy-energyCost);
+ const regionObj=S.regions.find(r=>r.name===region);S.factoryBuilds.push({id:factoryId(),type,region,region_id:regionObj&&(regionObj.geo||regionObj.id)||'',left:T.months,total:T.months});
+ log(`🏗 Начато строительство: ${T.n} в области «${region}» · срок ${T.months} мес.`);save();render();toast(`Строительство начато: ${T.n}`)
+};
+function factoryTick(){
+ S.milFactories=S.milFactories||[];S.factoryBuilds=S.factoryBuilds||[];
+ S.factoryBuilds=S.factoryBuilds.filter(b=>{b.left=Math.max(0,(b.left||1)-1);if(b.left>0)return true;const T=MIL_FACTORY_TYPES[b.type];if(!T)return false;S.milFactories.push({id:b.id||factoryId(),type:b.type,region:b.region,region_id:b.region_id||'',hp:100,progress:0});log(`🏭 ${T.n} введён в строй в области «${b.region}».`);say(`${T.n} введён в строй`,'🏭');return false});
+ S.milFactories.forEach(f=>{const T=MIL_FACTORY_TYPES[f.type];if(!T||f.hp<=0)return;f.progress=Math.max(0,Number(f.progress)||0);
+  const missing=[];if((S.steel||0)<T.steel)missing.push('стали');if((S.fuel||0)<T.fuel)missing.push('топлива');if((S.energy||0)<T.energy)missing.push('энергии');if((S.money||0)<T.upkeep)missing.push('денег');
+  if(missing.length){f.stalled=true;f.stallReason='Не хватает '+missing.join(', ');return}
+  f.stalled=false;f.stallReason='';f.progress++;
+  if(f.progress>=T.period){f.progress=0;S.steel=clamp(S.steel-T.steel);S.fuel=clamp(S.fuel-T.fuel);S.energy=clamp(S.energy-T.energy);S.money=Math.max(0,S.money-T.upkeep);S[T.weapon]=(Number(S[T.weapon])||0)+T.output;log(`🏭 ${T.ic} ${T.n}: −${T.steel} стали, −${T.fuel} топлива, −${T.energy} энергии, −${T.upkeep} млн; произведено ${T.output} ед. — ${ARMS[T.weapon]?.n||T.weapon}. Склад: ${Math.floor(S[T.weapon])}.`)}
+ });
+}
+function damagePlayerFactory(regionName,power,w,side){
+ const fs=(S.milFactories||[]).filter(f=>f.region===regionName&&f.hp>0);if(!fs.length)return null;
+ const f=fs[Math.floor(Math.random()*fs.length)],T=MIL_FACTORY_TYPES[f.type];f.hp=Math.max(0,(f.hp||100)-Math.round(22+Math.max(.3,power||1)*16));
+ const msg=f.hp<=0?`💥 Уничтожен ${T.n} в области «${regionName}»! Производство остановлено.`:`⚠️ ${T.n} в области «${regionName}» повреждён: прочность ${f.hp}%.`;
+ log(msg);if(w)warNews(w,f.hp<=0?'🏭':'⚠️',msg);if(f.hp<=0){S.milFactories=S.milFactories.filter(x=>x.id!==f.id);return{destroyed:true,type:f.type,region:regionName}}
+ return{destroyed:false,type:f.type,region:regionName,hp:f.hp}
+}
+function recordWarAttack(w,side,k,reg,down){if(!w||!reg)return;w.attacks=w.attacks||[];w.attacks.unshift({side,k,regId:reg.geo||reg.id||'',region:reg.name||reg.n||'область',down:!!down,month:S.year*12+S.month});w.attacks=w.attacks.slice(0,16)}
 function enemyRegs(n){const c=(rel(n)||{}),tk=c.regTaken||[];const rg=regsOf(n);
  if(rg)return rg.filter(x=>!taken()[x.id]).map(x=>({id:x.id,n:x.n,s:x.s||10,res:String(x.res||'')}));
  const R=WORLD.REGS[n];const L=R?R.map(x=>({n:x.n,s:x.s||10,res:String(x.res||'')})):WORLD.GEN.map(x=>({n:x[0]+' · '+n,s:x[1],res:String(x[2]||'')}));
@@ -977,7 +1023,7 @@ function enemyStrikes(w,c){
    shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f*myLS());S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
    const cd=popLoss(rnd(30,160)*f*myLS()*shf);S.warCiv=(S.warCiv||0)+cd;w.civDead=(w.civDead||0)+cd;
    S.morale=clamp(S.morale-.8*f);S.equipment=clamp(S.equipment-.8*f);S.ammo=clamp(S.ammo-.5*f);S.approval=clamp(S.approval+.4*f*Math.max(.15,(100-S.approval)/50));
-   reg.industry=clamp(reg.industry-.4*f);let extra='';if(Math.random()<.05*f&&S.mil>1){S.mil--;extra=' Уничтожен военный завод!'}
+   reg.industry=clamp(reg.industry-.4*f);let extra='';const mf=damagePlayerFactory(reg.name,f,w,'enemy');if(mf&&mf.destroyed)extra+=' Уничтожен специализированный военный завод!';if(Math.random()<.05*f&&S.mil>1){S.mil--;extra+=' Уничтожен базовый военный завод!'}
    r=shift/3+kills/2500;log(`💥 ${w.n}: ${AIARS.WN[act.w]} по военным целям (${reg.name}). Погибло ${fmt(kills)} солдат, ${fmt(cd)} мирных. ВВП −${ES.pct.toFixed(2)}%.${extra}`);
    warNews(w,'🎯',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага попала по военным объектам — погибло ${fmt(kills)} солдат${extra?', '+extra.trim().toLowerCase().replace('!',''):''}`)}
   else if(t==='infra'){
@@ -1002,11 +1048,11 @@ function enemyStrikes(w,c){
  });
  if(acts.length>1)log(`📡 ${w.n}: массированный удар — ${acts.length} ед. оружия, перехвачено ${stopped}, прошло ${hits}.`);
  /* анимация: каждый удар врага летит с ЕГО территории в ту область, куда попал (или где был сбит) */
- shows.forEach(x=>fxPush({kind:'strike',rev:1,down:x.down,k:x.w,enemy:w.n,regId:x.reg&&x.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[x.w]} → ${S.name}`,sub:x.down?`Сбито нашей ПВО · ${x.reg.name}`:`Попадание: область «${x.reg.name}»${x.eco!=null?` · ВВП −${x.eco.toFixed(2)}%`:''}`}));
+ shows.forEach(x=>{recordWarAttack(w,'enemy',x.w,x.reg,x.down);fxPush({kind:'strike',rev:1,down:x.down,k:x.w,enemy:w.n,regId:x.reg&&x.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[x.w]} → ${S.name}`,sub:x.down?`Сбито нашей ПВО · ${x.reg.name}`:`Попадание: область «${x.reg.name}»${x.eco!=null?` · ВВП −${x.eco.toFixed(2)}%`:''}`})});
 }
 const WP0={cannon:{air:false},drone:{air:true},tank:{air:false},rocket:{air:true},bomb:{air:true},howitzer:{air:false},heli:{air:true},mlrs:{air:false},cruise:{air:true},bomber:{air:true}};
 const TG0={cannon:1,drone:1,tank:1,rocket:1,bomb:1,howitzer:1,heli:1,mlrs:1,cruise:1,bomber:1};
-function ensure(){ensureHoi();S.just=S.just||{};S.justCause=S.justCause||{};S.justStage=S.justStage||{};S.justGoal=S.justGoal||{};S.justRegion=S.justRegion||{};S.regimes=S.regimes||{};if(window.GrandDiplomacy){S.ideology=S.ideology||'прагматизм';(S.relations||[]).forEach(r=>{if(!r.self&&!r.ideology)r.ideology=GrandDiplomacy.orientation(r)})}if(!S.aiCfg)S.aiCfg={aggr:'normal',nn:'std',ars:'none'};if(!S.pacts)S.pacts={};if(window.AIARS)AIARS.applyCfg(S);if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
+function ensure(){ensureHoi();S.milFactories=Array.isArray(S.milFactories)?S.milFactories:[];S.factoryBuilds=Array.isArray(S.factoryBuilds)?S.factoryBuilds:[];S.factoryRegion=S.factoryRegion||((S.regions&&S.regions[0]&&S.regions[0].name)||'');S.just=S.just||{};S.justCause=S.justCause||{};S.justStage=S.justStage||{};S.justGoal=S.justGoal||{};S.justRegion=S.justRegion||{};S.regimes=S.regimes||{};if(window.GrandDiplomacy){S.ideology=S.ideology||'прагматизм';(S.relations||[]).forEach(r=>{if(!r.self&&!r.ideology)r.ideology=GrandDiplomacy.orientation(r)})}if(!S.aiCfg)S.aiCfg={aggr:'normal',nn:'std',ars:'none'};if(!S.pacts)S.pacts={};if(window.AIARS)AIARS.applyCfg(S);if(!S.deps)S.deps=DN.map((n,i)=>({n,p:S.parties[i%S.parties.length].name,l:Math.round(rnd(45,80))}));if(!S.feed)S.feed=[];if(S.fund==null)S.fund=0;if(S.trust==null)S.trust=70;
 C0.forEach(c=>{let r=S.relations.find(x=>x.name===c[0]);if(!r)S.relations.push(r={name:c[0],value:c[1],power:c[2]});if(r.aggr==null){r.aggr=c[3];r.trait=c[4];r.intent='Наблюдает и ждёт'}});ARMK.forEach(k=>{if(S[k]==null)S[k]=0})}
 function say(t,m){if(window.__salv)return;ensure();S.feed.unshift({t,m:m||'🙂',d:`${months[S.month]} ${S.year}`});S.feed=S.feed.slice(0,40)}
 const blocked=()=>{if(S.campaignOver){toast('Кампания завершена. Начни новую игру.');return true}if(S.out){toast('Вы в оппозиции — вернуться к власти можно во вкладке «Возврат»');return true}return false};
@@ -1064,7 +1110,9 @@ function aiTick(){let me=myPower(),trade=0,help=0,sanc=0,thr=0,cand=[];
  cand=cand.filter(c=>aiMayAttackPlayer(c,me));
  /* Отношения даже −100 не запускают войну автоматически. ИИ может напасть только отдельным решением по своим военным условиям ниже. */
  const now=S.year*12+S.month;
- if(cand.length&&(!S.war||(S.wars.length===1&&weakness()>=45))&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=18){cand.sort((a,b)=>(b._gdDecision?.score||0)-(a._gdDecision?.score||0));const c=cand[0],d=c._gdDecision;if(d&&d.cause){S.aiWarLast=now;c.value=Math.max(-30,c.value-30);startWar(c.name,true,d.cause.id);log(`⚔️ ${c.name} объявил вам войну. Основание: ${GrandDiplomacy.CAUSES[d.cause.id].label}. Причина: ${d.cause.detail}.`);say(`${c.name} напал на нас!`,'😱');pause()}}}
+ /* В мультиплеере ИИ продолжает вести экономику и дипломатию, но не может
+    создавать локальные войны против игрока: сетевые войны принадлежат Room на сервере. */
+ if(!window.__NG_MP&&cand.length&&(!S.war||(S.wars.length===1&&weakness()>=45))&&now-(S.aiWarLast==null?-99:S.aiWarLast)>=18){cand.sort((a,b)=>(b._gdDecision?.score||0)-(a._gdDecision?.score||0));const c=cand[0],d=c._gdDecision;if(d&&d.cause){S.aiWarLast=now;c.value=Math.max(-30,c.value-30);startWar(c.name,true,d.cause.id);log(`⚔️ ${c.name} объявил вам войну. Основание: ${GrandDiplomacy.CAUSES[d.cause.id].label}. Причина: ${d.cause.detail}.`);say(`${c.name} напал на нас!`,'😱');pause()}}}
 function people(){let L=[],h=S.history,p=h[h.length-2];if(S.approval<35)L.push(['Правительству пора уходить!','😡']);if(S.inflation>12)L.push(['Цены растут каждый месяц','😟']);if(S.employment<85)L.push(['Работы нет, заводы закрываются','😞']);if(S.war)L.push(['Сыновья на фронте, когда это кончится?','😢']);if(S.approval>65)L.push(['Жить стало лучше, спасибо!','😊']);if(S.tax>35)L.push(['Налоги душат малый бизнес','😠']);if(S.food<35)L.push(['Полки пусты, не хватает еды','😰']);if(S.stability<40)L.push(['На улицах неспокойно — выходим на протест','✊']);if(p&&S.gdp>p.gdp*1.003)L.push(['Экономика растёт, ура!','😃']);if(S.out)L.push(['Новая власть — посмотрим, что она сделает','🤔']);if(!L.length)L.push(['Всё спокойно, живём','🙂']);let a=pick(L);say(a[0],a[1]);if(a[1]=='✊'||a[1]=='😡')S.regions.forEach(r=>r.unrest=clamp(r.unrest+1))}
 const depLoyal=()=>S.deps.reduce((a,d)=>a+d.l,0)/S.deps.length;
 const OUST=[
@@ -1103,7 +1151,7 @@ if(t&&TG[k]&&atWar()){
  const avg=regs.length?regs.reduce((a,x)=>a+x.s,0)/regs.length:10,rn=reg?reg.n:w.n;
  let wt=reg?Math.max(.6,Math.min(1.6,reg.s/avg)):1;
  if(reg){const rs=reg.res;if(t==='mil'&&/q/.test(rs))wt*=1.25;if(t==='infra'&&/[qeus]/.test(rs))wt*=1.25}
- const D0=dmgOf(w,rn);if(D0[t]==null)D0[t]=0;const worn=1-Math.min(.6,D0[t]/150);wt*=worn;D0[t]=Math.min(100,D0[t]+10*f);
+ const D0=dmgOf(w,rn);if(D0[t]==null)D0[t]=0;const worn=1-Math.min(.6,D0[t]/150);wt*=worn;D0[t]=Math.min(100,D0[t]+10*f);if(t==='mil'&&window.AIARS){const aiTarget=aiNationOf(w.n)||en;const mf=AIARS.damageFactory(S,aiTarget,rn,f);if(mf&&mf.destroyed){log(`🏭 Наш удар уничтожил ${mf.name||'военный завод'} в области «${rn}» врага.`);warNews(w,'🏭',`Наш удар уничтожил военный завод в области «${rn}»`)}}
  // Накопительный ущерб экономике противника от успешных ударов.
  // Это условная игровая модель, а не реальные денежные оценки.
  const econ=w.enemyEcon||(w.enemyEcon={gdp:100,fx:100,damage:0,months:0,hitGdp:0,hitFx:0,hitMoney:0,hits:0});
@@ -1442,6 +1490,7 @@ window.armyAttack=n=>{
 function armsFxMap(k,wname,reg,rn,down){
  const A=ARMS[k];if(!SCN[k])return;
  if(window.__salv){window.__salv.outs.push({reg,down:!!down});return}
+ const __war=(S.wars||[]).find(x=>x.n===wname);recordWarAttack(__war,'ours',k,reg,down);
  strikeScene({kind:'strike',k,enemy:wname,shots:[{regId:reg&&reg.id,down:!!down}],title:`${A.ic} ${A.n} → ${wname}`,sub:down?`Сбит ПВО · область «${rn}»`:`Область «${rn}»`});
 }
 /* ------------------------ АНИМАЦИЯ И ПРОИЗВОДСТВО АРСЕНАЛА ------------------------ */
@@ -1495,7 +1544,7 @@ window.salvo=(k,n,t)=>{
  const dn=sv.outs.filter(x=>x.down).length,hit=used-dn,w=tgtWar(),TN={mil:'военные цели',infra:'инфраструктуру',civ:'гражданские цели'}[t]||'цели';
  log(`${A.ic} Залп ×${used}: ${A.n.toLowerCase()} по ${w.n} (${TN}). Попало ${hit}, сбито ПВО врага ${dn}. 📉 ВВП врага −${(sv.eco||0).toFixed(1)}%.`);
  say(`Залп ×${used}: ${hit} попаданий, ${dn} сбито ПВО`,A.ic);
- warNews(w,A.ic,`Наш залп ×${used}: ${hit} попаданий, ${dn} сбито ПВО · ВВП врага −${(sv.eco||0).toFixed(1)}%`);
+ warNews(w,A.ic,`Наш залп ×${used}: ${hit} попаданий, ${dn} сбито ПВО · ВВП врага −${(sv.eco||0).toFixed(1)}%`);sv.outs.forEach(x=>recordWarAttack(w,'ours',k,x.reg,x.down));
  strikeScene({kind:'strike',k,enemy:w.n,shots:sv.outs.map(x=>({regId:x.reg&&x.reg.id,down:x.down})),title:`${A.ic} Залп ×${used} → ${w.n}`,sub:`Попало ${hit} · сбито ПВО ${dn} · ВВП врага −${(sv.eco||0).toFixed(1)}%`});
  toast(`${A.ic} Залп ×${used}: попало ${hit}, сбито ПВО ${dn} · ВВП врага −${(sv.eco||0).toFixed(1)}%`);
  save();render();
@@ -2605,6 +2654,9 @@ function aiGoalVsPlayer(name,cause){
  }catch(e){return 'tribute'}}
 function aiGoalReward(name,r){try{const W=S.aiWorld,n=W&&W.nations&&W.nations.find(x=>x.name===name);if(n&&window.GrandDiplomacy)GrandDiplomacy.goalOutcome(W,n,r)}catch(e){}}
 function startWar(name,def,cause,goal,region){
+ /* В сетевой партии все войны между участниками создаёт только сервер комнаты.
+    Локальная война с ботом здесь создаёт второй, расходящийся мир на каждом устройстве. */
+ if(window.__NG_MP){log('⚠️ В сетевой партии войну нужно объявлять через «Мультиплеер → Дипломатия игроков».');return false}
  if(S.wars.some(w=>w.n===name))return;
  const GD=window.GrandDiplomacy,label=GD&&GD.CAUSES[cause||'']?GD.CAUSES[cause].label:(def?'Оборона от нападения':'Военная операция');
  if(!goal||!(GD&&GD.GOALS[goal]))goal=def?aiGoalVsPlayer(name,cause||'territorial'):(GD?GD.defaultGoal(cause):'tribute');
@@ -3081,9 +3133,10 @@ const BEV=[
  [d=>d<0,w=>`🌧 Распутица и перебои со снабжением замедлили операции у «${w.frontLine}»`],
  [()=>true,w=>`⚔️ Затяжные бои на участке «${w.frontLine}»`]];
 function battleEvent(w,d,c){if(Math.random()>.4)return;const e=pick(BEV.filter(x=>x[0](d)).slice(0,3)),t=e[1](w,c);w.blog=w.blog||[];w.blog.unshift(`${months[S.month].slice(0,3)}, год ${S.year}: ${t}`);w.blog.length=Math.min(w.blog.length,5)}
+H.warMap=(name,side)=>{const w=S.wars.find(x=>x.n===name);if(!w)return;const list=(w.attacks||[]).filter(a=>a.side===(side==='enemy'?'enemy':'ours')).slice(0,8);if(!list.length)return toast(side==='enemy'?'Враг ещё не наносил ударов по нашим областям':'Наших ударов по врагу пока нет');const enemy=side==='enemy'?w.n:w.n;strikeScene({kind:'strike',rev:side==='enemy',k:list[0].k||'rocket',enemy,shots:list.map(a=>({regId:a.regId,down:a.down})),title:side==='enemy'?`🛡 Карта ударов врага: ${w.n}`:`🎯 Карта наших ударов: ${w.n}`,sub:list.map(a=>`${ARMS[a.k]?.n||a.k} → ${a.region}${a.down?' · сбито':''}`).join(' · ')});};
 function warNewsHtml(w){const a=Object.keys(S.dark||{}).length,b=Object.keys(w.dark||{}).length,n=w.news||[];
  const oc=(w.occ||[]),rgo=regsOf(w.n)||[];
- return `<div class="wnews"><b>📰 Новости войны</b>${oc.length?`<small class="muted">🚩 Заняты (заштрихованы на карте): ${oc.map(id=>{const x=rgo.find(z=>z.id===id);return x?String(x.n).replace(/ \(.*\)/,''):id}).join(', ')}. Станут нашими при мире — диктат «Области».</small>`:''}${(a||b)?`<small class="muted">Без света/в разрухе сейчас: у нас ${a} обл., у врага ${b} обл.</small>`:''}${n.length?n.slice(0,6).map(x=>`<div class="wn"><span>${x.m}</span> ${x.t} <small class="muted">· ${x.d}</small></div>`).join(''):'<p class="muted wnolog">Пока тихо. Новости о разрушениях и жертвах появятся после ударов.</p>'}</div>`}
+ const hits=(w.attacks||[]).slice(0,6);return `<div class="wnews"><b>📰 Новости войны</b>${oc.length?`<small class="muted">🚩 Заняты (заштрихованы на карте): ${oc.map(id=>{const x=rgo.find(z=>z.id===id);return x?String(x.n).replace(/ \(.*\)/,''):id}).join(', ')}. Станут нашими при мире — диктат «Области».</small>`:''}${(a||b)?`<small class="muted">Без света/в разрухе сейчас: у нас ${a} обл., у врага ${b} обл.</small>`:''}${hits.length?hits.map(x=>`<div class="wn">${x.side==='enemy'?'⚠️ Враг':'🎯 Мы'}: ${ARMS[x.k]?.n||x.k} → ${x.region}${x.down?' · сбито ПВО':''}</div>`).join(''):''}${n.length?n.slice(0,6).map(x=>`<div class="wn"><span>${x.m}</span> ${x.t} <small class="muted">· ${x.d}</small></div>`).join(''):'<p class="muted wnolog">Пока тихо. Новости о разрушениях и жертвах появятся после ударов.</p>'}</div>`}
 function myHitHtml(w){
  const h=w.myHit;if(!h||!h.n)return '';
  const R=w.myRegHit||{},k=Object.keys(R).filter(n=>R[n]>=.05).sort((a,b)=>R[b]-R[a]).slice(0,3);
@@ -3105,7 +3158,7 @@ function warCard(w){
  <div class="wtiles">${tile('🚚','Снабжение',sup+'%')}${tile('⭕','Окружение',(w.encirclement||0)+'/5')}${tile('👑','Вассалы','+'+fmt(w.aid||vassalAid()))}${tile('🤝','Союзники',allyL.length?allyL.length:'—')}${tile('🪦','Наши потери',fmt(w.lost||0))}${tile('☠','Потери врага',fmt(w.kills||0))}${tile('🚩','Занято областей',(w.occ||[]).length+'/'+regCount(w.n))}${tile('🏘','Мирные у нас',fmt(w.civDead||0))}${tile('🏚','Мирные у врага',fmt(w.eCiv||0))}${tile('📉','ВВП врага','−'+(w.eco?w.eco.loss:0).toFixed(1)+'%')}${tile('💱','Валюта врага',w.eco?pct((w.eco.r/w.eco.r0-1)*100,0):'—')}${tile('💥','Ударов по экономике',(w.eco&&w.eco.hits)||0)}${tile('💔','Ударов по нам',(w.myHit&&w.myHit.n)||0)}${tile('📉','ВВП от ударов врага','−'+((w.myHit&&w.myHit.pct)||0).toFixed(1)+'%')}${tile('📡','Разведка',Math.round(w.recon||0)+'%')}</div>${topEcoHtml(w)}${myHitHtml(w)}
  ${warNewsHtml(w)}
  ${allyL.length?`<div class="wallies">На нашей стороне: ${allyL.map(n=>`<span class="chip">${n}</span>`).join('')}</div>`:''}
- <div class="worders"><button class="${ord==='attack'?'on atk':''}" onclick="H.warOrder(${nm},'attack')">⚔ Наступать</button><button class="${ord==='balanced'?'on bal':''}" onclick="H.warOrder(${nm},'balanced')">⚖ Баланс</button><button class="${ord==='defend'?'on def':''}" onclick="H.warOrder(${nm},'defend')">🛡 Оборона</button></div><div class="actions"><button onclick="armyAttack(${nm})">🪖 Показать атаку пехоты на карте</button></div>
+ <div class="worders"><button class="${ord==='attack'?'on atk':''}" onclick="H.warOrder(${nm},'attack')">⚔ Наступать</button><button class="${ord==='balanced'?'on bal':''}" onclick="H.warOrder(${nm},'balanced')">⚖ Баланс</button><button class="${ord==='defend'?'on def':''}" onclick="H.warOrder(${nm},'defend')">🛡 Оборона</button></div><div class="actions"><button onclick="armyAttack(${nm})">🪖 Показать атаку пехоты на карте</button><button onclick="H.warMap(${nm},'ours')">🗺 Карта наших ударов</button><button onclick="H.warMap(${nm},'enemy')">🛡 Карта ударов врага</button></div>
   ${warPlanHtml(w)}
  ${(w.blog&&w.blog.length)?`<ul class="wlog">${w.blog.map(x=>`<li>${x}</li>`).join('')}</ul>`:'<p class="muted wnolog">Боевые донесения появятся в ходе войны.</p>'}
  ${(w.won||w.p>=60)?`<div class="wwin"><p><b>${w.won?'🏆 Полная победа!':'💪 Перевес на фронте'}</b> Решите, чем закончить войну${w.won?` (иначе через ${3-(w.wm||0)} мес. — контрибуция)`:''}:</p><div class="actions"><button class="good" onclick="H.dictate(${nm},'tribute')">💰 Контрибуция</button><button class="primary" onclick="H.dictate(${nm},'puppet')">👑 Вассал</button>${(w.won||w.p>=(w.goal==='territory'?60:70))?`<button class="danger" onclick="H.dictate(${nm},'region')">🗺 ${w.goal==='territory'?'Захватить территорию':'Области'} · до ${quota(w.n,w).q}</button>`:`<small class="muted">Области — от ${w.goal==='territory'?60:70}%</small>`}${w.goal==='regime'?`<button class="danger" onclick="H.dictate(${nm},'regime')">🏛 Сменить власть</button>`:''}${w.won?`<button class="danger" onclick="H.dictate(${nm},'annex')">🏴 Захватить всю страну</button>`:''}</div></div>`:''}</article>`}
@@ -3341,11 +3394,21 @@ function staffTab(){
  h+=card('📜 Законы',`<p class="muted">Меняются по одной ступени, раз в 4 месяца. Снижение стоит 20 ⭐.</p><h3>Экономика</h3><div class="cards">${ECOO.map(k=>{const L=ECOL[k],cur=S.law.eco===k,ok=!L.need||L.need();return `<div class="mini ${cur?'party-card':''}"><b>${L.n}</b><small>${L.t}</small><div class="actions">${cur?'<span class="muted">✅ Действует</span>':`<button class="${ok?'primary':''}" onclick="H.law('eco','${k}')">${ok?`${L.pp} ⭐`:'🔒 '+L.why}</button>`}</div></div>`}).join('')}</div><h3>Призыв</h3><div class="cards">${CONO.map(k=>{const L=CONS[k],cur=S.law.con===k,ok=!L.need||L.need();return `<div class="mini ${cur?'party-card':''}"><b>${L.n}</b><small>${L.t}</small><div class="actions">${cur?'<span class="muted">✅ Действует</span>':`<button class="${ok?'primary':''}" onclick="H.law('con','${k}')">${ok?`${L.pp} ⭐`:'🔒 '+L.why}</button>`}</div></div>`}).join('')}</div>`);
  return `<div class="grid">${h}</div>`;
 }
+function factoryPanel(){
+ const regions=S.regions||[],selected=regions.some(r=>r.name===S.factoryRegion)?S.factoryRegion:(regions[0]&&regions[0].name)||'';
+ const builds=S.factoryBuilds||[],factories=S.milFactories||[];
+ const opts=regions.map(r=>`<option value="${String(r.name).replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" ${r.name===selected?'selected':''}>${r.name}</option>`).join('');
+ const queue=builds.length?builds.map(b=>{const T=MIL_FACTORY_TYPES[b.type];return T?`<div class="mini"><b>${T.ic} ${T.n}</b><small>Область: ${b.region} · осталось ${b.left} мес.</small><div class="bar"><i style="width:${Math.max(0,Math.min(100,(1-b.left/T.months)*100))}%"></i></div></div>`:''}).join(''):'<small class="muted">Очередь строительства пуста.</small>';
+ const list=factories.length?factories.map(f=>{const T=MIL_FACTORY_TYPES[f.type];return T?`<div class="mini"><b>${T.ic} ${T.n}</b><small>📍 ${f.region} · прочность ${Math.round(f.hp||100)}% · выпуск: ${T.desc}</small><small>${f.stalled?'⚠️ Приостановлено: '+(f.stallReason||'не хватает ресурсов'): `Производственный цикл: ${f.progress||0}/${T.period} мес.`}</small><small>За цикл: −${T.steel} стали · −${T.fuel} топлива · −${T.energy} энергии · −${T.upkeep} млн</small><div class="bar"><i style="width:${Math.max(0,Math.min(100,(f.progress||0)/T.period*100))}%"></i></div></div>`:''}).join(''):'<small class="muted">Пока нет специализированных заводов.</small>'; 
+ const cards=Object.keys(MIL_FACTORY_TYPES).map(k=>{const T=MIL_FACTORY_TYPES[k];return `<div class="mini"><b>${T.ic} ${T.n}</b><small>${T.desc}</small><small>Строительство: ${T.months} мес. · ${T.cost} млн · ${Math.max(3,Math.ceil(T.steel*2))} стали · ${Math.max(1,Math.ceil(T.fuel*1.5))} топлива · ${Math.max(2,Math.ceil(T.energy*1.5))} энергии</small><small>За цикл: ${T.steel} стали · ${T.fuel} топлива · ${T.energy} энергии · ${T.upkeep} млн</small><button class="primary" onclick="H.buildFactory('${k}',document.getElementById('milFactoryRegion')?.value||'${String(selected).replace(/'/g,"\\'")}')">Построить</button></div>`}).join('');
+ return `<p class="muted">Заводы можно строить и в мирное время. Строительство требует денег, стали, топлива и энергии. Каждый завод закреплён за областью. Каждый производственный цикл расходует сталь, топливо, энергию и деньги на содержание. При нехватке любого ресурса производство останавливается на текущем этапе и продолжится после пополнения запасов. В мультиплеере списание при строительстве подтверждает сервер комнаты, а ресурсы и выпуск синхронизируются отчётами страны.</p><div class="row"><label>Область строительства</label><select id="milFactoryRegion" onchange="H.factoryRegion(this.value)">${opts}</select></div><div class="cards">${cards}</div><h3>🚧 Строятся</h3><div class="cards">${queue}</div><h3>🏭 Действующие предприятия (${factories.length})</h3><div class="cards">${list}</div>`;
+}
 function indTab(){
  const L=ECOL[S.law.eco]||ECOL.civ;
  let h=card('🏭 Промышленность',`<div class="cards"><div class="mini">Гражданские заводы<b>${S.civ}</b>доход ${incFlat()>=0?'+':''}${incFlat()} млн/мес относительно базы</div><div class="mini">Военные заводы<b>${S.mil}</b>выпуск ×${(L.out*(1+techSum('mo')+advSum('mo'))).toFixed(2)}</div><div class="mini">Верфи<b>${S.dock}</b>флот: ${S.navy}</div><div class="mini">Слоты стройки<b>${S.build.length} / ${bslotsN()}</b></div></div><p class="muted">Военные заводы расходуют сталь и дают вооружение и боеприпасы. Закон экономики влияет на выпуск и доход. Стройка стоит денег сразу. Заводы строятся около года, остальные объекты — от 4 до 12 месяцев. Военные объекты (бункеры, ПВО, госпитали, аэродромы, базы, ракетные шахты) строятся только на войне.</p>`);
  h+=card('🏗 Очередь строительства',S.build.length?`<div class="cards">${S.build.filter(b=>BUILD[b.t]).map(b=>`<div class="mini party-card"><b>${BUILD[b.t].ic} ${BUILD[b.t].n}</b>осталось ${b.left} мес.<div class="bar"><i style="width:${Math.max(0,Math.min(100,(1-b.left/(b.m||BUILD[b.t].m))*100))}%"></i></div></div>`).join('')}</div>`:'<p>Очередь пуста.</p>');
  h+=card('🏭 Построенные объекты',`<div class="cards">${Object.keys(BUILD).filter(k=>bcount(k)>0).map(k=>`<div class="mini"><b>${BUILD[k].ic} ${BUILD[k].n}</b>${bcount(k)} шт.</div>`).join('')||'<p class="muted">Пока нет особых объектов — стройте электростанции, порты, больницы и военные базы.</p>'}</div>`);
+ h+=card('🏭 Военно-промышленный комплекс',factoryPanel());
  h+=rsvCard();
  BGROUPS.forEach(([gk,title])=>{const ks=Object.keys(BUILD).filter(k=>BUILD[k].g===gk),lock=gk==='war'&&!atWar();
   h+=card('➕ '+title,(gk==='war'?`<p class="muted">${lock?'🔒 Сейчас вы не воюете со страной — эти объекты откроются с началом войны.':'⚔️ Идёт война — военные объекты доступны.'}</p>`:'')+`<div class="cards">${ks.map(k=>`<div class="mini"><b>${BUILD[k].ic} ${BUILD[k].n}</b><small>${BUILD[k].t}</small><br><span class="muted">${BUILD[k].m} мес.</span><div class="actions"><button class="primary" onclick="H.build('${k}')">${lock?'🔒 ':''}${BUILD[k].c} млн</button></div></div>`).join('')}</div>`)});
@@ -3593,7 +3656,7 @@ function hoiTick(){
  S.approval=clamp(S.approval+(C.app||0)+(L.app||0));S.stability=clamp(S.stability+(L.stab||0));
  const cap=C.cap*(1+(DOCS[S.doc]?DOCS[S.doc].cap||0:0))*S.pop;
  if(S.army<cap)S.army+=Math.round(Math.min(cap-S.army,S.pop*.0005));
- budTick();taxTick();billsTick();grTick();mkTick();autoPurchaseTick();prodTick();buildTick();focusTick();researchTick();justTick();warTick();puppetTick();regimeTick();worldTick();if(window.NGRES)NGRES.tick();rsvTick();
+ budTick();taxTick();billsTick();grTick();mkTick();autoPurchaseTick();prodTick();buildTick();factoryTick();focusTick();researchTick();justTick();warTick();puppetTick();regimeTick();worldTick();if(window.NGRES)NGRES.tick();rsvTick();
  S.war=S.wars.length>0||!!S.martial;
  if(!S.war)S.threat=clamp(S.threat+(20-S.threat)*.03);
  clampFix();
@@ -3604,7 +3667,7 @@ function hoiTick(){
 const MPSTART={story:{money:26000,approval:72,stability:78,sup:[42,22,19,17]},easy:{money:22000,approval:67,stability:73,sup:[38,23,20,19]},hard:{money:14500,approval:54,stability:59,sup:[30,28,22,20]},expert:{money:10500,approval:47,stability:50,sup:[29,27,24,20]}};
 
 /* ---------- Быстрый доступ к функциям государства (одиночная игра; в сетевой партии — своя копия в nations.js) ---------- */
-const QA=[['autobuy','🤖','Автозакупки'],['economy','💰','Экономика'],['military','🛡','Армия и ПВО'],['diplomacy','🌐','Дипломатия мира'],['politics','🏛','Политика'],['intelligence','🕵','Разведка'],['worldtension','🌍','Мировые события'],['map','🗺','Карта и регионы'],['market','🛒','Рынок']];
+const QA=[['autobuy','🤖','Автозакупки'],['economy','💰','Экономика'],['industry','🏭','Военные заводы'],['military','🛡','Армия и ПВО'],['diplomacy','🌐','Дипломатия мира'],['politics','🏛','Политика'],['intelligence','🕵','Разведка'],['worldtension','🌍','Мировые события'],['map','🗺','Карта и регионы'],['market','🛒','Рынок']];
 function qaSummary(){const a=S.autoPurchase||{},items=a.items||{},on=Object.keys(items).filter(k=>items[k]&&items[k].on);return `<b>Автозакупки:</b> ${a.enabled?'включены':'выключены'} · ${on.length?'товары: '+on.join(', '):'товары не выбраны'} <button onclick="NG.setTab('autobuy')">Настроить</button>`}
 function quickAccessCard(){
  try{let fxl='';try{fxEnsure();const F=S.fx;fxl=`<div class="qa-chips"><span class="chip">💱 1 ${F.ref} = <b>${fxRate(F.rate)} ${F.cur}</b></span><span class="chip">📈 ВВП <b>${fmt(S.gdp)}</b> млн</span></div>`}catch(e){}
@@ -4016,6 +4079,9 @@ function fxCard(){
 try{if(window.FXD)FXD.fetchLive(ok=>{if(ok){fxRebase();if(tab==='charts'||tab==='finance')render(true)}})}catch(e){}
 
 window.NG={
+ showWarAttack(o){try{strikeScene({kind:'strike',k:o.k||'rocket',enemy:o.enemy,rev:!!o.rev,shots:[{regId:o.regId,down:!!o.down}],title:o.title||'⚔️ Удар на карте',sub:o.sub||o.region||''})}catch(e){console.warn('MP attack map',e)}},
+ showWarAttackHistory(w,side,meId){try{const a=(w&&w.attacks||[]).filter(x=>side==='out'?x.from_id===meId:x.to_id===meId).slice(0,8);if(!a.length)return toast(side==='out'?'Наших ударов пока нет':'Ударов по нам пока нет');const first=a[0],incoming=side!=='out';strikeScene({kind:'strike',k:first.weapon||'rocket',enemy:incoming?first.from_country:first.to_country,rev:incoming,shots:a.map(x=>({regId:x.region_id,down:!!x.down})),title:incoming?'🛡 Карта ударов по нам':'🎯 Карта наших ударов',sub:a.map(x=>`${x.weapon} → ${x.region_name}${x.down?' · сбито':''}`).join(' · ')})}catch(e){console.warn('MP attack history',e)}},
+ applyFactoryState(m){if(!m)return;S.milFactories=Array.isArray(m.factories)?m.factories:[];S.factoryBuilds=Array.isArray(m.builds)?m.builds:[];if(Number.isFinite(+m.money))S.money=+m.money;if(Number.isFinite(+m.steel))S.steel=+m.steel;if(Number.isFinite(+m.fuel))S.fuel=+m.fuel;if(Number.isFinite(+m.energy))S.energy=+m.energy;const ars=m.ars||{};Object.keys(ars).forEach(k=>{if(ARMS[k])S[k]=Number(ars[k])||0});save();render(true)},
  get S(){return S},
  syncMPTerritory(data){if(!data||!data.from||!data.region||!data.to)return;S.mpTerritories=S.mpTerritories||{};S.mpTerritories[data.from+'|'+data.region]=data.to;save();if(WMAP.node){WMAP.usig='';updateWorld()}render(true)},
  syncMPTerritories(data){if(!data||typeof data!=='object')return;S.mpTerritories={...(S.mpTerritories||{}),...data};save();if(WMAP.node){WMAP.usig='';updateWorld()}render(true)},

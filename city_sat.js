@@ -140,30 +140,69 @@ let ITEMS=[],VER=0,LASTKEY='',LAYER=null;
 /* радиус города в единицах карты: 10 тыс. → 0.5, 100 тыс. → 1.25, 1 млн → 2, 10 млн → 2.75 (но не больше доли области) */
 function radius(pop,cap){const r=.5+.75*Math.log10(Math.max(1e4,pop||1e4)/1e4);return Math.max(.35,Math.min(r,cap?Math.max(.4,cap*.6):9))}
 const MAXVIS=260;
+/* Выбираем неперекрывающиеся значки: крупные города имеют приоритет,
+   а мелкие появляются по мере приближения карты. Координаты проверяются в экранных пикселях. */
+function declutter(items,ppu,max=MAXVIS){
+  const ordered=items.slice().sort((a,b)=>(b.rw||0)-(a.rw||0)),kept=[];
+  for(const c of ordered){
+    const sr=(Number(c.rw)||0)*ppu;
+    if(sr<1.6)break;
+    if(sr<(c.own!=null&&c.main?1.6:3.2))continue;
+    const sx=Number(c.x)*ppu,sy=Number(c.y)*ppu;
+    /* На большом приближении значки ограничены экранным размером: так соседние города
+       становятся видны, а не растут вместе с масштабом до полного наложения. */
+    const baseR=Math.min(sr,c.main?10:8.5);
+    let chosen=null;
+    for(const factor of [1,.82,.66,.5,.36]){
+      const r=Math.max(1.5,baseR*.88*factor);
+      let overlap=false;
+      for(const q of kept){const dx=sx-q.sx,dy=sy-q.sy,min=r+q.r+3;if(dx*dx+dy*dy<min*min){overlap=true;break}}
+      if(!overlap){chosen={r};break}
+    }
+    if(!chosen)continue;
+    kept.push({c,sr,sx,sy,r:chosen.r});
+    if(kept.length>=max)break;
+  }
+  return kept;
+}
 function draw(layer,svg,wz){
   if(!layer)return;
   if(!layer.querySelector('#csi')){layer.innerHTML='<defs id="csd"></defs><g id="csi"></g>';DEFSEL=null;DONE.clear();LASTKEY=''}
   const host=layer.querySelector('#csi'),rect=svg.getBoundingClientRect(),sw=rect.width>20?rect.width:400,ppu=sw/wz.w,
-   x0=wz.x-wz.w*.05,y0=wz.y-wz.h*.05,x1=wz.x+wz.w*1.05,y1=wz.y+wz.h*1.05,vis=[];
+   x0=wz.x-wz.w*.05,y0=wz.y-wz.h*.05,x1=wz.x+wz.w*1.05,y1=wz.y+wz.h*1.05,candidates=[];
   for(const c of ITEMS){
     const sr=c.rw*ppu;
-    if(sr<1.6)break;                       /* список отсортирован по размеру: дальше только ещё мельче */
+    if(sr<1.6)break;
     if(sr<(c.own!=null&&c.main?1.6:3.2))continue;
     if(c.x<x0||c.x>x1||c.y<y0||c.y>y1)continue;
-    vis.push({c,sr});if(vis.length>=MAXVIS)break}
+    candidates.push(c);
+  }
+  const vis=declutter(candidates,ppu,MAXVIS);
   const lg=Math.round(Math.log2(ppu)*3);
   const parts=vis.map(o=>{const c=o.c,lv=level(c.cond),tier=o.sr<9?0:o.sr<30?1:2;o.lv=lv;o.tier=tier;return c.id+'.'+lv+'.'+tier});
   const key=VER+'|'+lg+'|'+parts.join(',');
   if(key===LASTKEY)return;LASTKEY=key;
-  const fs=11/ppu,sk=3/ppu;
+  const fs=11/ppu,sk=3/ppu,labelBoxes=[];
+  /* Не даём названиям городов перекрывать соседние названия и сами значки. */
+  vis.forEach(o=>{
+    const c=o.c;let show= o.sr>=10&&(o.sr>=18||(c.own!=null&&c.main));
+    if(!show)return;
+    const w=Math.max(12,Math.min(16,String(c.name||'').length)*fs*.62*ppu),h=13.5;
+    const box={x:o.sx-w/2,y:o.sy+o.r*.95+1,w,h};
+    const labelOverlap=labelBoxes.some(b=>box.x<b.x+b.w+2&&box.x+box.w+2>b.x&&box.y<b.y+b.h+2&&box.y+box.h+2>b.y);
+    let markerOverlap=false;
+    for(const q of vis){if(q===o)continue;const nx=Math.max(box.x,Math.min(q.sx,box.x+box.w)),ny=Math.max(box.y,Math.min(q.sy,box.y+box.h)),dx=q.sx-nx,dy=q.sy-ny;if(dx*dx+dy*dy<(q.r+1)*(q.r+1)){markerOverlap=true;break}}
+    if(labelOverlap||markerOverlap)show=false;else labelBoxes.push(box);
+    o.showLab=show;
+  });
   host.innerHTML=vis.map(o=>{
-    const c=o.c,lv=o.lv,tier=o.tier,sr=o.sr,s=c.rw/9,cl=c.cond<35?'ru':c.cond<75?'dm':'ok',
+    const c=o.c,lv=o.lv,tier=o.tier,sr=o.sr,s=o.r/(9*ppu),cl=c.cond<35?'ru':c.cond<75?'dm':'ok',
      sym=ensure(layer,tier,lv,hash(c.id)%VARIANTS),
      tt=`${c.name}${c.sub?' · '+c.sub:''} · ${LV_NAME[lv]} (${Math.round(c.cond)}%)`+(c.pop?` · ${Math.round(c.pop/1000)} тыс. жителей`:'')+(c.own!=null?'. Нажмите, чтобы открыть город и восстановление.':''),
-     showLab=sr>=10&&(sr>=18||(c.own!=null&&c.main)),
-     hit=Math.max(c.rw,7/ppu);
-    return `<g class="csat ${cl}" transform="translate(${f(c.x)} ${f(c.y)})" ${c.own!=null?`data-own="1" data-city="${c.own}" data-town="${esc([c.name,c.pop||0,Math.round(c.cond),c.others||''].join('|'))}"`:`data-fc="${esc(c.name)}|${esc(c.sub||'')}|${Math.round(c.cond)}"`}><circle r="${f(hit)}" fill="#000" fill-opacity="0"/><use href="#${sym}" transform="scale(${f(s)})"/>${showLab?`<text text-anchor="middle" class="csat-label" y="${f(c.rw*.95+fs*1.05)}" style="font-size:${f(fs)}px;stroke-width:${f(sk)}px">${esc(c.name.length>16?c.name.slice(0,15)+'…':c.name)}</text>`:''}${c.bad&&c.main&&sr>=10?`<text class="csat-bad" x="${f(c.rw*.7)}" y="${f(-c.rw*.6)}" style="font-size:${f(fs)}px;stroke-width:${f(sk*.7)}px">!${c.bad}</text>`:''}<title>${esc(tt)}</title></g>`}).join('');
+     hit=Math.max(o.r,7)/ppu;
+    return `<g class="csat ${cl}" transform="translate(${f(c.x)} ${f(c.y)})" ${c.own!=null?`data-own="1" data-city="${c.own}" data-town="${esc([c.name,c.pop||0,Math.round(c.cond),c.others||''].join('|'))}"`:`data-fc="${esc(c.name)}|${esc(c.sub||'')}|${Math.round(c.cond)}"`}><circle r="${f(hit)}" fill="#000" fill-opacity="0"/><use href="#${sym}" transform="scale(${f(s)})"/>${o.showLab?`<text text-anchor="middle" class="csat-label" y="${f(o.r*.95/ppu+fs*1.05)}" style="font-size:${f(fs)}px;stroke-width:${f(sk)}px">${esc(c.name.length>16?c.name.slice(0,15)+'…':c.name)}</text>`:''}${c.bad&&c.main&&sr>=10?`<text class="csat-bad" x="${f(o.r*.7/ppu)}" y="${f(-o.r*.6/ppu)}" style="font-size:${f(fs)}px;stroke-width:${f(sk*.7)}px">!${c.bad}</text>`:''}<title>${esc(tt)}</title></g>`}).join('');
 }
+
 function setItems(items){ITEMS=items.slice().sort((a,b)=>b.rw-a.rw);VER++}
 function refresh(svg,wz,W){const layer=svg&&svg.querySelector('#city-markers');if(layer)draw(layer,svg,wz)}
 function render(layer,items){LAYER=layer;setItems(items);const sv=layer.ownerSVGElement;if(sv)draw(layer,sv,{x:0,y:0,w:1000,h:575})}
@@ -188,5 +227,5 @@ const st=document.createElement('style');
 st.textContent='.csat{cursor:pointer;pointer-events:all}.csat-label{font-family:system-ui,sans-serif;font-weight:700;fill:#fff4d2;paint-order:stroke;stroke:#101923;stroke-linejoin:round;user-select:none;pointer-events:none}.csat-bad{font-family:system-ui,sans-serif;font-weight:800;fill:#ffc56b;stroke:#111923;paint-order:stroke;pointer-events:none}.csat.ru .csat-bad{fill:#ff7777}@keyframes csflick{0%,100%{opacity:.95}50%{opacity:.45}}.cs-fire,.cs-fire2{animation:csflick 1.1s infinite}';
 document.head.appendChild(st);
 
-window.CitySat={defs,build,level,ref,zoom,render,refresh,setItems,radius,decorate,towns,townCond,townCount,cultureOf,tapForeign,toast,LV_NAME};
+window.CitySat={defs,build,level,ref,zoom,render,refresh,setItems,radius,declutter,decorate,towns,townCond,townCount,cultureOf,tapForeign,toast,LV_NAME};
 })();

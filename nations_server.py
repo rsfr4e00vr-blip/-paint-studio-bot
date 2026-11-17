@@ -67,6 +67,9 @@ def restore_rooms(path=None):
                         setattr(player, key, value)
                 player.ws = None
                 player.connected = False
+                player.rep.setdefault("steel", 55.0)
+                player.rep.setdefault("fuel", 65.0)
+                player.rep.setdefault("energy", 72.0)
                 room.players[player.id] = player
             if room.state == "running":
                 room.state = "paused"
@@ -172,10 +175,23 @@ ECO_TARGETS = {   # цель: (главная отрасль, сила, побо
 ECO_TARGET_NAMES = {"energy": "энергосеть", "fuel": "НПЗ и топливо", "ind": "заводы", "port": "порты и транспорт", "farm": "агро и склады", "bank": "финансовый сектор"}
 ECO_WEIGHT = {"energy": .16, "fuel": .06, "transport": .12, "steel": .06, "industry": .34, "food": .12, "finance": .14}
 ARS_WEAPONS = {   # цены те же, что в одиночной игре (млн); f — сила удара
+    "cannon": {"n": "Пушка", "c": 300, "f": 1.0},
     "drone": {"n": "Ударный дрон", "c": 250, "f": 1.0},
+    "tank": {"n": "Танк", "c": 450, "f": 1.5},
+    "howitzer": {"n": "Гаубица", "c": 380, "f": 1.3},
     "rocket": {"n": "Ракета", "c": 600, "f": 2.5},
+    "mlrs": {"n": "РСЗО", "c": 650, "f": 2.0},
     "cruise": {"n": "Крылатая ракета", "c": 800, "f": 3.0},
     "bomber": {"n": "Бомбардировщик", "c": 1100, "f": 4.0},
+}
+FACTORY_TYPES = {
+    "drone": {"name": "Завод ударных дронов", "cost": 850, "months": 10, "period": 1, "output": 5, "steel": 1, "fuel": 1, "energy": 2, "upkeep": 3},
+    "rocket": {"name": "Ракетный завод", "cost": 1250, "months": 14, "period": 3, "output": 1, "steel": 2, "fuel": 2, "energy": 3, "upkeep": 5},
+    "mlrs": {"name": "Завод РСЗО", "cost": 1450, "months": 15, "period": 5, "output": 1, "steel": 3, "fuel": 3, "energy": 4, "upkeep": 6},
+    "howitzer": {"name": "Артиллерийский завод", "cost": 1100, "months": 12, "period": 4, "output": 1, "steel": 2, "fuel": 2, "energy": 3, "upkeep": 4},
+    "tank": {"name": "Танковый завод", "cost": 1800, "months": 18, "period": 5, "output": 1, "steel": 4, "fuel": 4, "energy": 5, "upkeep": 8},
+    "cruise": {"name": "Завод крылатых ракет", "cost": 1750, "months": 18, "period": 6, "output": 1, "steel": 4, "fuel": 4, "energy": 5, "upkeep": 8},
+    "bomber": {"name": "Авиационный завод", "cost": 2200, "months": 20, "period": 8, "output": 1, "steel": 5, "fuel": 5, "energy": 7, "upkeep": 10},
 }
 ARS_STOCK_CAP = 30        # запас каждого вида
 ARS_SALVO_MAX = 6         # единиц оружия за один залп
@@ -267,7 +283,7 @@ class Player:
         # публичные показатели (ограничены сервером)
         self.rep = {"gdp": START_GDP, "money": 18000.0, "debt": 0.0, "stab": 68.0,
                     "appr": 61.0, "legit": 70.0, "power": START_POWER, "pop": 8200000.0,
-                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0, "infl": 5.0, "rate": 5.0, "infra": 100.0, "infra_critical": 100.0, "infra_count": 0, "cities": 0}
+                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0, "infl": 5.0, "rate": 5.0, "infra": 100.0, "infra_critical": 100.0, "infra_count": 0, "cities": 0, "steel": 55.0, "fuel": 65.0, "energy": 72.0}
         self.score_gdp = START_GDP    # «зачётный» ВВП: растёт не быстрее лимита
         # Личная «точка отсчёта»: у каждой страны свой стартовый ВВП, мощь и казна.
         # Заполняется первым отчётом клиента после старта, чтобы очки считались честно для любой страны.
@@ -303,6 +319,9 @@ class Player:
         self.crisis_response: str | None = None
         self.sect: dict = eco_new()        # здоровье отраслей экономики (0..100), считает сервер
         self.ars: dict = {k: 0 for k in ARS_WEAPONS}   # стратегический арсенал (хранится на сервере)
+        self.regions: list = []            # карта областей игрока: id/name/geo
+        self.factories: list = []          # построенные военно-промышленные заводы
+        self.factory_builds: list = []     # строящиеся заводы
         self.ars_cd = -99                  # месяц последнего залпа
         self.sect_boost = 0                # месяцев ускоренного ремонта
 
@@ -318,7 +337,8 @@ class Player:
                 "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
                 "res": round(self.rep.get("res", 70)), "infl": round(self.rep.get("infl", 5), 1), "rate": round(self.rep.get("rate", 5), 1),
                 "infra": round(self.rep.get("infra", 100), 1), "infra_critical": round(self.rep.get("infra_critical", 100), 1),
-                "infra_count": int(self.rep.get("infra_count", 0)), "cities": int(self.rep.get("cities", 0))}
+                "infra_count": int(self.rep.get("infra_count", 0)), "cities": int(self.rep.get("cities", 0)),
+                "steel": round(self.rep.get("steel", 55), 1)}
 
 
 class Room:
@@ -695,11 +715,22 @@ class Room:
                               "month": self.month})
         persist_rooms()
 
+    # ---- военно-промышленные заводы: сервер проверяет строительство и зеркалирует склад/состояние
+    # Помесячное производство выполняется в том же клиентском симуляторе, что и экономика страны;
+    # сервер принимает только ограниченный снимок и расходует подтверждённый запас при атаках.
+    def factory_state(self, p: Player) -> dict:
+        return {"type": "factory_state", "factories": [dict(x) for x in p.factories],
+                "builds": [dict(x) for x in p.factory_builds], "ars": dict(p.ars),
+                "money": round(p.rep.get("money", 0), 2), "steel": round(p.rep.get("steel", 0), 2),
+                "fuel": round(p.rep.get("fuel", 65), 2), "energy": round(p.rep.get("energy", 72), 2)}
+
     # ---- войны
     def war_pub(self, w: dict) -> dict:
         return {"id": w["id"], "a": w["a"], "d": w["d"], "p": round(w["p"]), "m": w["m"],
                 "cause": w.get("cause"), "cause_label": WAR_CAUSES.get(w.get("cause"), ""), "reason": w.get("reason", ""), "won": w.get("won"), "wm": w.get("wm", 0), "orders": w.get("orders", {}), "econ": w.get("econ", {}), "sect": {pid: {k: round(v, 1) for k, v in self.players[pid].sect.items()} for pid in (w["a"], w["d"]) if pid in self.players},
-                "goal": w.get("goal", "tribute"), "goal_label": WAR_GOALS.get(w.get("goal", "tribute"), ""), "claim_region": w.get("claim_region", "")}
+                "goal": w.get("goal", "tribute"), "goal_label": WAR_GOALS.get(w.get("goal", "tribute"), ""), "claim_region": w.get("claim_region", ""),
+                "regions": {pid: list(self.players[pid].regions[:200]) for pid in (w["a"], w["d"]) if pid in self.players},
+                "attacks": [dict(x) for x in w.get("attacks", [])[-16:]]}
 
     async def process_embassies(self):
         """Посольства: 20 млн ежемесячно, +2 к отношениям каждые 4 активных месяца."""
@@ -870,6 +901,7 @@ class Room:
         self.wars.pop(w["id"], None)
         for p in (win, lose):
             p.war = None
+        await self.broadcast({"type": "war_state", "wars": [self.war_pub(item) for item in self.wars.values()]})
         a = self.players.get(w["a"])
         if a:
             a.war_cd = self.month + WAR_COOLDOWN
@@ -883,6 +915,7 @@ class Room:
     async def end_war(self, w: dict, result: str):
         self.wars.pop(w["id"], None)
         a, d = self.players.get(w["a"]), self.players.get(w["d"])
+        await self.broadcast({"type": "war_state", "wars": [self.war_pub(item) for item in self.wars.values()]})
         for p in (a, d):
             if p:
                 p.war = None
@@ -973,7 +1006,7 @@ async def handle(room: Room, p: Player, msg: dict):
         return
 
     if kind == "sync":
-        await room.send(p, {"type": "state", "ars": dict(p.ars), "sect": {k: round(v, 1) for k, v in p.sect.items()}, "territories": dict(room.territories), **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
+        await room.send(p, {"type": "state", "ars": dict(p.ars), "factories": [dict(x) for x in p.factories], "factory_builds": [dict(x) for x in p.factory_builds], "money": p.rep.get("money", 0), "steel": p.rep.get("steel", 55), "fuel": p.rep.get("fuel", 65), "energy": p.rep.get("energy", 72), "sect": {k: round(v, 1) for k, v in p.sect.items()}, "territories": dict(room.territories), **room.lobby_info(), "wars": [room.war_pub(w) for w in room.wars.values()],
                             "mods": {q.id: room.income_mod(q) for q in room.players.values()},
                             "relations": room.relations_for(p), "relation_programs": room.programs_for(p),
                             "embassies": room.embassies_for(p), "claims": room.claims_for(p), "border_cases": room.border_cases_for(p), "ideology_cases": room.ideology_cases_for(p), "security_cases": room.security_cases_for(p), "war_grounds": room.grounds_for(p), "global_crisis": dict(room.global_crisis) if room.global_crisis else None, "global_next": room.global_next,
@@ -1020,6 +1053,8 @@ async def handle(room: Room, p: Player, msg: dict):
         await on_war(room, p, msg)
     elif kind == "war_command":
         await on_war_command(room, p, msg)
+    elif kind == "factory_build":
+        await on_factory_build(room, p, msg)
     elif kind == "ars_buy":
         await on_ars_buy(room, p, msg)
     elif kind == "ars_strike":
@@ -1090,7 +1125,61 @@ async def on_report(room: Room, p: Player, msg: dict):
         "infra_critical": num(r.get("infra_critical"), 0, 100, old.get("infra_critical", 100.0)),
         "infra_count": int(num(r.get("infra_count"), 0, 100000, old.get("infra_count", 0))),
         "cities": int(num(r.get("cities"), 0, 10000, old.get("cities", 0))),
+        "steel": num(r.get("steel"), 0, 100, old.get("steel", 55.0)),
+        "fuel": num(r.get("fuel"), 0, 100, old.get("fuel", 65.0)),
+        "energy": num(r.get("energy"), 0, 100, old.get("energy", 72.0)),
     }
+    regions = msg.get("regions") if isinstance(msg.get("regions"), list) else []
+    clean_regions = []
+    seen_regions = set()
+    for item in regions[:200]:
+        if not isinstance(item, dict):
+            continue
+        rid = "".join(ch for ch in str(item.get("id", "")) if ch.isalnum() or ch in ":_-.")[:100]
+        name = "".join(ch for ch in str(item.get("name", "")) if ch.isprintable()).strip()[:80]
+        if not rid or not name or rid in seen_regions:
+            continue
+        seen_regions.add(rid)
+        clean_regions.append({"id": rid, "name": name})
+    if clean_regions:
+        p.regions = clean_regions
+    # Военные склады и заводы зеркалируются на сервер: залп не может потратить чужой или несуществующий запас.
+    ars_report = r.get("ars") if isinstance(r.get("ars"), dict) else {}
+    for weapon in ARS_WEAPONS:
+        p.ars[weapon] = int(num(ars_report.get(weapon), 0, ARS_STOCK_CAP, p.ars.get(weapon, 0)))
+    factories_report = msg.get("factories") if isinstance(msg.get("factories"), list) else None
+    if factories_report is not None:
+        allowed_regions = {x["id"]: x["name"] for x in p.regions}
+        clean_factories = []
+        for item in factories_report[:100]:
+            if not isinstance(item, dict) or item.get("type") not in FACTORY_TYPES:
+                continue
+            rid = str(item.get("region_id", ""))[:100]
+            if rid not in allowed_regions:
+                continue
+            spec = FACTORY_TYPES[item["type"]]
+            clean_factories.append({"id": str(item.get("id", ""))[:40], "type": item["type"],
+                                    "region": allowed_regions[rid], "region_id": rid,
+                                    "hp": int(num(item.get("hp"), 0, 100, 100)),
+                                    "progress": int(num(item.get("progress"), 0, spec["period"] - 1, 0)),
+                                    "stalled": bool(item.get("stalled", False))})
+        p.factories = clean_factories
+    builds_report = msg.get("factory_builds") if isinstance(msg.get("factory_builds"), list) else None
+    if builds_report is not None:
+        allowed_regions = {x["id"]: x["name"] for x in p.regions}
+        clean_builds = []
+        for item in builds_report[:3]:
+            if not isinstance(item, dict) or item.get("type") not in FACTORY_TYPES:
+                continue
+            rid = str(item.get("region_id", ""))[:100]
+            if rid not in allowed_regions:
+                continue
+            spec = FACTORY_TYPES[item["type"]]
+            clean_builds.append({"id": str(item.get("id", ""))[:40], "type": item["type"],
+                                 "region": allowed_regions[rid], "region_id": rid,
+                                 "left": int(num(item.get("left"), 0, spec["months"], spec["months"])),
+                                 "total": spec["months"]})
+        p.factory_builds = clean_builds
     first = p.gdp0 is None and room.state in ("running", "paused")
     if first:
         # первый отчёт игры: запоминаем стартовые ВВП, мощь и казну этой страны
@@ -1413,6 +1502,9 @@ async def on_war(room: Room, p: Player, msg: dict):
     q = partner(room, p, msg)
     if not q:
         return
+    if not q.connected:
+        await room.notice(f"{q.country} сейчас не в сети. Объявить войну можно, когда оба игрока подключены к комнате.", "warn", p)
+        return
     cause = str(msg.get("cause", ""))
     grounds = room.diplomacy_grounds(p, q)
     if cause not in WAR_CAUSES or cause not in grounds:
@@ -1466,8 +1558,18 @@ async def on_war(room: Room, p: Player, msg: dict):
     current_q = int(num(q.relations.get(p.id, 0), -100, 100, 0))
     p.relations[q.id] = max(-45, current_p - 25)
     q.relations[p.id] = max(-45, current_q - 25)
-    await room.send(p, {"type": "war_start", "war": wid, "enemy": q.country, "aggressor": True, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
-    await room.send(q, {"type": "war_start", "war": wid, "enemy": p.country, "aggressor": False, "cause": cause, "cause_label": WAR_CAUSES[cause], "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
+    # Один и тот же авторитетный снимок войны отправляется обоим участникам и всей комнате.
+    # Клиенты не должны ждать следующего месячного тика, чтобы увидеть новую войну.
+    war_snapshot = [room.war_pub(item) for item in room.wars.values()]
+    await room.send(p, {"type": "war_start", "war": wid, "wars": war_snapshot,
+        "relations": room.relations_for(p), "claims": room.claims_for(p), "war_grounds": room.grounds_for(p),
+        "enemy": q.country, "aggressor": True, "cause": cause, "cause_label": WAR_CAUSES[cause],
+        "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
+    await room.send(q, {"type": "war_start", "war": wid, "wars": war_snapshot,
+        "relations": room.relations_for(q), "claims": room.claims_for(q), "war_grounds": room.grounds_for(q),
+        "enemy": p.country, "aggressor": False, "cause": cause, "cause_label": WAR_CAUSES[cause],
+        "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
+    await room.broadcast({"type": "war_state", "wars": war_snapshot})
     await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}. Основание: {WAR_CAUSES[cause]}. Причина: {ground.get('detail', '')}. Цель войны: {WAR_GOALS[goal]}{(' («' + claim_region + '»)') if claim_region else ''}.", "war")
 
 
@@ -1489,6 +1591,46 @@ async def on_war_command(room: Room, p: Player, msg: dict):
         "spec": spec, "logi": logi, "alloc": alloc, "preset": preset}
     await room.broadcast({"type": "war_orders", "wars": [room.war_pub(x) for x in room.wars.values()]})
     await room.notice(f"📋 {p.country} обновил план армии: {preset}, {region or 'общий фронт'}, авиация — {air}, флот — {navy}.", "war")
+
+
+async def on_factory_build(room: Room, p: Player, msg: dict):
+    kind = msg.get("factory")
+    spec = FACTORY_TYPES.get(kind)
+    if not spec:
+        await room.notice("Неизвестный тип военного завода.", "warn", p)
+        return
+    region_id = str(msg.get("region", ""))[:100]
+    region = next((x for x in p.regions if x.get("id") == region_id), None)
+    if not region:
+        await room.notice("Область не найдена на серверной карте. Обновите карту и повторите.", "warn", p)
+        return
+    if len(p.factory_builds) >= 3:
+        await room.notice("Одновременно можно строить не более 3 военных заводов.", "warn", p)
+        return
+    steel_cost = max(3, math.ceil(spec["steel"] * 2))
+    fuel_cost = max(1, math.ceil(spec["fuel"] * 1.5))
+    energy_cost = max(2, math.ceil(spec["energy"] * 1.5))
+    if p.rep.get("money", 0) < spec["cost"]:
+        await room.notice(f"Для строительства нужно {spec['cost']} млн.", "warn", p)
+        return
+    if p.rep.get("steel", 0) < steel_cost:
+        await room.notice(f"Для строительства нужно {steel_cost} стали.", "warn", p)
+        return
+    if p.rep.get("fuel", 65) < fuel_cost:
+        await room.notice(f"Для строительства нужно {fuel_cost} топлива.", "warn", p)
+        return
+    if p.rep.get("energy", 72) < energy_cost:
+        await room.notice(f"Для строительства нужно {energy_cost} энергии.", "warn", p)
+        return
+    p.rep["money"] -= spec["cost"]
+    p.rep["steel"] -= steel_cost
+    p.rep["fuel"] = p.rep.get("fuel", 65) - fuel_cost
+    p.rep["energy"] = p.rep.get("energy", 72) - energy_cost
+    p.factory_builds.append({"id": "mf_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=8)),
+                             "type": kind, "region": region["name"], "region_id": region_id,
+                             "left": spec["months"], "total": spec["months"]})
+    await room.send(p, room.factory_state(p))
+    await room.notice(f"🏗 {p.country} начал строительство: {spec['name']} в области «{region['name']}». Срок — {spec['months']} месяцев.", "info", p)
 
 
 async def on_ars_buy(room: Room, p: Player, msg: dict):
@@ -1523,7 +1665,7 @@ async def on_ars_repair(room: Room, p: Player, msg: dict):
 
 
 async def on_ars_strike(room: Room, p: Player, msg: dict):
-    """Залп стратегического арсенала по отрасли экономики противника в активной войне."""
+    """Серверный залп: списывает общий склад, выбирает конкретную область и сообщает обоим игрокам маршрут удара."""
     w = room.wars.get(p.war or "")
     if not w:
         await room.notice("Арсенал применяют только в активной войне.", "warn", p)
@@ -1541,14 +1683,19 @@ async def on_ars_strike(room: Room, p: Player, msg: dict):
     if count < 1:
         await room.notice(f"На складе нет оружия «{ARS_WEAPONS[k]['n']}».", "warn", p)
         return
+    requested_region = str(msg.get("region", ""))[:100]
+    region = next((x for x in d.regions if x.get("id") == requested_region), None)
+    if not region and d.regions:
+        region = random.choice(d.regions)
     p.ars[k] -= count
     p.ars_cd = room.month
     pvo = max(0.0, d.rep.get("pvo", 0.0))
-    intercept = min(0.55, pvo * 0.0035)       # шанс сбить одну единицу
-    defense = min(0.35, pvo * 0.003)          # ПВО и укрепления режут ущерб прошедших ударов
+    intercept = min(0.55, pvo * 0.0035)
+    defense = min(0.35, pvo * 0.003)
     f = ARS_WEAPONS[k]["f"]
     landed = stopped = 0
     pts_total = drop_total = 0.0
+    factory_damage = None
     for _ in range(count):
         if random.random() < intercept:
             stopped += 1
@@ -1557,25 +1704,50 @@ async def on_ars_strike(room: Room, p: Player, msg: dict):
         landed += 1
         pts_total += pts
         drop_total += drop
+    # Удары по выбранной области могут вывести из строя именно её военный завод.
+    if landed and region and d.factories and random.random() < min(0.82, 0.20 + f * 0.12):
+        candidates = [x for x in d.factories if x.get("region_id") == region["id"] and int(x.get("hp", 100)) > 0]
+        if candidates:
+            factory = random.choice(candidates)
+            factory["hp"] = max(0, int(factory.get("hp", 100)) - round(25 + f * 18))
+            spec = FACTORY_TYPES.get(factory.get("type"), {})
+            factory_damage = {"name": spec.get("name", "военный завод"), "region": region["name"],
+                              "hp": factory["hp"], "destroyed": factory["hp"] <= 0}
+            if factory["hp"] <= 0:
+                d.factories = [x for x in d.factories if x is not factory]
     main = ECO_TARGETS[target][0]
     if landed:
         econ = w.setdefault("econ", {})
         q = econ.setdefault(d.id, {"gdp": 100.0, "fx": 100.0})
         q["gdp"] = max(25.0, q["gdp"] * (1.0 - drop_total * 0.5))
         q["fx"] = min(500.0, q["fx"] * (1.0 + min(0.05, drop_total * 0.7)))
-        shift = min(6.0, 0.5 * f * landed)     # оборонка и заводы врага просели: фронт чуть сдвигается
+        shift = min(6.0, 0.5 * f * landed)
         w["p"] = max(0.0, min(100.0, w["p"] + (shift if w["a"] == p.id else -shift)))
     gf = round(eco_gdp_factor(d.sect) * 100)
     chain = sorted(eco_solve(d.sect).items(), key=lambda x: x[1])[:3]
     chain_txt = ", ".join(f"{ECO_NAMES[a]} {round(b)}%" for a, b in chain if b < 85)
+    region_id = region.get("id", "") if region else ""
+    region_name = region.get("name", d.country) if region else d.country
+    attack = {"from_id": p.id, "to_id": d.id, "from_country": p.country, "to_country": d.country,
+              "weapon": k, "region_id": region_id, "region_name": region_name,
+              "landed": landed, "stopped": stopped, "down": landed == 0, "month": room.month,
+              "factory_damage": factory_damage}
+    w.setdefault("attacks", []).insert(0, attack)
+    w["attacks"] = w["attacks"][:16]
     await room.send(p, {"type": "ars_result", "target": target, "landed": landed, "stopped": stopped, "pts": round(pts_total, 1),
-                        "gdp_factor": gf, "ars": dict(p.ars), "enemy": d.country,
-                        "text": f"💥 Залп по цели «{ECO_TARGET_NAMES[target]}» ({d.country}): попало {landed}, сбито ПВО {stopped}. Экономика врага работает на {gf}%. {chain_txt}"})
+                        "gdp_factor": gf, "ars": dict(p.ars), "enemy": d.country, "region": region_name,
+                        "factory_damage": factory_damage,
+                        "text": f"💥 Залп по области «{region_name}», цель «{ECO_TARGET_NAMES[target]}» ({d.country}): попало {landed}, сбито ПВО {stopped}. Экономика врага работает на {gf}%. {chain_txt}"})
     if landed:
         await room.send(d, {"type": "eco_strike", "from": p.country, "target": target, "main": main, "pts": round(pts_total, 1),
                             "h": {k2: round(v, 1) for k2, v in d.sect.items()}, "gdp_drop": round(drop_total, 4), "landed": landed})
+    # Один и тот же факт атаки и история войны уходят обеим сторонам.
+    await room.send(p, {"type": "war_attack", **attack, "attacker": True})
+    await room.send(d, {"type": "war_attack", **attack, "attacker": False})
+    if factory_damage:
+        await room.send(d, room.factory_state(d))
     await room.broadcast({"type": "war_orders", "wars": [room.war_pub(x) for x in room.wars.values()]})
-    await room.notice(f"💥 {p.country} ударил по отрасли «{ECO_NAMES[main]}» страны {d.country}: попало {landed}, сбито {stopped}. {chain_txt}", "war")
+    await room.notice(f"💥 {p.country} ударил по области «{region_name}» страны {d.country}: попало {landed}, сбито {stopped}. {chain_txt}", "war")
 
 
 async def on_peace(room: Room, p: Player, msg: dict):
