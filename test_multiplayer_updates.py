@@ -21,6 +21,19 @@ async def run_checks():
     room.players = {a.id: a, b.id: b}
     a.rep["money"] = b.rep["money"] = 10_000
 
+    # Military map snapshots are sanitized and broadcast without accepting arbitrary state.
+    await ns.handle(room, a, {"type": "military_state", "units": [
+        {"id": "u1", "sub": "inf", "x": 120, "y": 90, "hp": 88, "ang": 1.2, "name": "Пехота"},
+        {"id": "bad", "sub": "unknown", "x": 2, "y": 2},
+        {"id": "out", "sub": "tank", "x": 5000, "y": 2},
+        {"id": "fuel", "sub": "fighter", "x": 12, "y": 12, "fuel": "broken"},
+    ]})
+    assert len(a.military_state["units"]) == 1
+    assert a.military_state["units"][0]["sub"] == "inf"
+    sync = next(x for x in ws_b.messages if x.get("type") == "military_state")
+    assert sync["player"] == "a" and sync["units"][0]["x"] == 120
+    assert not any(x.get("type") == "military_state" for x in ws_a.messages)
+
     # New diplomacy actions are server-validated and debited once.
     await ns.on_diplomacy(room, a, {"to": b.id, "action": "gift"})
     assert a.rep["money"] == 9_550
@@ -73,7 +86,7 @@ async def run_checks():
     await room.tick()
     tick = next(x for x in ws_a.messages if x.get("type") == "tick")
     assert "global_crisis" in tick and "crisis_responses" in tick and "embassies" in tick
-    print("OK: multiplayer diplomacy, embassies, shared crisis response and war presets")
+    print("OK: multiplayer troop sync, diplomacy, embassies, shared crisis response and war presets")
 
 
 if __name__ == "__main__":
