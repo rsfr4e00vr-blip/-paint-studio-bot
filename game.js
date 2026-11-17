@@ -214,7 +214,7 @@ function regFill(C,r,i){const owner=regionOwner(C,r);if(isMe(owner))return MYC;r
 const ownSig=()=>JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).join(',')+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+myName()+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.regionOwners||{})+'|'+JSON.stringify(S.lostTo||{})+'|'+JSON.stringify(S.mpTerritories||{});
 function cityDamageSignature(){return (S.regions||[]).map(r=>(r.name||'')+':'+(r.assets||[]).map(a=>Math.round(Number(a.condition)||0)).join(',')+JSON.stringify(Object.fromEntries(Object.entries(r.townHit||{}).map(([k,v])=>[k,Math.round(v)])))).join('|')+'|'+(S.wars||[]).map(w=>Math.round(Object.values(w.regEco||{}).reduce((a,b)=>a+b,0))+':'+Math.round(Object.values(w.dmg||{}).reduce((a,d)=>a+d.infra+d.civ+d.mil,0))).join(',')}
 /* ---------- города в областях: у каждой области несколько городов (число зависит от населения) ---------- */
-const TWC={},TWPOS={};
+const TWC={},TWPOS={},TWRAD={};
 const hstr=s=>{let h=0;s=String(s);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h};
 function townSpots(rings,cx,cy,rad,n,key){
  const out=[[cx,cy]],h=hstr(key)%7;
@@ -250,10 +250,10 @@ function drawCityMarkers(svg){
   if(!C||!gr)return;const q=regClip(C,gr);if(!q||!Number.isFinite(q.cx)||!Number.isFinite(q.cy))return;
   const assets=Array.isArray(r.assets)?r.assets:[],avg=assets.length?assets.reduce((v,a)=>v+(Number(a.condition)||0),0)/assets.length:100,bad=assets.filter(a=>(Number(a.condition)||0)<70).length;
   const tw=ownTownsOf(ri),pk='o'+gr.id+'#'+tw.length;
-  if(!TWPOS[pk])TWPOS[pk]=townSpots(q.polys,q.cx,q.cy,Math.min(q.w,q.h)*.34,tw.length,gr.id);
+  if(!TWPOS[pk]){TWRAD[pk]=Math.min(q.w,q.h)*.34;TWPOS[pk]=townSpots(q.polys,q.cx,q.cy,TWRAD[pk],tw.length,gr.id)}
   mine[gr.id]=1;const names=tw.map(x=>x.name);
   tw.forEach((t,i)=>{const p=TWPOS[pk][i]||[q.cx,q.cy];
-   items.push({id:gr.id+':'+i,x:p[0],y:p[1],cond:CitySat.townCond(avg,t.fate,(r.townHit||{})[t.name]),name:t.name,sub:r.name,pop:t.pop,cty:C.name,own:ri,main:i===0,bad,others:names.filter(x=>x!==t.name).join(', '),sz:.75+.5*Math.min(1,Math.log10(Math.max(1e4,t.pop)/1e4)/3)})});
+   items.push({id:gr.id+':'+i,x:p[0],y:p[1],cond:CitySat.townCond(avg,t.fate,(r.townHit||{})[t.name]),name:t.name,sub:r.name,pop:t.pop,cty:C.name,own:ri,main:i===0,bad,others:names.filter(x=>x!==t.name).join(', '),rw:CitySat.radius(t.pop,TWRAD[pk])})});
  });
  /* 2) все остальные страны: у каждой области свои города, состояние зависит от ударов по области в войне */
  Object.values(GEO.c).forEach(C=>{
@@ -266,9 +266,9 @@ function drawCityMarkers(svg){
    const rp=Math.max(2e4,cpop*(r.s||100/Math.max(1,C.regs.length))/100),key='f'+r.id+'#'+Math.round(Math.log10(rp)*4);
    if(!TWC[key]){TWC[key]=CitySat.towns(r.id,r.n,rp,C.name,W0.cont,null);
     let rad=Math.min(r.cell&&r.cell.length>2?Math.min(rbox(r.cell)[2]-rbox(r.cell)[0],rbox(r.cell)[3]-rbox(r.cell)[1]):12,(C.bb[2]-C.bb[0]),(C.bb[3]-C.bb[1]))*.28;
-    TWPOS[key]=townSpots(C.rings,r.cx,r.cy,rad,TWC[key].length,r.id)}
+    TWRAD[key]=rad;TWPOS[key]=townSpots(C.rings,r.cx,r.cy,rad,TWC[key].length,r.id)}
    const tw=TWC[key];
-   tw.forEach((t,i)=>{const p=TWPOS[key][i];items.push({id:r.id+':'+i,x:p[0],y:p[1],cond:CitySat.townCond(cond,t.fate,0),name:t.name,sub:String(r.n||'').replace(/ \(.*\)/,'')||C.name,pop:t.pop,cty:C.name,sz:.75+.5*Math.min(1,Math.log10(Math.max(1e4,t.pop)/1e4)/3)})});
+   tw.forEach((t,i)=>{const p=TWPOS[key][i];items.push({id:r.id+':'+i,x:p[0],y:p[1],cond:CitySat.townCond(cond,t.fate,0),name:t.name,sub:String(r.n||'').replace(/ \(.*\)/,'')||C.name,pop:t.pop,cty:C.name,rw:CitySat.radius(t.pop,TWRAD[key])})});
   });
  });
  /* ранг в стране по числу жителей: чем дальше камера, тем меньше городов показываем */
@@ -308,7 +308,7 @@ function drawOcc(svg){
 function buildWorldNode(){const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
  const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>r.d?`<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/>`:'').join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
  body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
- if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="none" shape-rendering="geometricPrecision" style="touch-action:pan-y;will-change:transform"><defs>
+ if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="none" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
  <linearGradient id="oceanGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071521"/><stop offset=".48" stop-color="#102b3b"/><stop offset="1" stop-color="#07131f"/></linearGradient>
  <radialGradient id="oceanGlow"><stop offset="0" stop-color="#2c7180" stop-opacity=".22"/><stop offset="1" stop-color="#0a1c2a" stop-opacity="0"/></radialGradient>
  <pattern id="oceanTexture" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M0 12 Q10 7 21 12 T42 12 M-8 31 Q2 26 13 31 T34 31" fill="none" stroke="#6fc3d1" stroke-opacity=".09" stroke-width=".7"/></pattern>
@@ -335,7 +335,7 @@ function buildWorldNode(){const cl=[],body=[];Object.values(GEO.c).forEach(C=>{c
  svg.addEventListener('wheel',e=>{e.preventDefault();H.wz(e.deltaY<0?'in':'out')},{passive:false});return n}
 let WZ={x:0,y:0,w:1000,h:575};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
-function wzFit(v){v.w=Math.max(40,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
+function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
 function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
 const hwz=m=>{if(!WMAP.node)return;if(m==='full'){WMAP.full=!WMAP.full;const sl=document.getElementById('wm-slot');if(sl)sl.classList.toggle('full',!!WMAP.full);document.body.style.overflow=WMAP.full?'hidden':'';const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';return wzApply()}if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
 function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted">Нажмите на любой регион: откроется страна с её областями. Синие регионы — ваши (и своя страна, и захваченное выглядят одинаково). Перетаскивайте и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}

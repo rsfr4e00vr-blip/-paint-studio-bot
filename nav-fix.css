@@ -194,12 +194,11 @@ details.fold.hint>p{padding:0 14px 10px}
 /* MAP VISUAL UPDATE: layered ocean, relief grain and restrained motion */
 .wmslot{background:linear-gradient(135deg,#071521,#102b3b 52%,#07131f)!important;border:1px solid #52758a!important;box-shadow:inset 0 0 35px #4ca2b522,0 14px 34px #0008!important}
 .wmnode{isolation:isolate;overflow:hidden;background:radial-gradient(ellipse at 50% 48%,#1b4655 0%,#0b1c2a 70%)}
-.wmnode:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 15%,#b8e8ff08 42%,transparent 68%);background-size:220% 100%;animation:mapLightSweep 18s ease-in-out infinite;mix-blend-mode:screen}
-.wmnode svg{filter:drop-shadow(0 2px 2px #0008)}
-.wmnode .ocean-lines{animation:oceanDrift 48s linear infinite;transform-origin:center}
-.wmnode .terrain-grain{mix-blend-mode:soft-light;animation:terrainBreath 7s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.wmnode:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 15%,#b8e8ff08 42%,transparent 68%);background-size:220% 100%;display:none}
+.wmnode .ocean-lines{opacity:.8}
+.wmnode .terrain-grain{opacity:.2}.wmnode svg.far .terrain-grain{display:none}
 .wmnode [data-o]{vector-effect:non-scaling-stroke;transition:stroke .35s,stroke-width .35s}
-.wmnode [data-r]{transition:filter .25s,opacity .25s}
+.wmnode [data-r]{transition:none}
 .wmnode [data-r]:hover{filter:brightness(1.32) saturate(1.2);opacity:1;cursor:pointer}
 .wzoom{z-index:3;padding:5px;border:1px solid #8bb8c455;border-radius:13px;background:#07152188;backdrop-filter:blur(8px)}
 .wzoom button{box-shadow:0 3px 10px #0006;transition:transform .16s,background .16s,border-color .16s}

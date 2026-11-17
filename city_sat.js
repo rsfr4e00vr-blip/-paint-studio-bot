@@ -1,8 +1,9 @@
-/* «Спутниковые» города на карте мира.
-   Каждый город — маленький снимок сверху: застройка, дороги, парки.
-   Чем сильнее разрушения, тем меньше целых домов: появляются руины, воронки, гарь, огонь и дым.
-   Картинки заранее собраны в <defs> (6 уровней разрушения × 6 вариантов города), на карте используется только <use>,
-   поэтому можно показывать города ВСЕХ стран без тормозов. */
+/* Города на карте мира — реальная застройка, а не значок.
+   Размер города задан в единицах карты (зависит от числа жителей), поэтому при приближении он растёт вместе с картой:
+   сначала пятно, потом улицы и кварталы, вблизи — отдельные дома, парки, воронки, огонь.
+   Чем сильнее разрушения, тем меньше целых домов: руины, воронки, гарь, пожары.
+   Производительность: символы строятся лениво (только нужные), на карте — <use>; рисуются только города в кадре,
+   достаточно крупные на экране; при панорамировании ничего не перерисовывается, пока набор видимых городов не изменился. */
 (()=>{
 'use strict';
 const LEVELS=6,VARIANTS=6,LV_NAME=['цел','мелкие повреждения','заметные разрушения','тяжёлые разрушения','почти уничтожен','руины'];
@@ -11,19 +12,25 @@ const f=n=>(Math.round(n*100)/100).toString();
 const ROOF=['#c9c1b0','#b3ab9b','#d8d0bf','#a39b8c','#bdb4a2','#cfa98a','#9aa3a8'];
 const FATE=[0,.08,.22,.42,.68,.93]; /* доля уничтоженных домов по уровням */
 
-function build(v,lv){
-  const R=rng(v*7919+13),o=[];
-  const ang=(R()-.5)*50,blob=[];
+const LAY={};
+function layout(v){
+  if(LAY[v])return LAY[v];
+  const R=rng(v*7919+13),ang=(R()-.5)*50,blob=[];
   for(let i=0;i<16;i++){const a=i/16*6.2832,r=8.1+R()*1.5;blob.push([Math.cos(a)*r,Math.sin(a)*r*.88])}
-  o.push(`<path d="M${blob.map(p=>f(p[0])+' '+f(p[1])).join('L')}Z" fill="${lv>=4?'#3a352d':'#434d3c'}" stroke="#e9e3cf" stroke-opacity=".65" stroke-width=".55"/>`);
-  for(let i=0;i<3;i++){const x=(R()-.5)*11,y=(R()-.5)*9,r=1.4+R()*1.6;o.push(`<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(r)}" ry="${f(r*.8)}" fill="${lv>=3?'#4a4a3a':'#4f6e46'}" opacity=".85"/>`)}
-  o.push(`<g transform="rotate(${f(ang)})" stroke="${lv>=4?'#6d665b':'#a2a299'}" stroke-width=".55" stroke-linecap="round" fill="none"><path d="M-9 ${f((R()-.5)*3)}L9 ${f((R()-.5)*3)}M${f((R()-.5)*3)} -9L${f((R()-.5)*3)} 9"/><path d="M-6 -6L6 6" stroke-width=".35"/><ellipse rx="5.2" ry="4.4" stroke-width=".3"/></g>`);
-  const b=[];
+  const parks=[];for(let i=0;i<3;i++){const x=(R()-.5)*11,y=(R()-.5)*9,r=1.4+R()*1.6;parks.push([x,y,r])}
+  const rd=[(R()-.5)*3,(R()-.5)*3,(R()-.5)*3,(R()-.5)*3],b=[];
   for(let i=0;i<38;i++){
     const a=R()*6.2832,r=Math.pow(R(),.8)*7.4,x=Math.cos(a)*r,y=Math.sin(a)*r*.86,w=1.1+R()*1.7,h=1.1+R()*1.5,c=ROOF[Math.floor(R()*ROOF.length)],fate=R(),j=R();
     b.push({x,y,w,h,c,fate,j})}
+  return LAY[v]={ang,blob,parks,rd,b}}
+const blobPath=(L,lv)=>`<path d="M${L.blob.map(p=>f(p[0])+' '+f(p[1])).join('L')}Z" fill="${lv>=4?'#3a352d':'#434d3c'}" stroke="#e9e3cf" stroke-opacity=".65" stroke-width=".55"/>`;
+/* подробный символ (город крупный на экране) */
+function buildHigh(v,lv){
+  const L=layout(v),ang=L.ang,o=[blobPath(L,lv)];
+  L.parks.forEach(q=>o.push(`<ellipse cx="${f(q[0])}" cy="${f(q[1])}" rx="${f(q[2])}" ry="${f(q[2]*.8)}" fill="${lv>=3?'#4a4a3a':'#4f6e46'}" opacity=".85"/>`));
+  o.push(`<g transform="rotate(${f(ang)})" stroke="${lv>=4?'#6d665b':'#a2a299'}" stroke-width=".55" stroke-linecap="round" fill="none"><path d="M-9 ${f(L.rd[0])}L9 ${f(L.rd[1])}M${f(L.rd[2])} -9L${f(L.rd[3])} 9"/><path d="M-6 -6L6 6" stroke-width=".35"/><ellipse rx="5.2" ry="4.4" stroke-width=".3"/></g>`);
   const bs=[];
-  b.forEach(q=>{
+  L.b.forEach(q=>{
     const dead=q.fate<FATE[lv],hurt=!dead&&q.fate<FATE[lv]+.22&&lv>=1;
     if(dead){
       bs.push(`<g transform="translate(${f(q.x)} ${f(q.y)}) rotate(${f(q.j*70)})"><polygon points="${f(-q.w*.5)},${f(-q.h*.3)} ${f(q.w*.2)},${f(-q.h*.5)} ${f(q.w*.5)},${f(q.h*.2)} ${f(-q.w*.2)},${f(q.h*.5)}" fill="#2b2622"/><circle cx="${f(q.w*.15)}" cy="${f(q.h*.1)}" r=".28" fill="#7a7063"/><circle cx="${f(-q.w*.25)}" cy="${f(-q.h*.05)}" r=".2" fill="#5c5348"/></g>`)
@@ -36,17 +43,49 @@ function build(v,lv){
   if(lv>=3){const n=lv-2;for(let i=0;i<n*2;i++){const x=(R2()-.5)*11,y=(R2()-.5)*9;
     if(lv>=4)o.push(`<circle class="cs-fire" cx="${f(x)}" cy="${f(y)}" r=".7" fill="#ff7a1a"/><circle class="cs-fire2" cx="${f(x)}" cy="${f(y)}" r=".3" fill="#ffe08a"/>`);
     o.push(`<circle class="cs-smoke" cx="${f(x+.8)}" cy="${f(y-1.6)}" r="${f(1.3+R2()*1.2)}" fill="#bfbab2" opacity=".3"/>`)}}
-  return o.join('');
-}
-
-let DEFS=null;
-function defs(){
-  if(DEFS)return DEFS;let s='<defs>';
-  for(let lv=0;lv<LEVELS;lv++)for(let v=0;v<VARIANTS;v++)s+=`<g id="cs-${lv}-${v}">${build(v,lv)}</g>`;
-  return DEFS=s+'</defs>'}
+  return o.join('')}
+/* средний символ: всё склеено в несколько <path>, мало элементов */
+const ell=(x,y,rx,ry)=>`M${f(x-rx)} ${f(y)}a${f(rx)} ${f(ry)} 0 1 0 ${f(2*rx)} 0a${f(rx)} ${f(ry)} 0 1 0 ${f(-2*rx)} 0`;
+function buildMid(v,lv){
+  const L=layout(v),ang=L.ang,o=[blobPath(L,lv)];
+  o.push(`<path d="${L.parks.map(q=>ell(q[0],q[1],q[2],q[2]*.8)).join('')}" fill="${lv>=3?'#4a4a3a':'#4f6e46'}" opacity=".85"/>`);
+  o.push(`<path transform="rotate(${f(ang)})" d="M-9 ${f(L.rd[0])}L9 ${f(L.rd[1])}M${f(L.rd[2])} -9L${f(L.rd[3])} 9M-6 -6L6 6" stroke="${lv>=4?'#6d665b':'#a2a299'}" stroke-width=".5" fill="none"/>`);
+  const quad=(q,w,h,deg,dx)=>{const t=deg*Math.PI/180,c=Math.cos(t),s=Math.sin(t);return 'M'+[[-w,-h],[w,-h],[w,h],[-w,h]].map(p=>f(q.x+dx+p[0]*c-p[1]*s)+' '+f(q.y+dx+p[0]*s+p[1]*c)).join('L')+'Z'};
+  const sh=[],ok={},hurt=[],dead=[];
+  L.b.forEach(q=>{
+    const isDead=q.fate<FATE[lv],isHurt=!isDead&&q.fate<FATE[lv]+.22&&lv>=1;
+    if(isDead){dead.push(quad(q,q.w*.45,q.h*.35,q.j*70,0));return}
+    const deg=ang+(q.j>.5?0:8);sh.push(quad(q,q.w/2,q.h/2,deg,.3));
+    if(isHurt)hurt.push(quad(q,q.w/2,q.h/2,deg,0));else(ok[q.c]=ok[q.c]||[]).push(quad(q,q.w/2,q.h/2,deg,0))});
+  o.push(`<path d="${sh.join('')}" fill="#000" opacity=".4"/>`);
+  Object.keys(ok).forEach(c=>o.push(`<path d="${ok[c].join('')}" fill="${c}"/>`));
+  if(hurt.length)o.push(`<path d="${hurt.join('')}" fill="#6e6258"/>`);
+  if(dead.length)o.push(`<path d="${dead.join('')}" fill="#2b2622"/>`);
+  const R2=rng(v*104729+7);
+  if(lv>=3){let d='';for(let i=0;i<lv*1.5;i++){const x=(R2()-.5)*13,y=(R2()-.5)*11,r=1.6+R2()*2.2;d+=ell(x,y,r,r*.75)}o.push(`<path d="${d}" fill="#000" opacity=".34"/>`)}
+  if(lv>=2){let d='';for(let i=0;i<lv*2;i++){const x=(R2()-.5)*14,y=(R2()-.5)*12,r=.7+R2()*1.0;d+=ell(x,y,r,r)}o.push(`<path d="${d}" fill="#1b1814" stroke="#7b6a55" stroke-width=".28"/>`)}
+  if(lv>=3){let fire='',smoke='';const n=lv-2;for(let i=0;i<n*2;i++){const x=(R2()-.5)*11,y=(R2()-.5)*9;
+    if(lv>=4)fire+=ell(x,y,.8,.8);smoke+=ell(x+.8,y-1.6,1.3+R2()*1.2,1.3)}
+    if(fire)o.push(`<path d="${fire}" fill="#ff7a1a"/>`);o.push(`<path d="${smoke}" fill="#bfbab2" opacity=".3"/>`)}
+  return o.join('')}
+/* самый простой символ: город очень мелкий на экране — пятно застройки и след разрушений */
+function buildLow(v,lv){
+  const L=layout(v),o=[blobPath(L,lv)];
+  o.push(`<path transform="rotate(${f(L.ang)})" d="${ell(0,0,5.6,4.6)}" fill="${lv>=4?'#5a5046':'#9a9486'}" opacity=".6"/>`);
+  if(lv>=3)o.push(`<path d="${ell(-1.5,1,1.6+lv*.4,1.6+lv*.4)}" fill="${lv>=4?'#ff7a1a':'#2b2622'}" opacity=".85"/>`);
+  return o.join('')}
+const BUILDERS=[buildLow,buildMid,buildHigh];
+const build=(v,lv,tier)=>BUILDERS[tier==null?2:tier](v,lv);
+let DEFSEL=null;const DONE=new Set();
+function ensure(layer,tier,lv,v){
+  const id='cs-'+tier+'-'+lv+'-'+v;if(DONE.has(id))return id;
+  if(!DEFSEL||!DEFSEL.isConnected)DEFSEL=layer.querySelector('#csd');
+  if(!DEFSEL)return id;
+  DEFSEL.insertAdjacentHTML('beforeend','<g id="'+id+'">'+build(v,lv,tier)+'</g>');DONE.add(id);return id}
+const defs=()=>'';
 const level=c=>c>=90?0:c>=75?1:c>=55?2:c>=35?3:c>=15?4:5;
 const hash=s=>{let h=0;s=String(s);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h};
-const ref=(cond,id)=>'#cs-'+level(cond)+'-'+(hash(id)%VARIANTS);
+const ref=(cond,id,tier)=>'#cs-'+(tier==null?2:tier)+'-'+level(cond)+'-'+(hash(id)%VARIANTS);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
 /* ---------- города внутри областей: сколько, как называются, какого размера ---------- */
@@ -96,29 +135,39 @@ function towns(key,regionName,pop,country,cont,mainName){
 /* состояние города: общий урон области × «невезучесть» + прямые попадания */
 function townCond(regionCond,fate,hit){return Math.max(0,Math.min(100,100-(100-regionCond)*(.55+.9*fate)-(hit||0)))}
 
-/* ---------- рисование: показываем только нужные города (по приближению и по тому, что в кадре) ---------- */
-let ITEMS=[];
-function lodLimit(z){return z>.55?1:z>.3?4:z>.15?14:z>.07?60:999}
-function draw(layer,z,box){
+/* ---------- рисование ---------- */
+let ITEMS=[],VER=0,LASTKEY='',LAYER=null;
+/* радиус города в единицах карты: 10 тыс. → 0.5, 100 тыс. → 1.25, 1 млн → 2, 10 млн → 2.75 (но не больше доли области) */
+function radius(pop,cap){const r=.5+.75*Math.log10(Math.max(1e4,pop||1e4)/1e4);return Math.max(.35,Math.min(r,cap?Math.max(.4,cap*.6):9))}
+const MAXVIS=260;
+function draw(layer,svg,wz){
   if(!layer)return;
-  if(!layer.querySelector('#csi'))layer.innerHTML=defs()+'<g id="csi"></g>';
-  const host=layer.querySelector('#csi'),lim=lodLimit(z),k=1.8*Math.max(.15,Math.pow(Math.min(1,z),.75)),lab=z<.3;
-  const mx=box?(box[2]-box[0])*.08:0,mi=[];
+  if(!layer.querySelector('#csi')){layer.innerHTML='<defs id="csd"></defs><g id="csi"></g>';DEFSEL=null;DONE.clear();LASTKEY=''}
+  const host=layer.querySelector('#csi'),rect=svg.getBoundingClientRect(),sw=rect.width>20?rect.width:400,ppu=sw/wz.w,
+   x0=wz.x-wz.w*.05,y0=wz.y-wz.h*.05,x1=wz.x+wz.w*1.05,y1=wz.y+wz.h*1.05,vis=[];
   for(const c of ITEMS){
-    if(!(c.rk<lim||(c.own!=null&&c.main)))continue;
-    if(box&&(c.x<box[0]-mx||c.x>box[2]+mx||c.y<box[1]-mx||c.y>box[3]+mx))continue;
-    mi.push(c);if(mi.length>1400)break}
-  host.innerHTML=mi.map(c=>{
-    const cl=c.cond<35?'ru':c.cond<75?'dm':'ok',s=k*(c.sz||1),lv=level(c.cond),
+    const sr=c.rw*ppu;
+    if(sr<1.6)break;                       /* список отсортирован по размеру: дальше только ещё мельче */
+    if(sr<(c.own!=null&&c.main?1.6:3.2))continue;
+    if(c.x<x0||c.x>x1||c.y<y0||c.y>y1)continue;
+    vis.push({c,sr});if(vis.length>=MAXVIS)break}
+  const lg=Math.round(Math.log2(ppu)*3);
+  const parts=vis.map(o=>{const c=o.c,lv=level(c.cond),tier=o.sr<9?0:o.sr<30?1:2;o.lv=lv;o.tier=tier;return c.id+'.'+lv+'.'+tier});
+  const key=VER+'|'+lg+'|'+parts.join(',');
+  if(key===LASTKEY)return;LASTKEY=key;
+  const fs=11/ppu,sk=3/ppu;
+  host.innerHTML=vis.map(o=>{
+    const c=o.c,lv=o.lv,tier=o.tier,sr=o.sr,s=c.rw/9,cl=c.cond<35?'ru':c.cond<75?'dm':'ok',
+     sym=ensure(layer,tier,lv,hash(c.id)%VARIANTS),
      tt=`${c.name}${c.sub?' · '+c.sub:''} · ${LV_NAME[lv]} (${Math.round(c.cond)}%)`+(c.pop?` · ${Math.round(c.pop/1000)} тыс. жителей`:'')+(c.own!=null?'. Нажмите, чтобы открыть город и восстановление.':''),
-     showLab=lab||(c.own!=null&&c.main&&z<.72);
-    return `<g class="csat ${cl}" transform="translate(${f(c.x)} ${f(c.y)})" ${c.own!=null?`data-own="1" data-city="${c.own}" data-town="${esc([c.name,c.pop||0,Math.round(c.cond),c.others||''].join('|'))}"`:`data-fc="${esc(c.name)}|${esc(c.sub||'')}|${Math.round(c.cond)}"`}><use href="${ref(c.cond,c.id)}" transform="scale(${f(s)})"/>${showLab?`<text text-anchor="middle" class="csat-label" y="${f(10*s+3.2)}">${esc(c.name.length>16?c.name.slice(0,15)+'…':c.name)}</text>`:''}${c.bad&&c.main?`<text class="csat-bad" x="${f(6*s+1)}" y="${f(-5*s)}">!${c.bad}</text>`:''}<title>${esc(tt)}</title></g>`}).join('');
+     showLab=sr>=10&&(sr>=18||(c.own!=null&&c.main)),
+     hit=Math.max(c.rw,7/ppu);
+    return `<g class="csat ${cl}" transform="translate(${f(c.x)} ${f(c.y)})" ${c.own!=null?`data-own="1" data-city="${c.own}" data-town="${esc([c.name,c.pop||0,Math.round(c.cond),c.others||''].join('|'))}"`:`data-fc="${esc(c.name)}|${esc(c.sub||'')}|${Math.round(c.cond)}"`}><circle r="${f(hit)}" fill="#000" fill-opacity="0"/><use href="#${sym}" transform="scale(${f(s)})"/>${showLab?`<text text-anchor="middle" class="csat-label" y="${f(c.rw*.95+fs*1.05)}" style="font-size:${f(fs)}px;stroke-width:${f(sk)}px">${esc(c.name.length>16?c.name.slice(0,15)+'…':c.name)}</text>`:''}${c.bad&&c.main&&sr>=10?`<text class="csat-bad" x="${f(c.rw*.7)}" y="${f(-c.rw*.6)}" style="font-size:${f(fs)}px;stroke-width:${f(sk*.7)}px">!${c.bad}</text>`:''}<title>${esc(tt)}</title></g>`}).join('');
 }
-let LAYER=null;
-function setItems(items){ITEMS=items.slice().sort((a,b)=>a.rk-b.rk)}
-function refresh(svg,wz,W){const layer=svg&&svg.querySelector('#city-markers');if(layer)draw(layer,wz.w/W,[wz.x,wz.y,wz.x+wz.w,wz.y+wz.h])}
-function render(layer,items){LAYER=layer;setItems(items);draw(layer,1,null)}
-function zoom(svg,z){const layer=(svg&&svg.querySelector('#city-markers'))||LAYER;draw(layer,z,null)}
+function setItems(items){ITEMS=items.slice().sort((a,b)=>b.rw-a.rw);VER++}
+function refresh(svg,wz,W){const layer=svg&&svg.querySelector('#city-markers');if(layer)draw(layer,svg,wz)}
+function render(layer,items){LAYER=layer;setItems(items);const sv=layer.ownerSVGElement;if(sv)draw(layer,sv,{x:0,y:0,w:1000,h:575})}
+function zoom(svg,z){const layer=(svg&&svg.querySelector('#city-markers'))||LAYER;if(layer&&svg)draw(layer,svg,{x:0,y:0,w:1000*z,h:575*z})}
 /* окно города: показываем именно тот город, на который нажали */
 function decorate(info){
   const m=document.getElementById('nova-city-pop');if(!m)return;
@@ -136,8 +185,8 @@ function toast(msg){
 function tapForeign(el){const p=String(el.getAttribute('data-fc')||'').split('|');toast(`🛰 ${p[0]}${p[1]?' · '+p[1]:''} · ${LV_NAME[level(+p[2])]} (${p[2]}%)`)}
 
 const st=document.createElement('style');
-st.textContent='.csat{cursor:pointer}.csat use{filter:drop-shadow(0 .8px 1.4px rgba(0,0,0,.85))}.csat-label{font:700 4.2px system-ui,sans-serif;fill:#fff4d2;paint-order:stroke;stroke:#101923;stroke-width:1.5px;stroke-linejoin:round;user-select:none}.csat-bad{font:800 4.4px system-ui,sans-serif;fill:#ffc56b;stroke:#111923;stroke-width:1.1px;paint-order:stroke}.csat.ru .csat-bad{fill:#ff7777}@keyframes csflick{0%,100%{opacity:.95}50%{opacity:.45}}@keyframes cssmoke{0%{opacity:.35}100%{opacity:.12}}.cs-fire,.cs-fire2{animation:csflick 1.1s infinite}.cs-smoke{animation:cssmoke 2.4s infinite alternate}';
+st.textContent='.csat{cursor:pointer;pointer-events:all}.csat-label{font-family:system-ui,sans-serif;font-weight:700;fill:#fff4d2;paint-order:stroke;stroke:#101923;stroke-linejoin:round;user-select:none;pointer-events:none}.csat-bad{font-family:system-ui,sans-serif;font-weight:800;fill:#ffc56b;stroke:#111923;paint-order:stroke;pointer-events:none}.csat.ru .csat-bad{fill:#ff7777}@keyframes csflick{0%,100%{opacity:.95}50%{opacity:.45}}.cs-fire,.cs-fire2{animation:csflick 1.1s infinite}';
 document.head.appendChild(st);
 
-window.CitySat={defs,build,level,ref,zoom,render,refresh,setItems,decorate,towns,townCond,townCount,cultureOf,tapForeign,toast,LV_NAME};
+window.CitySat={defs,build,level,ref,zoom,render,refresh,setItems,radius,decorate,towns,townCond,townCount,cultureOf,tapForeign,toast,LV_NAME};
 })();
