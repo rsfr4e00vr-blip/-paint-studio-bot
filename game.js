@@ -297,10 +297,6 @@ function clusterSpot(g){let wt=0,x=0,y=0,bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;
  return{x,y,w:bx1-bx0,h:by1-by0}}
 const ownerLabel=o=>isMe(o)?myName():String(o).startsWith('Вассал: ')?String(o).slice(8):String(o);
 function drawTerritoryLabels(svg){
- // Названия стран скрыты на карте мира: подписи перекрывали провинции на мобильных экранах.
- // Владельца территории игрок по-прежнему видит в карточке после нажатия на провинцию.
- const old=svg.querySelector('#territory-labels');if(old)old.remove();
- return;
  const NS='http://www.w3.org/2000/svg';let g=svg.querySelector('#territory-labels');if(!g){g=document.createElementNS(NS,'g');g.id='territory-labels';g.setAttribute('pointer-events','none');svg.appendChild(g)}g.replaceChildren();
  const groups={};
  Object.values(GEO.c).forEach(C=>{(C.regs||[]).forEach(r=>{if(!r.d||!Number.isFinite(r.cx)||!Number.isFinite(r.cy))return;const b=r.cell&&r.cell.length>2?rbox(r.cell):[r.cx-1,r.cy-1,r.cx+1,r.cy+1],q={cx:r.cx,cy:r.cy,x0:b[0],y0:b[1],x1:b[2],y1:b[3],w:b[2]-b[0],h:b[3]-b[1],polys:[r.cell||[]]};const o=regionOwner(C,r);(groups[o]||(groups[o]=[])).push({C,r,q})})});
@@ -729,15 +725,15 @@ window.buildAA=(qty=1)=>{if(blocked())return;qty=Math.max(1,Math.min(10,Math.flo
 const ARMS={
  cannon:{n:'Пушка',ic:'💥',c:300,pw:.5,t:'Артиллерия: на войне давит врага'},
  drone:{n:'Ударный дрон',ic:'🛩',c:250,pw:.4,t:'Дешёвый удар по врагу'},
- tank:{n:'Танк',ic:'🛡',c:450,pw:1,mil:7,eq:3,t:'Бронетехника · нужно 7+ воен. заводов'},
- aa:{n:'Комплекс ПВО',ic:'📡',c:700,pw:1.5,mil:7,eq:3,t:'Защита неба · нужно 7+ воен. заводов'},
- rocket:{n:'Ракета',ic:'🚀',c:600,pw:3,mil:8,eq:4,t:'Дальний удар · нужно 8+ воен. заводов'},
+ tank:{n:'Танк',ic:'🛡',c:450,pw:1,mil:7,eq:3,t:'Бронетехника'},
+ aa:{n:'Комплекс ПВО',ic:'📡',c:700,pw:1.5,mil:7,eq:3,t:'Защита неба'},
+ rocket:{n:'Ракета',ic:'🚀',c:600,pw:3,mil:8,eq:4,t:'Дальний удар'},
  bomb:{n:'Бомба',ic:'💣',c:900,pw:15,t:'Оружие устрашения'},
-  howitzer:{n:'Гаубица',ic:'🔫',c:380,pw:.8,mil:3,eq:1,t:'Тяжёлая артиллерия · нужно 3+ воен. завода'},
-  heli:{n:'Ударный вертолёт',ic:'🚁',c:520,pw:1.2,mil:5,eq:2,t:'Манёвренный удар с воздуха · нужно 5+ воен. заводов'},
-  mlrs:{n:'РСЗО «Залп»',ic:'🎇',c:650,pw:2,mil:7,eq:3,t:'Залповый огонь по площадям · нужно 7+ воен. заводов'},
-  cruise:{n:'Крылатая ракета',ic:'🛰',c:800,pw:4,mil:9,eq:5,t:'Точный дальний удар · нужно 9+ воен. заводов'},
-  bomber:{n:'Бомбардировщик',ic:'🛫',c:1100,pw:6,mil:10,eq:6,t:'Тяжёлая авиация · нужно 10+ воен. заводов'},
+  howitzer:{n:'Гаубица',ic:'🔫',c:380,pw:.8,mil:3,eq:1,t:'Тяжёлая артиллерия'},
+  heli:{n:'Ударный вертолёт',ic:'🚁',c:520,pw:1.2,mil:5,eq:2,t:'Манёвренный удар с воздуха'},
+  mlrs:{n:'РСЗО «Залп»',ic:'🎇',c:650,pw:2,mil:7,eq:3,t:'Залповый огонь по площадям'},
+  cruise:{n:'Крылатая ракета',ic:'🛰',c:800,pw:4,mil:9,eq:5,t:'Точный дальний удар'},
+  bomber:{n:'Бомбардировщик',ic:'🛫',c:1100,pw:6,mil:10,eq:6,t:'Тяжёлая авиация'},
   petard:{n:'Петарда',ic:'🎆',c:20,pw:0,t:'Для парада'}
 };
 const MT={cannon:1,drone:1,howitzer:2,tank:3,heli:3,aa:3,mlrs:4,rocket:4,cruise:5,bomber:7,bomb:9};
@@ -1140,12 +1136,12 @@ const OUSTWHY=['низкое одобрение','хаос и беспорядк
 const RET=['Массовые митинги','Народный референдум','Коалиция с другими партиями','Всеобщая забастовка','Компромат на правительство','Досрочные выборы','Популярный новый лидер','Переговоры с депутатами','Международная поддержка','Агитация в СМИ','Сбор подписей','Обращение к армии','Судебный иск','Союз с профсоюзами','Благотворительные акции','Тайные переговоры','Реформа партии','Уличный фестиваль','Антикоррупционное расследование','Поддержка регионов','Голосование в парламенте','Обещание налоговых льгот','Союз с общинами','Голоса диаспоры','Партийный съезд'];
 function ouster(c){if(S.out||S.campaignOver)return;S.crisis=0;let w=S.parties.filter(p=>p.name!==S.playerParty).sort((a,b)=>b.support-a.support)[0];S.out={cause:c,months:0};S.fund=800;S.party=w.name;S.leader='Новое правительство';log(`🚨 Вы потеряли власть: ${c}`);say('Власть сменилась!','😮');pause();toast('Вы потеряли власть! Откройте «Возврат»');tab='comeback';setTimeout(render,120)}
 window.ret=i=>{if(!S.out)return;let cost=100+(i%6)*80,my=S.parties.find(p=>p.name===S.playerParty),ch=(8+(i*7)%22)/100+(my?my.support:0)/300;if(S.fund<cost)return toast('В партийной кассе не хватает денег');S.fund-=cost;if(Math.random()<ch){S.out=null;S.grace=12;S.crisis=0;S.party=S.playerParty;S.leader='Александр Ветров';S.approval=55;S.stability=50;S.legitimacy=50;S.coupRisk=20;S.election=36;S.deps.forEach(d=>d.l=55);log(`✅ Вы вернулись к власти: ${RET[i]}!`);say('Старый лидер вернулся!','🎉');toast('ВЫ ВЕРНУЛИСЬ К ВЛАСТИ!');tab='overview'}else{if(my)my.support=clamp(my.support-1);log(`Попытка не удалась: ${RET[i]}`);toast('Не вышло. Попробуйте другой путь')}save();render()};
-window.buy=(k,n)=>{if(blocked())return;const A=ARMS[k];if(!A)return;n=Math.max(1,(n|0)||1);if(A.mil&&S.mil<A.mil)return toast(`Нужно ${A.mil}+ военных заводов`);
- let can=Math.min(n,Math.floor(S.money/A.c));if(A.eq)can=Math.min(can,Math.floor(S.equipment/A.eq));
+window.buy=(k,n)=>{if(blocked())return;const A=ARMS[k];if(!A)return;n=Math.max(1,(n|0)||1);
+ let can=Math.min(n,Math.floor(S.money/A.c));
  if(can<1)return toast(S.money<A.c?'Недостаточно средств':'Не хватает вооружения на складе');
- S.money-=A.c*can;if(A.eq)S.equipment=clamp(S.equipment-A.eq*can);S[k]=(S[k]||0)+can;armFx(k,'buy');log(`Закуплено: ${A.n.toLowerCase()}${can>1?' ×'+can:''}`);
+ S.money-=A.c*can;S[k]=(S[k]||0)+can;armFx(k,'buy');log(`Закуплено: ${A.n.toLowerCase()}${can>1?' ×'+can:''}`);
  if(k=='bomb')S.relations.forEach(r=>r.value=clamp(r.value-3*can,-100,100));
- if(can<n)toast(`Куплено ${can} из ${n}: не хватило ${S.money<A.c?'денег':'вооружения'}`);
+ if(can<n)toast(`Куплено ${can} из ${n}: не хватило денег`);
  save();render()};
 window.fire=(k,t)=>{if(blocked())return;if(!(S[k]>0))return toast('Сначала купите');if(!(t&&atWar()&&SCN[k]))armFx(k,'fire');
 const TG={cannon:1,drone:1,tank:1.5,rocket:2.5,bomb:5,howitzer:1.3,heli:1.4,mlrs:2,cruise:3,bomber:4};
@@ -1513,16 +1509,16 @@ function armFx(k,mode){
 }
 const mq=()=>S.mfg||(S.mfg=[]);
 const mSlots=()=>Math.max(1,Math.floor((S.mil||0)/3));
-const mCost=k=>{const A=ARMS[k];return{m:Math.round(A.c*.6),st:Math.max(1,Math.round(A.c/200)),eq:Math.ceil((A.eq||0)/2),need:A.mil?Math.max(1,A.mil-2):1}};
+const mCost=k=>{const A=ARMS[k];return{m:Math.round(A.c*.6),st:Math.max(1,Math.round(A.c/200)),eq:Math.ceil((A.eq||0)/2),need:0}};
 window.make=k=>{
  if(blocked())return;const A=ARMS[k];if(!A||k==='petard')return;
  const c=mCost(k),q=mq();
- if(S.mil<c.need)return toast(`Для производства нужно ${c.need}+ воен. заводов`);
- if(q.length>=mSlots())return toast(`Все производственные линии заняты (${mSlots()})`);
+ 
+ 
  if(S.money<c.m)return toast('Недостаточно средств');
  if(S.steel<c.st)return toast(`Не хватает стали (нужно ${c.st})`);
- if(c.eq&&S.equipment<c.eq)return toast('Не хватает вооружения на складе');
- S.money-=c.m;S.steel=clamp(S.steel-c.st);if(c.eq)S.equipment=clamp(S.equipment-c.eq);
+ 
+ S.money-=c.m;S.steel=clamp(S.steel-c.st);
  q.push({k,left:A.mt||2,total:A.mt||2});
  log(`🏭 Начато производство: ${A.n.toLowerCase()} (${A.mt||2} мес.)`);armFx(k,'make');toast(`🏭 В производстве: ${A.n}`);save();render();
 };
@@ -2346,7 +2342,7 @@ const BUILD={
  mil:{g:'mil',n:'Военный завод',c:450,m:12,t:'Выпуск вооружения и боеприпасов · −6 млн/мес, тратит сталь · стройка ~год',ic:'⚙️'},
  dock:{g:'mil',n:'Верфь',c:600,m:12,t:'Нужна для кораблей (до 6 кораблей на верфь) · стройка ~год',ic:'⚓'},
  ship:{g:'mil',n:'Боевой корабль',c:700,m:8,t:'Флот +1',ic:'🚢'},
- sq:{g:'mil',n:'Авиаэскадрилья',c:550,m:6,t:'Авиация +2 (нужно 4+ воен. завода)',ic:'✈️'},
+ sq:{g:'mil',n:'Авиаэскадрилья',c:550,m:6,t:'Авиация +2',ic:'✈️'},
  fort:{g:'mil',n:'Укрепрайон',c:350,m:4,t:'Угроза −5, боевой дух +1',ic:'🧱'},
  barracks:{g:'mil',n:'Казармы',c:400,m:6,t:'Армия +8 000 чел.',ic:'🏕'},
  depot:{g:'mil',n:'Военный склад',c:350,m:4,t:'Вооружение +12, боеприпасы +12',ic:'📦'},
@@ -2356,7 +2352,7 @@ const BUILD={
  milhosp:{g:'war',n:'Военный госпиталь',c:400,m:4,t:'Боевой дух +3 и +0.2/мес на войне',ic:'🏥'},
  airfield:{g:'war',n:'Военный аэродром',c:800,m:6,t:'Авиация +3 (нужна 1 эскадрилья)',ic:'🛫'},
  base:{g:'war',n:'Военная база',c:900,m:8,t:'Армия +15 000 чел., подготовка +3',ic:'🏰'},
- silo:{g:'war',n:'Ракетная шахта',c:1200,m:10,t:'Ракеты в арсенале +2 (нужно 8+ воен. заводов)',ic:'🚀'}
+ silo:{g:'war',n:'Ракетная шахта',c:1200,m:10,t:'Ракеты в арсенале +2',ic:'🚀'}
 };
 const BGROUPS=[['civ','🏙 Гражданские объекты'],['mil','⚔️ Военные объекты'],['war','🔥 Только во время войны']];
 const atWar=()=>!!((S.wars&&S.wars.length)||(S.mpWars&&S.mpWars.length));
@@ -2366,10 +2362,10 @@ H.build=k=>{
  if(blocked())return;const B=BUILD[k];
  if(S.build.length>=bslotsN())return toast('Нет свободных слотов стройки');
  if(k==='ship'&&S.navy>=S.dock*6)return toast('Нужно больше верфей');
- if(k==='sq'&&S.mil<4)return toast('Нужно 4+ военных завода');
+ 
  if(B.g==='war'&&!atWar())return toast('Этот объект можно строить только во время войны');
  if(k==='airfield'&&S.air<1)return toast('Нужна хотя бы одна авиаэскадрилья');
- if(k==='silo'&&S.mil<8)return toast('Нужно 8+ военных заводов');
+ 
  if(S.money<B.c)return toast('Недостаточно средств');
  S.money-=B.c;S.build.push({t:k,left:B.m,m:B.m});log(`Начато строительство: ${B.n}.`);save();render();
 };
