@@ -7,14 +7,77 @@
   * переводы, торговые пакты, санкции и войны между игроками с правилами баланса.
 """
 import asyncio
+import json
 import math
+import os
 import random
 import string
 import time
+from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect
 
 NROOMS: dict = {}
+ROOMS_FILE = Path(os.getenv("NOVARIA_ROOMS_FILE", str(Path(__file__).with_name("data") / "nations_rooms.json")))
+
+def _room_snapshot(room):
+    """JSON-safe snapshot of a room; sockets and asyncio tasks are never persisted."""
+    room_data = {k: v for k, v in room.__dict__.items() if k not in {"players", "task"}}
+    players = {}
+    for pid, player in room.players.items():
+        players[pid] = {k: v for k, v in player.__dict__.items() if k != "ws"}
+    return {"room": room_data, "players": players}
+
+def persist_rooms(path=None):
+    """Atomically persist multiplayer state so a server restart does not erase campaigns."""
+    target = Path(path or ROOMS_FILE)
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        payload = {code: _room_snapshot(room) for code, room in NROOMS.items()}
+        temp = target.with_suffix(target.suffix + ".tmp")
+        temp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        temp.replace(target)
+        return True
+    except (OSError, TypeError, ValueError) as exc:
+        print(f"[Novaria MP] Не удалось сохранить комнаты: {exc}")
+        return False
+
+def restore_rooms(path=None):
+    """Restore saved rooms as paused campaigns; players reconnect with their existing token."""
+    target = Path(path or ROOMS_FILE)
+    if not target.exists():
+        return 0
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        restored = 0
+        for code, snapshot in payload.items():
+            if code in NROOMS or not isinstance(snapshot, dict):
+                continue
+            room = Room(str(code))
+            data = snapshot.get("room", {})
+            for key, value in data.items():
+                if key not in {"players", "task", "code"}:
+                    setattr(room, key, value)
+            room.code = str(code)
+            room.players = {}
+            for pid, pdata in snapshot.get("players", {}).items():
+                player = Player(None, str(pid), str(pdata.get("name", "Игрок")), str(pdata.get("country", "Новария")), str(pdata.get("ideology", "прагматизм")))
+                for key, value in pdata.items():
+                    if key != "ws":
+                        setattr(player, key, value)
+                player.ws = None
+                player.connected = False
+                room.players[player.id] = player
+            if room.state == "running":
+                room.state = "paused"
+                room.auto_paused = True
+            if room.players:
+                NROOMS[room.code] = room
+                restored += 1
+        return restored
+    except (OSError, TypeError, ValueError, AttributeError) as exc:
+        print(f"[Novaria MP] Не удалось восстановить комнаты: {exc}")
+        return 0
 
 _REGION_CATALOG_CACHE = None
 def region_catalog() -> dict:
@@ -204,7 +267,7 @@ class Player:
         # публичные показатели (ограничены сервером)
         self.rep = {"gdp": START_GDP, "money": 18000.0, "debt": 0.0, "stab": 68.0,
                     "appr": 61.0, "legit": 70.0, "power": START_POWER, "pop": 8200000.0,
-                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0, "infl": 5.0, "rate": 5.0}
+                    "trust": 70.0, "income": 800.0, "res": 70.0, "pvo": 0.0, "pp": 60.0, "infl": 5.0, "rate": 5.0, "infra": 100.0, "infra_critical": 100.0, "infra_count": 0, "cities": 0}
         self.score_gdp = START_GDP    # «зачётный» ВВП: растёт не быстрее лимита
         # Личная «точка отсчёта»: у каждой страны свой стартовый ВВП, мощь и казна.
         # Заполняется первым отчётом клиента после старта, чтобы очки считались честно для любой страны.
@@ -253,7 +316,9 @@ class Player:
                 "gdp": round(self.rep["gdp"]), "money": round(self.rep["money"]),
                 "stab": round(self.rep["stab"]), "appr": round(self.rep["appr"]),
                 "power": round(self.rep["power"], 1), "pop": round(self.rep["pop"]),
-                "res": round(self.rep.get("res", 70)), "infl": round(self.rep.get("infl", 5), 1), "rate": round(self.rep.get("rate", 5), 1)}
+                "res": round(self.rep.get("res", 70)), "infl": round(self.rep.get("infl", 5), 1), "rate": round(self.rep.get("rate", 5), 1),
+                "infra": round(self.rep.get("infra", 100), 1), "infra_critical": round(self.rep.get("infra_critical", 100), 1),
+                "infra_count": int(self.rep.get("infra_count", 0)), "cities": int(self.rep.get("cities", 0))}
 
 
 class Room:
@@ -396,7 +461,7 @@ class Room:
         # Логарифмическая шкала: ×1 → 30, ×2 → 60, ×4 → 90. Не насыщается при обычной игре.
         eco = max(0.0, min(100.0, 30.0 + 30.0 * math.log2(g)))
         # благосостояние: стабильность и одобрение + ресурсная обеспеченность (еда, топливо, энергия, сталь)
-        welfare = max(0.0, min(100.0, r["stab"] * 0.4 + r["appr"] * 0.4 + r.get("res", 70.0) * 0.2))
+        welfare = max(0.0, min(100.0, r["stab"] * 0.35 + r["appr"] * 0.35 + r.get("res", 70.0) * 0.15 + r.get("infra", 100.0) * 0.15))
         gov = max(0.0, min(100.0, (r["legit"] * 0.5 + r["trust"] * 0.5)))
         net = r["money"] - r["debt"]
         fin = max(0.0, min(100.0, 50 + (net - (p.money0 or self.start_money)) * (START_GDP / (p.gdp0 or START_GDP)) / 400))   # ±20000 млн от старта = край шкалы
@@ -433,9 +498,10 @@ class Room:
         if p.vassal_of and p.vassal_end > self.month:
             vas -= p.vassal_tax / 100.0
         vas += sum((self.players[k].vassal_tax / 100.0) * 0.70 for k, end in p.vassals.items() if end > self.month and k in self.players)
+        infra = -min(0.08, max(0.0, (90.0 - num(p.rep.get("infra", 100), 0, 100, 100)) * 0.0015))
         return {"pact": round(pact, 4), "sanction": round(-sanc - self_cost, 4),
-                "rubber": round(rub, 4), "vassal": round(vas, 4),
-                "total": round(pact - sanc - self_cost + rub + vas, 4)}
+                "rubber": round(rub, 4), "vassal": round(vas, 4), "infrastructure": round(infra, 4),
+                "total": round(pact - sanc - self_cost + rub + vas + infra, 4)}
 
     # ---- цикл времени
     async def run(self):
@@ -515,6 +581,7 @@ class Room:
             "global_next": self.global_next,
             "crisis_responses": {q.id: bool(self.global_crisis and q.crisis_response == self.global_crisis.get("id")) for q in self.players.values()},
         })
+        persist_rooms()
 
     def process_global_crisis(self):
         """Один общий мировой кризис для всех участников комнаты."""
@@ -626,6 +693,7 @@ class Room:
         self.winner = order[0].id if order else None
         await self.broadcast({"type": "final", "standings": self.final, "winner": self.winner,
                               "month": self.month})
+        persist_rooms()
 
     # ---- войны
     def war_pub(self, w: dict) -> dict:
@@ -1017,6 +1085,11 @@ async def on_report(room: Room, p: Player, msg: dict):
         "res": num(r.get("res"), 0, 100, old.get("res", 70.0)),
         "pvo": num(r.get("pvo"), 0, 1000, old.get("pvo", 0.0)),
         "pp": num(r.get("pp"), 0, 400, old.get("pp", 60.0)),
+        # Сводка инфраструктуры: сервер ограничивает диапазоны и хранит её между переподключениями.
+        "infra": num(r.get("infra"), 0, 100, old.get("infra", 100.0)),
+        "infra_critical": num(r.get("infra_critical"), 0, 100, old.get("infra_critical", 100.0)),
+        "infra_count": int(num(r.get("infra_count"), 0, 100000, old.get("infra_count", 0))),
+        "cities": int(num(r.get("cities"), 0, 10000, old.get("cities", 0))),
     }
     first = p.gdp0 is None and room.state in ("running", "paused")
     if first:
@@ -1677,6 +1750,7 @@ async def nations_socket(ws: WebSocket, code: str):
                     room.task = asyncio.create_task(room.run())
                     await room.broadcast({"type": "paused", "value": False})
                 await room.push_lobby()
+                persist_rooms()
                 pend = room.cedes.get(me.id)
                 if pend and room.state != "lobby":
                     w_ = room.players.get(pend["to"])
@@ -1684,6 +1758,7 @@ async def nations_socket(ws: WebSocket, code: str):
                                         "country": w_.country if w_ else ""})
                 continue
             await handle(room, me, msg)
+            persist_rooms()
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -1703,6 +1778,12 @@ async def nations_socket(ws: WebSocket, code: str):
             if not any(p.connected for p in room.players.values()):
                 if room.task:
                     room.task.cancel()
+                if room.state == "running":
+                    room.state = "paused"
+                    room.auto_paused = True
+                # Комната остаётся сохранённой для переподключения, в том числе после перезапуска сервера.
+            persist_rooms()
+            if not any(p.connected for p in room.players.values()):
                 # комнату держим 10 минут для переподключения, затем удаляем
                 asyncio.get_event_loop().call_later(600, lambda: _gc(code))
 
@@ -1711,3 +1792,8 @@ def _gc(code: str):
     room = NROOMS.get(code)
     if room and not any(p.connected for p in room.players.values()):
         NROOMS.pop(code, None)
+        persist_rooms()
+
+
+# Восстанавливаем сохранённые кампании при импорте серверного модуля.
+RESTORED_ROOMS = restore_rooms()

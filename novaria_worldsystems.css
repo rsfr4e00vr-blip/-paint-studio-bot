@@ -19,3 +19,27 @@
 .nova-doctrine{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
 .nova-doctrine select{min-height:40px;max-width:100%}
 @media(max-width:560px){.nova-map-row{grid-template-columns:1fr}.nova-map-row span{text-align:left}.nova-asset{grid-template-columns:1fr}.nova-asset button{max-width:none;width:100%}.nova-summary>*{flex:1 1 130px}}
+
+/* City condition markers on the strategic world map. */
+#city-markers{pointer-events:none}
+.nova-city-marker{pointer-events:all;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8))}
+.nova-city-marker circle{vector-effect:non-scaling-stroke}
+.nova-city-marker text{font-family:system-ui,sans-serif;user-select:none}
+.nova-city-marker .nova-city-label{font-size:4.2px;fill:#fff4d2;paint-order:stroke;stroke:#101923;stroke-width:1.6px;stroke-linejoin:round;font-weight:700}
+.nova-city-marker.is-damaged circle{stroke-dasharray:2 1}
+.nova-city-marker.is-ruined circle{stroke-width:2;stroke-dasharray:1.5 1}
+.nova-city-pop{position:fixed;inset:0;z-index:10020;background:rgba(3,9,16,.76);display:flex;align-items:center;justify-content:center;padding:12px}
+.nova-city-pop-box{width:min(680px,100%);max-height:88vh;overflow:auto;background:#142331;color:#eef4f8;border:1px solid #60788b;border-radius:14px;padding:14px;box-shadow:0 18px 60px #0009}
+.nova-city-pop-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.nova-city-pop-head h2{margin:0 0 5px;font-size:19px}
+.nova-city-pop-close{min-width:38px;min-height:38px;border:1px solid #60788b;border-radius:9px;background:#263a4b;color:white;font-size:20px}
+.nova-city-pop-stats{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+.nova-city-pop-stats span{background:#203647;border:1px solid #3d596d;border-radius:8px;padding:6px 9px;font-size:12px}
+.nova-city-pop .nova-assets{display:grid;gap:8px}
+.nova-city-pop .nova-asset{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#1c3040;border:1px solid #354e60;border-radius:9px;padding:9px}
+.nova-city-pop .nova-asset-info{flex:1;min-width:0}
+.nova-city-pop .nova-asset-info small{display:block;color:#c1d0dc;font-size:11px;margin-top:3px}
+.nova-city-pop .nova-meter{height:6px;background:#354b5c;border-radius:5px;overflow:hidden;margin:5px 0}
+.nova-city-pop .nova-meter i{display:block;height:100%;background:#78c997}
+.nova-city-pop button{cursor:pointer}
+@media(max-width:520px){.nova-city-pop{padding:6px}.nova-city-pop-box{padding:10px;max-height:92vh}.nova-city-pop .nova-asset{align-items:flex-start}.nova-city-pop .nova-asset>button{font-size:11px;padding:7px}}

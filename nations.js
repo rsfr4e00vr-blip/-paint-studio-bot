@@ -166,7 +166,7 @@ function catchUp(){
 function report(){
   const S=NG.S;if(!S||!active)return;
   let power=1;try{power=NG.warPower(null)}catch(e){}
-  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,infl:S.inflation,rate:S.cbRate??5,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70,pvo:S.aa||0,pp:S.pp||0}});
+  send({type:'report',out:!!S.out,rep:{gdp:S.gdp,money:S.money,debt:S.debt,infl:S.inflation,rate:S.cbRate??5,stab:S.stability,appr:S.approval,legit:S.legitimacy,trust:S.trust==null?70:S.trust,power,pop:S.pop,income:NG.income(),res:NG.resIndex?NG.resIndex():70,pvo:S.aa||0,pp:S.pp||0,infra:window.NovaSystems?NovaSystems.totals(S).health:100,infra_critical:window.NovaSystems?NovaSystems.totals(S).critical:100,infra_count:window.NovaSystems?NovaSystems.totals(S).count:0,cities:(S.regions||[]).filter(r=>r.city).length}});
 }
 function saveLocal(){try{localStorage.setItem(LKEY(room.code),JSON.stringify(NG.S))}catch(e){}}
 function addMoney(d){const S=NG.S;if(d>=0)S.money+=d;else{const n=-d;if(S.money>=n)S.money-=n;else{S.debt+=n-S.money;S.money=0}}}
@@ -291,7 +291,7 @@ function paintCountryHint(){const e=$('#mpCountryHint'),v=val('#mpCountry');if(!
   e.className='mp-hint ok';e.innerHTML=`<b>${esc(i.key)}</b> · 💱 ${esc(i.curName)} (<b>${esc(i.cur)}</b>) · 1 ${esc(i.ref)} = <b>${curRate(i)}</b> ${esc(i.cur)} · 📈 стартовый ВВП ≈ <b>${fmt(i.gdp)}</b> млн · 👥 ${i.pop>=1?i.pop.toFixed(i.pop>=10?0:1)+' млн':Math.round(i.pop*1000)+' тыс.'}`}
 /* моя экономика прямо в «Быстром доступе»: ВВП и курс именно моей страны */
 function myEcoChips(){const S=NG.S;if(!S)return'';let fx='';try{const F=S.fx;if(F&&F.cur)fx=`<span class="chip">💱 1 ${esc(F.ref)} = <b>${curRate({rate:F.rate})}</b> ${esc(F.cur)}</span>`}catch(e){}
-  return `<span class="chip">🏳 <b>${esc(S.name||'')}</b></span>${fx}<span class="chip">📈 ВВП <b>${fmt(S.gdp)}</b> млн</span><span class="chip">👥 ${((S.pop||0)/1e6).toFixed(1)} млн</span>`}
+  return `<span class="chip">🏳 <b>${esc(S.name||'')}</b></span>${fx}<span class="chip">📈 ВВП <b>${fmt(S.gdp)}</b> млн</span><span class="chip">👥 ${((S.pop||0)/1e6).toFixed(1)} млн</span><span class="chip">🏗 Инфраструктура <b>${Math.round(window.NovaSystems?NovaSystems.totals(S).health:100)}%</b></span>`}
 function tgName(){const u=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user;return u&&u.first_name||''}
 function randCode(){const a='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let s='';for(let i=0;i<5;i++)s+=a[Math.floor(Math.random()*a.length)];return s}
 function go(code){
@@ -304,7 +304,7 @@ function copy(t){try{navigator.clipboard.writeText(t)}catch(e){const i=document.
 
 /* ---------- вкладка «Мультиплеер» ---------- */
 function table(list){
-  return `<div style="overflow:auto"><table><tr><th>#</th><th>Страна</th><th>Очки</th><th>ВВП</th><th>Мощь</th><th>Стаб.</th><th>Инфляция</th><th>Ставка ЦБ</th></tr>${list.map((p,i)=>`<tr class="${p.id===me.id?'me':''}"><td>${i+1}</td><td><b>${esc(p.country)}</b>${p.eliminated?' 💀':p.out?' 🪧':''}${p.connected===false?' 📴':''}${curTag(p.country)}<br><span class="muted2">${esc(p.name)}</span><br>${chips(p.comp)}</td><td><b>${p.score}</b></td><td>${fmt(p.gdp)}</td><td>${p.power}</td><td>${p.stab}%</td><td>${Number(p.infl??0).toFixed(1)}%</td><td>${Number(p.rate??5).toFixed(1)}%</td></tr>`).join('')}</table></div>`;
+  return `<div style="overflow:auto"><table><tr><th>#</th><th>Страна</th><th>Очки</th><th>ВВП</th><th>Мощь</th><th>Стаб.</th><th>Инфра.</th><th>Инфляция</th><th>Ставка ЦБ</th></tr>${list.map((p,i)=>`<tr class="${p.id===me.id?'me':''}"><td>${i+1}</td><td><b>${esc(p.country)}</b>${p.eliminated?' 💀':p.out?' 🪧':''}${p.connected===false?' 📴':''}${curTag(p.country)}<br><span class="muted2">${esc(p.name)}</span><br>${chips(p.comp)}</td><td><b>${p.score}</b></td><td>${fmt(p.gdp)}</td><td>${p.power}</td><td>${p.stab}%</td><td>${Number(p.infra??100).toFixed(0)}%</td><td>${Number(p.infl??0).toFixed(1)}%</td><td>${Number(p.rate??5).toFixed(1)}%</td></tr>`).join('')}</table></div>`;
 }
 function curTag(c){try{const i=NG.countryInfo&&NG.countryInfo(c);return i?` <span class="chip" title="${esc(i.curName)}">💱 ${esc(i.cur)}</span>`:''}catch(e){return''}}
 function chips(c){if(!c)return'';const n={eco:'Эко',welfare:'Нар.',gov:'Упр.',fin:'Фин.',mil:'Арм.'};return Object.keys(n).map(k=>`<span class="chip">${n[k]} ${c[k]}</span>`).join('')}
@@ -334,7 +334,7 @@ window.NGMP={
 };
 function paintAll(){if(NG.getTab()!=='mp'||!active&&room.state==='lobby')return;paintStand();paintMods();paintDip();paintChat();paintFeed();paintAutoSummary() }
 function paintAutoSummary(){const me2=$('#mpMyEco');if(me2&&NG.S)me2.innerHTML=myEcoChips();const e=$('#mpAutoSummary');if(!e||!NG.S)return;const a=NG.S.autoPurchase||{},items=a.items||{},on=Object.keys(items).filter(k=>items[k]&&items[k].on);e.innerHTML=`<b>Автозакупки:</b> ${a.enabled?'включены':'выключены'} · ${on.length?`товары: ${on.map(esc).join(', ')}`:'товары не выбраны'} <button onclick="NG.setTab('autobuy')">Настроить</button>`}
-function paintStand(){const e=$('#mpStand');if(!e)return;const list=standings.length?standings:room.players;e.innerHTML=`<h2>🏆 Таблица очков · месяц ${room.month}/${room.length}</h2>${table(list)}<p class="muted2">Очки: экономика 36%, народ 20%, управление 14%, финансы 14%, армия 16%. Считаются на сервере; рост ВВП в зачёте ограничен 1,5% в месяц.</p>`}
+function paintStand(){const e=$('#mpStand');if(!e)return;const list=standings.length?standings:room.players;e.innerHTML=`<h2>🏆 Таблица очков · месяц ${room.month}/${room.length}</h2>${table(list)}<p class="muted2">Очки: экономика 36%, народ 20%, управление 14%, финансы 14%, армия 16%. Состояние инфраструктуры учитывается в благосостоянии; её разрушение снижает доход и очки. Рост ВВП в зачёте ограничен сервером.</p>`}
 function pct(v){return(v>0?'+':v<0?'−':'')+Math.abs(Math.round(v*1000)/10)+'%'}
 function relationTier(v){return v>=80?'🌟 стратегический партнёр':v>=60?'🤝 близкий партнёр':v>=35?'🙂 дружелюбные отношения':v>=10?'🕊 партнёрский диалог':v>-10?'😐 нейтралитет':v>-35?'🧊 напряжённые отношения':v>-60?'⚠️ недружественные отношения':'😠 враждебные отношения'}
 function paintMods(){
