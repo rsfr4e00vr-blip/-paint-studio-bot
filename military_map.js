@@ -671,11 +671,14 @@ function hud(){
  if(!p){p=document.createElement('div');p.id='mm-panel';p.className='mm-panel';p.hidden=true;
   ['pointerdown','pointerup','click','touchstart','wheel'].forEach(t=>p.addEventListener(t,ev=>ev.stopPropagation()));document.body.appendChild(p)}
  let tc=box.querySelector('.mm-time-controls');
- if(!tc){tc=document.createElement('div');tc.className='mm-time-controls';tc.innerHTML='<button type="button" data-mm-time="pause" aria-label="Пауза">Ⅱ</button><button type="button" data-mm-time="play" aria-label="Старт">▶</button>';tc.addEventListener('pointerdown',ev=>ev.stopPropagation());tc.addEventListener('click',ev=>{ev.stopPropagation();const a=ev.target.closest('[data-mm-time]');if(!a)return;const fn=a.dataset.mmTime==='pause'?'pause':'play';if(env&&typeof env[fn]==='function')env[fn]();MM.speed=a.dataset.mmTime==='pause'?0:1;MM.dirty=true;paintHud(true)});box.appendChild(tc)}
+ if(!tc){tc=document.createElement('div');tc.className='mm-time-controls';tc.innerHTML='<button type="button" data-mm-time="pause" aria-label="Пауза">Ⅱ</button><button type="button" data-mm-time="play" aria-label="Старт">▶</button><span class="mm-clock"></span>';tc.addEventListener('pointerdown',ev=>ev.stopPropagation());tc.addEventListener('click',ev=>{ev.stopPropagation();const a=ev.target.closest('[data-mm-time]');if(!a)return;const fn=a.dataset.mmTime==='pause'?'pause':'play';if(env&&typeof env[fn]==='function')env[fn]();MM.speed=a.dataset.mmTime==='pause'?0:1;MM.dirty=true;paintHud(true)});box.appendChild(tc)}
  return{p,fab:f}}
 const bar=(v,m,c)=>`<span class="mm-b"><i style="width:${clampN(v/m*100,0,100)}%;background:${c}"></i></span>`;
 const MISS={idle:'на месте',move:'в движении',patrol:'патрулирует',bomb:'идёт на цель',rtb:'возвращается'};
-function paintHud(force){
+const MM_MON=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
+function paintClock(){try{const st=env&&env.S&&env.S();if(!st)return;document.querySelectorAll('.mm-clock').forEach(el=>{const mi=(+st.month||0)%12,tot=((+st.year||1)-1)*12+(+st.month||0);el.textContent=`${st.year||1} г · ${MM_MON[mi]} · ${tot} мес`})}catch(e){}}
+setInterval(paintClock,700);
+function paintHud(force){paintClock();
  const h=hud();if(!h)return;const p=h.p,fab=h.fab;
  const mine=MM.units.filter(u=>u.own===ME),foes=MM.units.filter(u=>u.own!==ME).length+(MM.remoteUnits||[]).length;
  const u=byId(MM.sel);

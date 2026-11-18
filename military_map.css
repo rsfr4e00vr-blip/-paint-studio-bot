@@ -29,3 +29,13 @@
 .mm-time-controls{position:absolute;left:10px;right:auto;top:10px;z-index:100002;display:flex;gap:6px;padding:5px;border:1px solid #8c713c;border-radius:12px;background:#0d1826eF;box-shadow:0 4px 14px #0008}
 .mm-time-controls button{min-width:42px;min-height:38px;border:1px solid #53677b;border-radius:8px;background:#20354b;color:#f5e4b7;font-weight:700;font-size:15px}
 .mm-time-controls button:active{transform:scale(.96)}
+
+/* компактные пауза/старт + часы */
+.mm-time-controls{gap:4px;padding:3px;border-radius:10px;align-items:center}
+.mm-time-controls button{min-width:30px;min-height:28px;padding:0 6px;font-size:13px;border-radius:7px}
+.mm-clock{font:700 11px/1.1 system-ui,sans-serif;color:#f5e4b7;padding:0 6px;white-space:nowrap}
+/* подсказка «чья территория» — меньше и выше кнопок Войска/Арсенал */
+.wm-tip.wm-tip{bottom:62px;left:8px;right:64px;padding:6px 28px 6px 9px;font-size:12px;max-width:300px}
+.wm-tip.wm-tip b{font-size:13px}
+.wm-tip.wm-tip .wm-open{padding:5px 8px;font-size:12px;min-height:30px;margin-top:4px}
+.wm-tip.wm-tip .wm-sub,.wm-tip.wm-tip .wm-st{font-size:11px}
