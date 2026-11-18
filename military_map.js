@@ -218,7 +218,7 @@ function step(dt){
   else say((mine?'💥 Уничтожено: ':'✅ Уничтожено у противника: ')+NAMES[u.sub],mine);
   {const kd=kindOf(u);MM.fx.push({kind:'ghost',sub:u.sub,own:u.own,x:u.x,y:u.y,ang:u.ang||0,dk:kd==='sea'?'sink':kd==='air'?'crash':'wreck',t0:MM.t,life:kd==='sea'?3.4:kd==='air'?1.7:2.2});
    addFx(u.x,u.y,'boom',kd==='air'?.8:1.5);if(kd!=='air')addFx(u.x,u.y,'smoke',1.6)}
-  if(MM.sel===u.id)MM.sel=null;if(mine)env&&env.lostUnit&&env.lostUnit(u);return false});
+  if(MM.sel===u.id)MM.sel=null;if(env&&env.lostUnit)env.lostUnit(u);return false});
  const addF=[];
  MM.fx=MM.fx.filter(f=>{if(MM.t-f.t0<f.life)return true;
   if(f.kind==='ghost'&&f.dk==='crash'){const a=1,ex=f.x+Math.cos(f.ang)*14,ey=f.y+Math.sin(f.ang)*14+6;addF.push({x:ex,y:ey,kind:'boom',s:1.5,t0:MM.t,life:FXLIFE.boom});addF.push({x:ex,y:ey,kind:'smoke',s:1.6,t0:MM.t,life:FXLIFE.smoke})}
@@ -297,13 +297,15 @@ function addBase(ra){if(MM.bases.some(b=>b.id===ra.id))return;const w=snap('sea'
 /* ---------- ИИ противника ---------- */
 function aiThink(){
  if(!env||!env.wars)return;
+ const difficulty=env.difficulty?env.difficulty():'normal';
+ const aiScale=difficulty==='hard'?1.22:difficulty==='easy'?.78:1;
  const wars=env.wars();
  const alive=new Set(wars.map(w=>w.n));
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
  wars.forEach(w=>{
   const mine=MM.units.filter(u=>u.own===w.n),nat=env.enemyNation&&env.enemyNation(w.n),pw=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
-  const cap={land:2+Math.floor(pw/28),sea:1+(pw>55?1:0),air:2+(pw>60?1:0)};
+  const cap={land:Math.max(1,Math.round((2+Math.floor(pw/28))*aiScale)),sea:Math.max(1,Math.round((1+(pw>55?1:0))*aiScale)),air:Math.max(1,Math.round((2+(pw>60?1:0))*aiScale))};
   const cnt=k=>mine.filter(u=>kindOf(u)===k&&!SPEC[u.sub].static).length;
   MM.spawnT=MM.spawnT||{};MM.spawnT[w.n]=(MM.spawnT[w.n]||0)-1.5;
   if(MM.spawnT[w.n]<=0){
@@ -331,7 +333,7 @@ function aiThink(){
      else mk(w.n,sub,spot[0],spot[1],{name:nm,base:null})}
     /* промышленность определяет темп: слабая индустрия — медленнее */
     const ind=nat&&Number(nat.industry)>0?Math.max(.4,Math.min(3,Number(nat.industry))):1;
-    MM.spawnT[w.n]=(paid?22:30)/ind}
+    MM.spawnT[w.n]=(paid?22:30)/(ind*aiScale)}
   }
  });
  const mine=MM.units.filter(u=>u.own===ME);
@@ -380,7 +382,7 @@ function commander(w,mine){
  const ePow=sumP(my),mPow=sumP(mine)+.1,myFi=mA.filter(m=>m.sub==='fighter').length,eFi=my.filter(u=>u.sub==='fighter').length;
  const ctx=(ePow/mPow>1.4?'strong':ePow/mPow<.7?'weak':'even')+'|'+(near?'near':'far')+'|'+(myFi>eFi?'airDown':'airUp');
  /* раз в 12 с: оценка прошлой тактики по результату боёв и выбор новой */
- if(MM.t-st.t>12){
+ if(MM.t-st.t>(env.difficulty&&env.difficulty()==='hard'?8:env.difficulty&&env.difficulty()==='easy'?18:12)){
   const eHP=my.reduce((a,u)=>a+u.hp,0),mHP=mine.reduce((a,u)=>a+u.hp,0);
   if(st.hp){const dE=st.hp[0]-eHP,dM=st.hp[1]-mHP;tLearn(st.c,st.tact,clampN(.5+.5*(dM-dE)/(100*Math.max(2,my.length)),0,1))}
   st.c=ctx;st.tact=tPick(ctx);st.hp=[eHP,mHP];st.t=MM.t}
@@ -715,7 +717,8 @@ let raf=0,last=0,lastPaint=0,acc=0,saveT=0;
 function frame(ts){
  raf=requestAnimationFrame(frame);
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(document.hidden||!MM.ready)return;
- const sd=dt*MM.speed;
+ const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
+ const sd=running?dt*MM.speed:0;
  if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{aiThink()}catch(e){console.warn('MM ai',e)}}}
  // На мобильных устройствах не перерисовываем тяжёлый SVG чаще 30 раз/с.
  // Шаг симуляции и таймер сохранения продолжают работать с исходной частотой.
@@ -749,7 +752,7 @@ const API={
  speed(s){MM.speed=s;MM.dirty=true;paintHud(true)},
  deploy(sub){if(sub==='aabat'){MM.mode='placeAA';say('🛡️ Выберите точку на суше для размещения батареи ПВО · 500 млн',true);paintHud(true);return}deploy(sub)},deployProd:deployProduced
 };
-const core={MM,SPEC,DM,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
+const core={MM,SPEC,DM,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
 if(typeof module!=='undefined'&&module.exports){module.exports=core}
 if(typeof window!=='undefined'&&root===window){
  window.MilMap={depToggle(o){MM.depOpen=!!o},handleTap,attach,core,setNetworkState:core.setNetworkState};
