@@ -1016,6 +1016,8 @@ function branchTick(w,c){
   const rr=S.regions.slice().sort((a,b)=>a.infra-b.infra)[0];if(rr){rr.infra=clamp(rr.infra+1.4);rr.industry=clamp(rr.industry+.5)}
  }
 }
+/* если на карте есть настоящие сухопутные отряды — области занимают они, а не счётчик фронта */
+function realForce(){try{const M=window.MilMap&&MilMap.core&&MilMap.core.MM;return !!(M&&M.ready&&M.units.some(u=>u.own==='me'&&(u.sub==='inf'||u.sub==='tank')))}catch(e){return false}}
 function occupyTick(w){
  const rg=regsOf(w.n);if(!rg||!rg.length)return;
  const free=rg.filter(x=>!taken()[x.id]);
@@ -1025,8 +1027,8 @@ function occupyTick(w){
    extra=(w.p>52&&cm0.troops>0)?(cm0.alloc==='spread'?Math.min(Math.max(0,cm0.regions.length-1),Math.floor(shr*3)):(shr>=.3?1:0)):0;   // широкий фронт берёт несколько областей сразу
   const want=Math.min(free.length,Math.floor(rg.length*Math.max(0,w.p-50)/50*(order==='attack'?.85:order==='defend'?.35:.6))+extra);
  const nm=id=>{const x=rg.find(z=>z.id===id);return x?String(x.n).replace(/ \(.*\)/,''):id};
- while(w.occ.length>want){const id=w.occ.pop();warNews(w,'🏳',`${cityOf(nm(id))}: наши войска отошли, область снова у врага`);log(`🏳 Отход из области «${nm(id)}» (${w.n}).`)}
- if(w.occ.length<want&&sup>=35){
+ while(!realForce()&&w.occ.length>want){const id=w.occ.pop();warNews(w,'🏳',`${cityOf(nm(id))}: наши войска отошли, область снова у врага`);log(`🏳 Отход из области «${nm(id)}» (${w.n}).`)}
+ if(w.occ.length<want&&sup>=35&&!realForce()){
   let pick0=null;const pref=((S.tgt&&S.wars[S.tgt.wi||0]===w&&S.tgt.r)||''),prefs=(cm0.regions&&cm0.regions.length)?cm0.regions:(pref?[pref]:[]);
   for(const pn of prefs){pick0=free.find(x=>x.n===pn&&!w.occ.includes(x.id));if(pick0)break}
   if(!pick0){   // ближайшая к нашей земле или уже занятой — как продвижение фронта
@@ -3139,7 +3141,8 @@ H.warPreset=(name,preset)=>{const w=S.wars.find(x=>x.n===name);if(!w)return;cons
   defense:{label:'Крепкая оборона',order:'defend',troops:.50,alloc:'spread',air:'patrol',navy:'escort',spec:'recon',logi:'repair'},
   economy:{label:'Экономия ресурсов',order:'balanced',troops:.20,alloc:'focus',air:'reserve',navy:'reserve',spec:'reserve',logi:'repair'},
   pressure:{label:'Давление на экономику',order:'balanced',troops:.25,alloc:'focus',air:'strategic',navy:'blockade',spec:'recon',logi:'convoys'}
- };const x=plans[preset];if(!x)return;w.order=x.order;cm.troops=safe(x.troops);cm.alloc=x.alloc;cm.air=x.air;cm.navy=x.navy;cm.spec=x.spec;cm.logi=x.logi;normCmd(w);log(`📋 Штаб ${w.n}: применён план «${x.label}».`);save();render();toast('План армии обновлён')};
+ };const x=plans[preset];if(!x)return;w.order=x.order;cm.troops=safe(x.troops);cm.alloc=x.alloc;cm.air=x.air;cm.navy=x.navy;cm.spec=x.spec;cm.logi=x.logi;normCmd(w);w.auto=(preset==='assault'||preset==='balanced');log(`📋 Штаб ${w.n}: применён план «${x.label}».${w.auto?' Отряды на карте сами идут к целям.':''}`);save();render();toast(w.auto?'План применён: армия на карте пойдёт к целям':'План армии обновлён')};
+H.warAutoMove=(name)=>{const w=S.wars.find(x=>x.n===name);if(!w)return;w.auto=!w.auto;toast(w.auto?'Автоход армии включён':'Автоход армии выключен');save();render()};
 H.warAutoPlan=(name)=>{const w=S.wars.find(x=>x.n===name);if(!w)return;const low=S.money<500||S.fuel<25||S.ammo<25||S.morale<35||S.food<25;H.warPreset(name,low?'defense':(w.p<35?'balanced':'assault'))};
 H.warAllOrder=(order)=>{if(!['attack','defend','balanced'].includes(order))return;S.wars.forEach(w=>{w.order=order;if(order==='attack'){const cm=normCmd(w);if(!cm.troops)cm.troops=Math.floor(S.army*.35)}});log(`🌐 Общий приказ всем фронтам: ${{attack:'наступать',defend:'держать оборону',balanced:'действовать сбалансированно'}[order]}.`);save();render();toast('Приказ передан всем фронтам')};
 // Приказы войскам — абстрактная игровая система, без реальных координат и маршрутов.
@@ -3253,7 +3256,7 @@ function warPlanHtml(w){
  const free=(enemyRegs(w.n)||[]).slice().sort((a,b)=>b.s-a.s),opts=free.filter(x=>!cm.regions.includes(x.n));
  const sel=(key,list)=>`<select onchange="H.wcmd(${nm},'${key}',this.value)">${Object.keys(list).map(k=>`<option value="${k}" ${cm[key]===k?'selected':''}>${list[k]}</option>`).join('')}</select>`;
  const pr=p=>`<button class="${Math.abs(cm.troops-Math.floor(S.army*p/100))<2&&cm.troops>0?'on':''}" onclick="H.wcmd(${nm},'troopsPct',${p})">${p}%</button>`;
- return `<div class="mini war-command wplan"><b>📋 Штаб: план армии и родов войск</b><div class="wp-presets"><small class="muted">Быстрые планы — применяются одним нажатием:</small><div class="actions"><button class="danger" onclick="H.warPreset(${nm},'assault')">⚔ Наступление</button><button onclick="H.warPreset(${nm},'balanced')">⚖ Баланс</button><button onclick="H.warPreset(${nm},'defense')">🛡 Оборона</button><button onclick="H.warPreset(${nm},'economy')">💰 Экономия</button><button onclick="H.warPreset(${nm},'pressure')">📉 Давление на экономику</button><button class="primary" onclick="H.warAutoPlan(${nm})">✨ Подобрать автоматически</button></div></div>
+ return `<div class="mini war-command wplan"><b>📋 Штаб: план армии и родов войск</b><div class="wp-presets"><small class="muted">Быстрые планы — применяются одним нажатием:</small><div class="actions"><button class="danger" onclick="H.warPreset(${nm},'assault')">⚔ Наступление</button><button onclick="H.warPreset(${nm},'balanced')">⚖ Баланс</button><button onclick="H.warPreset(${nm},'defense')">🛡 Оборона</button><button onclick="H.warPreset(${nm},'economy')">💰 Экономия</button><button onclick="H.warPreset(${nm},'pressure')">📉 Давление на экономику</button><button class="primary" onclick="H.warAutoPlan(${nm})">✨ Подобрать автоматически</button><button onclick="H.warAutoMove(${nm})">🪖 Автоход армии: ${w.auto?'вкл':'выкл'}</button></div></div>
  <div class="wp-sec"><small class="muted">🎯 Области-цели (очерёдность = приоритет; 🚩 занята, ⏳ в плане)</small><div class="rpsel" data-w="${escA(w.n)}">${rpSelHtml(w)}</div><button class="primary" style="width:100%;margin:6px 0" onclick="H.planMap(${nm})">🗺 Выбрать области на карте</button>${fold('rp_'+w.n,'📋 Список областей (поиск и фильтры)',rpBox(w),false)}</div>
  <div class="wp-sec"><small class="muted">🪖 Сухопутные войска</small><div class="seg"><button class="${cm.troops===0?'on':''}" onclick="H.wcmd(${nm},'troopsPct',0)">0</button>${pr(25)}${pr(50)}${pr(70)}</div>
  <label>Выделить солдат: <input type="number" min="0" max="${Math.floor(S.army*.7)}" step="1000" value="${cm.troops}" onchange="H.wcmd(${nm},'troops',this.value)" style="width:110px"></label>
@@ -4480,6 +4483,8 @@ function mmRegionAt(x,y){const g=mmGeom(x,y);if(!g)return null;const {C,r}=g;
 window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
  env(){return{GEO,WMAP,S:()=>S,save,toast,play,pause,isRunning:()=>running,difficulty:()=>S.difficulty||'normal',regionAt:mmRegionAt,
   wars:()=>(S.wars||[]).filter(w=>!w.won),
+  warTargets(w){const rg=regsOf(w.n)||[],cm=normCmd(w),occ=new Set(w.occ||[]),tk=taken(),pri={};(cm.regions||[]).forEach((n,i)=>pri[n]=i+1);
+   return rg.filter(x=>Number.isFinite(x.cx)&&Number.isFinite(x.cy)&&!tk[x.id]).map(x=>({id:x.id,name:String(x.n).replace(/ \(.*\)$/,''),x:x.cx,y:x.cy,occ:occ.has(x.id),pri:pri[x.n]||0}))},
   homeAnchor(){let C=null;try{C=GEO.c[wi(myName()).iso]}catch(e){}let r=C&&(C.regs||[]).find(q=>Number.isFinite(q.cx));
    if(!r){for(const c of Object.values(GEO.c)){const q=(c.regs||[]).find(z=>Number.isFinite(z.cx)&&isMe(regionOwner(c,z)));if(q){C=c;r=q;break}}}
    if(!r){C=Object.values(GEO.c).find(c=>(c.regs||[]).some(z=>Number.isFinite(z.cx)));r=C&&C.regs.find(z=>Number.isFinite(z.cx))}

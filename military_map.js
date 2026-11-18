@@ -157,7 +157,7 @@ function nearestBase(u){let best=null,bd=1e9;MM.bases.forEach(b=>{if(b.own&&b.ow
 /* ---------- приказы ---------- */
 function say(t,own){MM.log.unshift(t);MM.log=MM.log.slice(0,6);if(own&&env&&env.toast)env.toast(t);MM.dirty=true}
 function orderMove(u,x,y,opt){
- const k=kindOf(u);opt=opt||{};
+ const k=kindOf(u);opt=opt||{};if(!opt.auto)u.autoTgt=null;
  if(k==='air'){
   const base=u.base||nearestBase(u);if(!base)return false;
   const need=dist([u.x,u.y],[x,y])+dist([x,y],[base.x,base.y])+6;
@@ -293,6 +293,32 @@ function capture(dt){
    if(u.cap>=14){u.cap=0;u.capId=null;if(env.enemyRaid)env.enemyRaid(ra);MM.bases=MM.bases.filter(b=>b.id!==ra.id);addFx(u.x,u.y,'flag',1);say('⚠️ Противник отбил область: '+ra.name,true)}}
  })}
 function addBase(ra){if(MM.bases.some(b=>b.id===ra.id))return;const w=snap('sea',ra.x,ra.y,120,true),p=w>=0?cellPt(w):[ra.x,ra.y];MM.bases.push({id:ra.id,name:ra.name,x:ra.x,y:ra.y,px:p[0],py:p[1],own:ME})}
+
+/* ---------- автоплан: реальные отряды сами идут к целям войны ---------- */
+function autoCommand(){
+ if(!env||!env.wars||!env.warTargets)return;
+ const wars=env.wars().filter(w=>w.auto);if(!wars.length)return;
+ const units=MM.units.filter(u=>u.own===ME&&kindOf(u)==='land'&&!SPEC[u.sub].static);if(!units.length)return;
+ const bad=MM.autoBad||(MM.autoBad={});
+ let tg=[];wars.forEach(w=>{try{tg=tg.concat(env.warTargets(w)||[])}catch(e){}});
+ const free=tg.filter(t=>!t.occ&&!(bad[t.id]>MM.t));
+ const byTid={};tg.forEach(t=>byTid[t.id]=t);
+ const claimed={};units.forEach(u=>{if(u.autoTgt&&byTid[u.autoTgt]&&!byTid[u.autoTgt].occ)claimed[u.autoTgt]=(claimed[u.autoTgt]||0)+1});
+ let budget=3,noPath=0;   /* не больше 3 расчётов пути за такт — чтобы не лагало */
+ units.forEach(u=>{
+  if(budget<=0)return;
+  if(u.hp<30){u.autoTgt=null;if(!u.path.length&&u.mission!=='rtb'){const b=nearestBase(u);if(b&&dist([u.x,u.y],[b.x,b.y])>8){orderRtb(u);budget--}}return}
+  if(u.mission==='rtb'&&u.hp<70)return;
+  if(MM.t-(u.fight||-99)<2||u.cap>0)return;
+  if(u.autoTgt){const t=byTid[u.autoTgt];if(t&&!t.occ&&u.path.length)return;u.autoTgt=null}
+  else if(u.path.length)return;   /* ручной приказ игрока не трогаем, пока отряд идёт */
+  let best=null,bs=1e18;
+  free.forEach(t=>{const d=Math.hypot(t.x-u.x,t.y-u.y),sc=(t.pri?(t.pri-1)*400:300)+d+120*(claimed[t.id]||0);if(sc<bs){bs=sc;best=t}});
+  if(!best)return;
+  budget--;
+  if(orderMove(u,best.x,best.y,{auto:true})){u.autoTgt=best.id;claimed[best.id]=(claimed[best.id]||0)+1}
+  else{bad[best.id]=MM.t+45;noPath++}});
+ if(noPath&&MM.t-(MM.autoWarnT||-99)>40){MM.autoWarnT=MM.t;say('🪖 Автоплан: к части целей нет сухопутного пути (за морем) — нужен флот или другая цель',true)}}
 
 /* ---------- ИИ противника ---------- */
 function aiThink(){
@@ -625,10 +651,10 @@ function paint(){
  if(u&&u.own===ME){
   if(u.path.length)pd=`<path d="M${u.x} ${u.y}${u.path.map(p=>'L'+p[0]+' '+p[1]).join('')}" fill="none" stroke="#ffd76a" stroke-width="1.6" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity=".9"/><circle cx="${u.path[u.path.length-1][0]}" cy="${u.path[u.path.length-1][1]}" r="${(up*5).toFixed(2)}" fill="#ffd76a" opacity=".85"/>`;
   if(kindOf(u)==='air'){const b=u.base||nearestBase(u);if(b)rg=`<circle cx="${b.x}" cy="${b.y}" r="${SPEC[u.sub].range/2}" fill="#ffd76a10" stroke="#ffd76a" stroke-width="1" stroke-dasharray="2 4" vector-effect="non-scaling-stroke"/>`}}
- L.paths.innerHTML=pd;L.rng.innerHTML=rg;
+ if(pd!==L.pds){L.pds=pd;L.paths.innerHTML=pd}if(rg!==L.rgs){L.rgs=rg;L.rng.innerHTML=rg}
  /* эффекты */
  const z=up*zf,m30=30*up,inV=(x,y)=>x>vb.x-m30&&x<vb.x+vb.width+m30&&y>vb.y-m30&&y<vb.y+vb.height+m30;
- L.fx.innerHTML=MM.fx.map(f=>{const a=(MM.t-f.t0)/f.life;
+ let fxHtml=MM.fx.map(f=>{const a=(MM.t-f.t0)/f.life;
   if(f.kind==='shot'){if(!inV(f.x,f.y)&&!inV(f.tx,f.ty))return'';return shotSvg(f,clampN(a,0,1),z)}
   if(a<0)return'';
   if(!inV(f.x,f.y))return'';
@@ -661,7 +687,7 @@ function paint(){
   if(!S.static&&MM.t-(u.fight||-99)<.45){const col=u.own===ME?'#cfe2ff':'#ffd0d0';
    for(let i=0;i<5;i++){const an=i*1.2566+MM.t*2.4,rr=R*(1.15+.25*Math.sin(MM.t*9+i*2));extra+=`<circle cx="${(u.x+Math.cos(an)*rr).toFixed(2)}" cy="${(u.y+Math.sin(an)*rr*.7).toFixed(2)}" r="${(z*1.15).toFixed(2)}" fill="${col}" stroke="#101820" stroke-width=".8" vector-effect="non-scaling-stroke"/>`}}
   if(u.build)extra+=`<circle cx="${u.x.toFixed(2)}" cy="${u.y.toFixed(2)}" r="${(R*1.15).toFixed(2)}" fill="none" stroke="#ffd76a" stroke-width="1.6" stroke-dasharray="3 3" opacity="${(.5+.4*Math.sin(MM.t*6)).toFixed(2)}" vector-effect="non-scaling-stroke"/>`});
- L.fx.innerHTML+=extra;
+ fxHtml+=extra;if(fxHtml!==L.fxs){L.fxs=fxHtml;L.fx.innerHTML=fxHtml}
 }
 
 /* ---------- панель управления ---------- */
@@ -684,7 +710,7 @@ const MISS={idle:'на месте',move:'в движении',patrol:'патру
 const MM_MON=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 function paintClock(){try{const st=env&&env.S&&env.S();if(!st)return;document.querySelectorAll('.mm-clock').forEach(el=>{const mi=(+st.month||0)%12,tot=((+st.year||1)-1)*12+(+st.month||0);el.textContent=`${st.year||1} г · ${MM_MON[mi]} · ${tot} мес`})}catch(e){}}
 setInterval(paintClock,700);
-function paintHud(force){paintClock();
+function paintHud(force){if(force)paintClock();
  const h=hud();if(!h)return;const p=h.p,fab=h.fab;
  const mine=MM.units.filter(u=>u.own===ME),foes=MM.units.filter(u=>u.own!==ME).length+(MM.remoteUnits||[]).length;
  const u=byId(MM.sel);
@@ -713,16 +739,16 @@ function restore(o){
 function persist(){if(!env||!MM.dirty)return;MM.dirty=false;try{const st=env.S();st.milmap=snapshot();env.save()}catch(e){}}
 
 /* ---------- запуск ---------- */
-let raf=0,last=0,lastPaint=0,acc=0,saveT=0;
+let raf=0,last=0,lastPaint=0,lastHud=0,acc=0,saveT=0;const IS_MOBILE=!!(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));
 function frame(ts){
  raf=requestAnimationFrame(frame);
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(document.hidden||!MM.ready)return;
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  const sd=running?dt*MM.speed:0;
- if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{aiThink()}catch(e){console.warn('MM ai',e)}}}
+ if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}}
  // На мобильных устройствах не перерисовываем тяжёлый SVG чаще 30 раз/с.
  // Шаг симуляции и таймер сохранения продолжают работать с исходной частотой.
- const isMobile=(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));const frameMs=isMobile?42:33;if(ts-lastPaint>=frameMs){lastPaint=ts;paint();paintHud(false)}
+ const frameMs=sd>0?(IS_MOBILE?50:33):140;if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>250||MM.hsig===null){lastHud=ts;paintHud(false)}}
  saveT+=dt;if(saveT>4){saveT=0;persist()}}
 function attach(){
  const G=window.NG&&NG.__mm;if(!G)return;
@@ -752,7 +778,7 @@ const API={
  speed(s){MM.speed=s;MM.dirty=true;paintHud(true)},
  deploy(sub){if(sub==='aabat'){MM.mode='placeAA';say('🛡️ Выберите точку на суше для размещения батареи ПВО · 500 млн',true);paintHud(true);return}deploy(sub)},deployProd:deployProduced
 };
-const core={MM,SPEC,DM,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
+const core={MM,SPEC,DM,autoCommand,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
 if(typeof module!=='undefined'&&module.exports){module.exports=core}
 if(typeof window!=='undefined'&&root===window){
  window.MilMap={depToggle(o){MM.depOpen=!!o},handleTap,attach,core,setNetworkState:core.setNetworkState};
