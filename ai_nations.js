@@ -46,7 +46,7 @@ function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80
 /* Мировая обстановка влияет на рост: война у торговых партнёров и общая «горячность» мира тормозят экономику. */
 let worldDrag=0,byNameCur={},curW=null;
 /* Госдолг ИИ-страны: на тяжёлой войне лимит долга выше (военные займы и облигации), казна может уходить в минус (дефицит). */
-const debtLimit=n=>n.gdp*((n.war?.65:.25)+n.stability/220);
+const debtLimit=n=>n.gdp*(n.war?1.15:C(.25+n.stability/220,.35,.68));
 function defaultNow(n){
  const W=curW,cut=n.debt*.6;n.debt-=cut;n.treasury=0;n.arrears=0;n.defaults=(n.defaults||0)+1;n.defMonth=W?W.month:0;n.noCredit=(W?W.month:0)+24;
  n.stability=C(n.stability-15,5,96);n.gdp*=.96;n.fx=C((n.fx||100)*1.4,45,700);n.relations-=15;
@@ -93,8 +93,8 @@ function economy(n){
  /* Разрешаем уходить в минус (бюджетный дефицит до -5% ВВП) при тяжёлых расходах */
  n.treasury=C(n.treasury+income-upkeep,-n.gdp*.05,n.gdp*.25);debtService(n);
  /* Военные займы ИИ при тяжёлой войне: кредит при дефиците казны, истощении или низком духе; каждый заём ослабляет валюту */
- if(n.war&&(n.treasury<n.gdp*.01||n.exhaustion>28||n.morale<55)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<debtLimit(n)){
-  const emer=Math.min(debtLimit(n)-n.debt,n.gdp*.055);
+ if(n.war&&(n.treasury<n.gdp*.018||n.exhaustion>32||n.morale<48)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<debtLimit(n)){
+  const emer=Math.min(debtLimit(n)-n.debt,n.gdp*.07);
   if(emer>n.gdp*.002){
    n.debt+=emer;n.treasury+=emer;
    n.power=C(n.power+emer*.14,2,150);
@@ -283,7 +283,7 @@ function think(W,n,A,m,wv){
  /* 2) допустимые действия и бюджет */
  const s=Math.min(n.treasury*.025,n.gdp*.0012),rich=s>=.5,peaceW=n.war?W.wars.find(w=>w.id===n.war):null;
  const ok=i=>{const a=ACTS[i];
-  if(a==='borrow')return(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.95&&n.treasury<n.gdp*.18;
+  if(a==='borrow')return(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.995&&n.treasury<n.gdp*.22;
   if(a==='repay')return n.debt>0&&n.treasury>n.gdp*.004;
   if(a==='mobilize'||a==='peace')return !!peaceW&&(a==='mobilize'?n.manpower>.05:peaceW.months>=2&&!peaceW.peaceReq);
   if(a==='rate')return (n.inflation||0)>8&&n.cbRate<15;
@@ -298,14 +298,14 @@ function think(W,n,A,m,wv){
  const debtR=(n.debt||0)/Math.max(1,n.gdp),cashR=n.treasury/Math.max(1,n.gdp),infl=n.inflation||0;
  if(debtR>.35){q[13]+=.22+Math.min(.55,(debtR-.35)*.8);q[0]+=.08}
  if(debtR>.65)q[13]+=.35;
- if(cashR<.012&&(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.82)q[12]+=.28;
+ if(cashR<.018&&(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.97)q[12]+=.36;
  if(cashR<.004){q[0]+=.18;q[1]-=.12;q[4]-=.08}
  if(infl>10){q[14]+=.18+Math.min(.4,(infl-10)*.025);q[15]+=.1;q[16]+=.12}
  if(n.war){
    if(n.manpower<Math.max(2,n.pop*.012))q[10]+=.32;
    if(n.exhaustion>28)q[10]+=.12;
    if(n.morale<42)q[7]+=.18;
-   if(peaceW&&peaceW.months>=4&&(n.exhaustion>48||n.treasury<n.gdp*.002||((peaceW.a===n.name&&peaceW.score < -25)||(peaceW.b===n.name&&peaceW.score > 25))))q[11]+=.24;
+   if(peaceW&&peaceW.months>=7&&(n.exhaustion>72||(n.treasury<n.gdp*.001&&n.morale<28)||(((peaceW.a===n.name&&peaceW.score < -58)||(peaceW.b===n.name&&peaceW.score > 58))&&n.exhaustion>58)))q[11]+=.16;
    if((n.aa||0)<2)q[5]+=.14;
  }else{
    const danger=A.filter(b=>b!==n&&!b.annexed&&!b.war).sort((a,b)=>b.power-a.power)[0];
@@ -355,7 +355,7 @@ function tick(S){
  W.nations.forEach(n=>{if(n.annexed)return;(n.gh||(n.gh=[])).push(Math.round(n.gdp*100)/100);if(n.gh.length>13)n.gh.shift();if(n.gdp>(n.gpeak||0))n.gpeak=n.gdp});
  {const m=med(A),wv=worldView(A);W.view={atWar:+wv.atWar.toFixed(3),growth:+wv.growth.toFixed(4)};A.forEach(n=>think(W,n,A,m,wv))}diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
- fight(W,w,a,b,A);const tired=w.months>=5&&(a.exhaustion>52||b.exhaustion>52||a.treasury<a.gdp*.002||b.treasury<b.gdp*.002);if(!tired&&!(w.peaceReq&&w.months>=3)&&(w.months<4||(w.months<8&&Math.abs(w.score)<18)||(w.months<18&&Math.abs(w.score)<32&&a.treasury>a.gdp*.002&&b.treasury>b.gdp*.002)&&w.encirclementA<4&&w.encirclementB<4))return true;
+ fight(W,w,a,b,A);const tired=w.months>=8&&((a.exhaustion>78&&b.exhaustion>68)||(b.exhaustion>78&&a.exhaustion>68)||((a.treasury<a.gdp*.001&&a.morale<25)&&(b.treasury<b.gdp*.001&&b.morale<25)));if(!tired&&!(w.peaceReq&&w.months>=7)&&(w.months<6||(w.months<12&&Math.abs(w.score)<22)||(w.months<24&&Math.abs(w.score)<42&&a.treasury>a.gdp*.001&&b.treasury>b.gdp*.001)&&w.encirclementA<5&&w.encirclementB<5))return true;
  peace(W,w,a,b,A);return false});
  if(W.month%12===0)ev(W,'📊 Годовой обзор: экономики, промышленность, резервы и торговля продолжают развиваться.');
  W.events.length=Math.min(W.events.length,80);
@@ -426,5 +426,5 @@ function econSetSort(k){
  const tb=document.getElementById('econTb');if(tb)tb.innerHTML=econBody(econRows(S));
  const p=document.getElementById('econPanel');if(p)p.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.getAttribute('onclick')==="NationsAI.econSort('"+k+"')"));
 }
-window.NationsAI={fxIndex,init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort};
+window.NationsAI={fxIndex,init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort,debtLimit};
 })();

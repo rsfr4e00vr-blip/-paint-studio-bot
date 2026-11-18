@@ -1485,7 +1485,7 @@ const SVGNS='http://www.w3.org/2000/svg';
 const SCN={drone:{n:3,dur:2.5,R:16},heli:{n:2,dur:2.8,R:18},bomber:{n:3,dur:3.1,R:24},cruise:{n:1,dur:3.2,R:22,rk:1},rocket:{n:1,dur:2.8,R:28,rk:1},bomb:{n:1,dur:3.3,R:62,rk:1},cannon:{n:4,dur:1.8,R:12,ar:1},howitzer:{n:3,dur:1.9,R:15,ar:1},mlrs:{n:9,dur:1.8,R:11,ar:1,gap:.16},tank:{n:5,dur:3.1,R:16,tk:1}};
 function strikeScene(o){
  /* Боевые события с сервера могут автоматически открыть сцену полёта/удара; история также доступна вручную. */
- if(!o||!o.manual)return;
+ if(!o)return;
  wmLoad(ok=>{if(!ok)return;try{if(!WMAP.box)buildWorldNode();try{updateWorld()}catch(e){}runScene(o)}catch(e){console.warn('scene',e)}});
 }
 /* Точки пуска СТРОГО на территории стороны-атакующего: берём реальную границу ближайших к цели областей
@@ -1655,7 +1655,7 @@ function armsFxMap(k,wname,reg,rn,down){
  const A=ARMS[k];if(!SCN[k])return;
  if(window.__salv){window.__salv.outs.push({reg,down:!!down});return}
  const __war=(S.wars||[]).find(x=>x.n===wname);recordWarAttack(__war,'ours',k,reg,down);
- strikeScene({kind:'strike',k,enemy:wname,shots:[{regId:reg&&reg.id,down:!!down}],title:`${A.ic} ${A.n} → ${wname}`,sub:down?`Сбит ПВО · область «${rn}»`:`Область «${rn}»`});
+ strikeScene({manual:1,kind:'strike',k,enemy:wname,shots:[{regId:reg&&reg.id,down:!!down}],title:`${A.ic} ${A.n} → ${wname}`,sub:down?`Сбит ПВО · область «${rn}»`:`Область «${rn}»`});
 }
 /* ------------------------ АНИМАЦИЯ И ПРОИЗВОДСТВО АРСЕНАЛА ------------------------ */
 function armFx(k,mode){
@@ -4492,6 +4492,7 @@ window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
   blockadeRegion(ra,u){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.blockade=w.blockade||{};w.blockade[ra.id]=Math.min(100,(Number(w.blockade[ra.id])||0)+1);w.blockadePower=Math.min(100,(Number(w.blockadePower)||0)+.35);w.blockadeLast=ra.name;w.p=Math.min(100,(Number(w.p)||50)+.12);WMAP.usig=''},
   enemyRaid(ra){S.stability=clamp(S.stability-1.5);S.approval=clamp(S.approval-1);log('⚠️ Противник занял область «'+ra.name+'».');save()},
   enemyNation(name){const W=S.aiWorld;return W&&Array.isArray(W.nations)?(W.nations.find(x=>x.name===name)||null):null},
+  countryPvoMarkers(){const out=[];try{(WORLD.list||[]).forEach(n=>{if(!n||n.name===myName())return;const C=GEO.c[n.iso];const rs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy)).sort((a,b)=>(b.s||0)-(a.s||0));if(!rs.length)return;const count=Math.max(1,Math.min(3,1+Math.floor((Number(n.power)||20)/65)));for(let i=0;i<count;i++){const r=rs[Math.min(rs.length-1,Math.floor(i*rs.length/count))];out.push({x:r.cx,y:r.cy,name:n.name})}})}catch(e){}return out},
   enemySpawn(name){let C=null;try{C=GEO.c[wi(name).iso]}catch(e){}const rs=C&&(C.regs||[]).filter(q=>Number.isFinite(q.cx));if(!rs||!rs.length)return null;const r=rs[Math.floor(Math.random()*rs.length)];return{x:r.cx,y:r.cy}},
   lostUnit(u){if(u.pid&&Array.isArray(S.militaryUnits))S.militaryUnits=S.militaryUnits.filter(x=>x.id!==u.pid)}}}};
 
