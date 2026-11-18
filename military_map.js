@@ -747,7 +747,24 @@ if(typeof window!=='undefined'&&root===window){
  window.MilMap={depToggle(o){MM.depOpen=!!o},handleTap,attach,core,setNetworkState:core.setNetworkState};
  const H=window.H=window.H||{};
  H.mmToggle=API.toggle;H.mmSel=API.sel;H.mmStop=API.stop;H.mmRtb=API.rtb;H.mmMode=API.mode;H.mmSpeed=API.speed;H.mmDeploy=API.deploy;H.mmDeployProd=API.deployProd;
- H.mmOpen=()=>{if(window.goTab)window.goTab('map');setTimeout(()=>{MM.open=true;paintHud(true)},400)};
+ H.mmOpen=()=>{
+  /* переходим на вкладку «Карта», ждём пока карта построится, разворачиваем её на весь экран и открываем панель войск */
+  const btn=document.querySelector('#tabs [data-tab="map"]');
+  if(btn)btn.click();else if(window.goTab)window.goTab('map');
+  let tries=0;
+  const tm=setInterval(()=>{
+    tries++;
+    const G=window.NG&&NG.__mm,slot=document.getElementById('wm-slot');
+    const ok=!!(G&&G.WMAP&&G.WMAP.node&&G.WMAP.box&&G.GEO&&G.GEO.st==='ready'&&slot&&slot.contains(G.WMAP.box));
+    if(ok||tries>50){
+      clearInterval(tm);
+      try{if(ok&&!G.WMAP.full&&H.wz)H.wz('full')}catch(e){}
+      try{attach()}catch(e){}
+      MM.open=true;paintHud(true);
+      try{window.scrollTo(0,0)}catch(e){}
+    }
+  },150);
+};
  setInterval(()=>{try{attach()}catch(e){console.warn('MilMap',e)}},600);
 }
 })(typeof window!=='undefined'?window:globalThis);

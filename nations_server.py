@@ -105,6 +105,42 @@ def region_catalog() -> dict:
     _REGION_CATALOG_CACHE = catalog
     return catalog
 
+# ---- претензии на несколько областей: "Область1|Область2" или "*" (вся страна) ----
+_CLAIM_SUB = None
+def claim_tokens(raw) -> list:
+    global _CLAIM_SUB
+    import re
+    if _CLAIM_SUB is None:
+        _CLAIM_SUB = re.compile(r" · провинция \d+$")
+    s = "".join(ch for ch in str(raw or "") if ch.isprintable()).strip()
+    if not s:
+        return []
+    if s == "*":
+        return ["*"]
+    out = []
+    for part in s.split("|"):
+        t = _CLAIM_SUB.sub("", part.strip()).strip()[:80]
+        if t and t not in out:
+            out.append(t)
+    return out[:120]
+
+def claim_string(tokens: list) -> str:
+    if "*" in tokens:
+        return "*"
+    s = "|".join(tokens)
+    if len(s) > 900:
+        s = s[:900].rsplit("|", 1)[0]
+    return s
+
+def claim_label(raw) -> str:
+    t = claim_tokens(raw)
+    if not t:
+        return ""
+    if t[0] == "*":
+        return "вся страна"
+    short = [x.split(" (")[0] for x in t]
+    return ", ".join(short) if len(short) <= 3 else ", ".join(short[:2]) + f" и ещё {len(short) - 2}"
+
 # ------------------------------------------------------------------ настройки
 MAX_PLAYERS = 6
 SPEEDS = {"slow": 10.0, "normal": 6.0, "fast": 3.5}          # секунд на игровой месяц
@@ -1421,27 +1457,29 @@ async def on_claim(room: Room, p: Player, msg: dict):
     if p.claims.get(q.id, {}).get("expires", 0) > room.month:
         await room.notice("Территориальная претензия уже действует.", "warn", p)
         return
-    region = clean_name(msg.get("region"), default="", n=80)
-    if not region:
-        await room.notice("Выберите конкретную область, на которую предъявляется претензия.", "warn", p)
+    tokens = claim_tokens(msg.get("region"))
+    if not tokens:
+        await room.notice("Выберите хотя бы одну область, на которую предъявляется претензия.", "warn", p)
         return
     catalog = region_catalog()
     known = catalog.get(q.country)
-    if known is not None and region not in known:
-        await room.notice("Выбранная область не относится к указанной стране.", "warn", p)
+    if tokens[0] != "*" and known is not None and any(t not in known for t in tokens):
+        await room.notice("Одна из выбранных областей не относится к указанной стране.", "warn", p)
         return
+    region = claim_string(tokens)
+    label = claim_label(region)
     cost = 15
     if p.rep.get("pp", 0) < cost:
         await room.notice(f"Для официальной претензии нужно {cost} политической власти.", "warn", p)
         return
     p.rep["pp"] -= cost
     p.claims[q.id] = {"created": room.month, "expires": room.month + 36,
-                      "region": region, "detail": f"Официальное требование передачи области «{region}»", "severity": 68}
+                      "region": region, "detail": f"Официальное требование передачи: {label}", "severity": 68}
     p.ultimatums.pop(q.id, None)
     p.relations[q.id] = int(num(p.relations.get(q.id, 0) - 6, -100, 100, 0))
     q.relations[p.id] = int(num(q.relations.get(p.id, 0) - 6, -100, 100, 0))
     await room.send(p, {"type": "pp_update", "pp": p.rep["pp"]})
-    await room.notice(f"🗺 {p.country} предъявила {q.country} претензию на область «{region}». У сторон есть время для переговоров.", "dip")
+    await room.notice(f"🗺 {p.country} предъявила {q.country} претензию на: «{label}». У сторон есть время для переговоров.", "dip")
     await room.broadcast({"type": "relations", "relations": {x.id: room.relations_for(x) for x in room.players.values()}})
     await room.push_diplomacy_state()
 
@@ -1580,7 +1618,7 @@ async def on_war(room: Room, p: Player, msg: dict):
         return
     claim_region = ""
     if goal == "territory":
-        claim_region = clean_name(msg.get("region") or (p.claims.get(q.id, {}) or {}).get("region") or ground.get("region"), default="", n=80)
+        claim_region = claim_string(claim_tokens(msg.get("region") or (p.claims.get(q.id, {}) or {}).get("region") or ground.get("region")))
     if p.regime_by == q.id and p.regime_end > room.month:
         await room.notice("Правительство, поставленное этой страной, не может воевать с ней.", "warn", p)
         return
@@ -1614,7 +1652,7 @@ async def on_war(room: Room, p: Player, msg: dict):
         "enemy": p.country, "aggressor": False, "cause": cause, "cause_label": WAR_CAUSES[cause],
         "reason": ground.get("detail", ""), "goal": goal, "goal_label": WAR_GOALS[goal], "claim_region": claim_region})
     await room.broadcast({"type": "war_state", "wars": war_snapshot})
-    await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}. Основание: {WAR_CAUSES[cause]}. Причина: {ground.get('detail', '')}. Цель войны: {WAR_GOALS[goal]}{(' («' + claim_region + '»)') if claim_region else ''}.", "war")
+    await room.notice(f"⚔️ {p.country} объявил войну стране {q.country}. Основание: {WAR_CAUSES[cause]}. Причина: {ground.get('detail', '')}. Цель войны: {WAR_GOALS[goal]}{(' («' + claim_label(claim_region) + '»)') if claim_region else ''}.", "war")
 
 
 async def on_war_command(room: Room, p: Player, msg: dict):

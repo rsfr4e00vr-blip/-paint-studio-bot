@@ -26,6 +26,6 @@
 @media(max-width:390px){.mm-ars-fab{left:150px}.mm-ars-panel{left:5px;right:5px}}
 
 /* Компактные команды времени непосредственно на карте */
-.mm-time-controls{position:absolute;right:10px;top:10px;z-index:100002;display:flex;gap:6px;padding:5px;border:1px solid #8c713c;border-radius:12px;background:#0d1826eF;box-shadow:0 4px 14px #0008}
+.mm-time-controls{position:absolute;left:10px;right:auto;top:10px;z-index:100002;display:flex;gap:6px;padding:5px;border:1px solid #8c713c;border-radius:12px;background:#0d1826eF;box-shadow:0 4px 14px #0008}
 .mm-time-controls button{min-width:42px;min-height:38px;border:1px solid #53677b;border-radius:8px;background:#20354b;color:#f5e4b7;font-weight:700;font-size:15px}
 .mm-time-controls button:active{transform:scale(.96)}

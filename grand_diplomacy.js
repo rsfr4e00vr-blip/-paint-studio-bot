@@ -2,6 +2,15 @@
    The multiplayer server mirrors the same cause IDs and thresholds in nations_server.py. */
 (function(root){'use strict';
  const C=(v,a,b)=>Math.max(a,Math.min(b,Number(v)||0));
+
+ /* ---- многообластные претензии: строка "Область1|Область2" или "*" = вся страна ---- */
+ const CLAIM_SEP='|',claimBase=n=>String(n||'').replace(/ · провинция \d+$/,'').trim();
+ const claimToks=s=>{s=String(s||'').trim();if(!s)return[];if(s==='*')return['*'];return[...new Set(s.split(CLAIM_SEP).map(claimBase).filter(Boolean))]};
+ const claimStr=a=>{a=[...new Set((a||[]).map(claimBase).filter(Boolean))];if(a.includes('*'))return'*';let s=a.join(CLAIM_SEP);if(s.length>900)s=s.slice(0,900).replace(/\|[^|]*$/,'');return s};
+ const claimShort=x=>String(x).replace(/ \(.*\)/,'');
+ const claimLabel=s=>{const t=claimToks(s);if(!t.length)return'';if(t[0]==='*')return'вся страна';return t.length<=3?t.map(claimShort).join(', '):t.slice(0,2).map(claimShort).join(', ')+' и ещё '+(t.length-2)};
+ const claimHas=(s,n)=>{const t=claimToks(s);return t[0]==='*'||t.includes(claimBase(n))};
+ root.ClaimUtil={claimBase,claimToks,claimStr,claimLabel,claimHas};
  const CAUSES={
   territorial:{label:'Территориальные претензии',icon:'🗺',weight:1.0},
   border:{label:'Пограничный конфликт',icon:'🚧',weight:1.15},
@@ -32,7 +41,7 @@
  }
  function causes(att,def,month){
   const out=[];
-  if(active(att.claims&&att.claims[def.name],month)){const claim=att.claims[def.name];out.push({id:'territorial',severity:C(claim.severity||65,35,100),region:claim.region||null,detail:claim.detail||(claim.region?`Требование передачи региона «${claim.region}»`:'Официальная территориальная претензия')});}
+  if(active(att.claims&&att.claims[def.name],month)){const claim=att.claims[def.name];out.push({id:'territorial',severity:C(claim.severity||65,35,100),region:claim.region||null,detail:claim.detail||(claim.region?`Требование передачи региона «${claimLabel(claim.region)}»`:'Официальная территориальная претензия')});}
   if(active(att.borderCases&&att.borderCases[def.name],month))out.push({id:'border',severity:C(att.borderCases[def.name].severity||60,35,100),detail:att.borderCases[def.name].detail||'Зарегистрированный пограничный инцидент'});
   const ideol=att.ideology&&def.ideology&&att.ideology!==def.ideology;
   if(ideol&&active(att.ideologyDisputes&&att.ideologyDisputes[def.name],month))out.push({id:'ideology',severity:C(att.ideologyDisputes[def.name].severity||48,25,90),detail:`Противостояние: ${att.ideology} — ${def.ideology}`});
@@ -194,7 +203,7 @@
  function preparePlayerCase(S,c,cause,region){
   const month=(S.year||0)*12+(S.month||0),G=S.grandDiplomacy||(S.grandDiplomacy={version:1,claims:{},borderCases:{}});G.claims=G.claims||{};G.borderCases=G.borderCases||{};G.securityCases=G.securityCases||{};
   if(!CAUSES[cause])return{ok:false,error:'Неизвестное основание.'};
-  if(cause==='territorial'){const target=String(region||'').trim().slice(0,80);if(!target)return{ok:false,error:'Выберите конкретную область, на которую предъявляется претензия.'};const known=(root.WORLD_SEEDS&&root.WORLD_SEEDS[c.name]||[]).some(x=>x.n===target);if(root.WORLD_SEEDS&&root.WORLD_SEEDS[c.name]&&!known)return{ok:false,error:'Выбранная область не принадлежит этой стране.'};G.claims[c.name]={severity:68,expires:month+36,created:month,region:target,detail:`Официальное требование передачи региона «${target}»`};}
+  if(cause==='territorial'){const toks=claimToks(region);if(!toks.length)return{ok:false,error:'Выберите хотя бы одну область, на которую предъявляется претензия.'};const seeds=root.WORLD_SEEDS&&root.WORLD_SEEDS[c.name];if(toks[0]!=='*'&&seeds&&seeds.length){const names=new Set(seeds.map(x=>claimBase(x.n)));if(toks.some(t=>!names.has(t)))return{ok:false,error:'Одна из выбранных областей не принадлежит этой стране.'}}const target=claimStr(toks);G.claims[c.name]={severity:68,expires:month+36,created:month,region:target,regions:toks[0]==='*'?[]:toks,detail:`Официальное требование передачи: ${toks[0]==='*'?'вся страна':claimLabel(target)}`};}
   else if(cause==='border'){
    if((+c.value||0)>15)return{ok:false,error:'Пограничный кризис возможен только при напряжённых отношениях.'};
    G.borderCases[c.name]={severity:(+c.value||0)<=-60?88:68,expires:month+24,created:month,detail:'Официально зарегистрированный пограничный инцидент'};
