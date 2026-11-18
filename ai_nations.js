@@ -190,10 +190,15 @@ function declare(W,A){
   if(action!=='war'||cr.stage<3||warScore<70)continue;
   const id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;W.lastDeclare=W.month;
   const goal=GrandDiplomacy.chooseGoal(W,a,b,cause,{relations:a.relations,warScore});
-  const claim=a.claims&&a.claims[b.name],claimRegion=goal==='territory'?((claim&&claim.region)||(()=>{const rg=(window.WORLD_SEEDS&&WORLD_SEEDS[b.name])||[];return rg.length?(rg[Math.floor(Math.random()*rg.length)].n||''):''})()):'';
-  W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal,goalLabel:GrandDiplomacy.GOALS[goal].label,claimRegion,cause:cause.id,causeLabel:GrandDiplomacy.CAUSES[cause.id].label,reason:cause.detail,joinedA:[],joinedB:[]});
+  const claim=a.claims&&a.claims[b.name],seedRegions=(window.WORLD_SEEDS&&WORLD_SEEDS[b.name])||[];
+  /* Территориальная цель может включать от одной до всех областей страны-цели. */
+  const shuffled=seedRegions.slice().filter(x=>x&&x.n).sort(()=>Math.random()-.5);
+  const claimCount=goal==='territory'&&shuffled.length?1+Math.floor(Math.random()*shuffled.length):0;
+  const claimRegions=goal==='territory'?(claim&&Array.isArray(claim.regions)&&claim.regions.length?claim.regions.slice():shuffled.slice(0,claimCount).map(x=>x.n)):[];
+  const claimRegion=claimRegions[0]||'';
+  W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal,goalLabel:GrandDiplomacy.GOALS[goal].label,claimRegion,claimRegions,cause:cause.id,causeLabel:GrandDiplomacy.CAUSES[cause.id].label,reason:cause.detail,joinedA:[],joinedB:[]});
   cr.expires=W.month; a.rivals[b.name]=Math.max(a.rivals[b.name]||0,45);b.rivals[a.name]=Math.max(b.rivals[a.name]||0,45);
-  ev(W,`⚔️ ${a.name} объявила войну ${b.name}. Основание: ${GrandDiplomacy.CAUSES[cause.id].label}. Причина: ${cause.detail}. Цель войны: ${GrandDiplomacy.GOALS[goal].label}${claimRegion?` («${claimRegion}»)`:''}. Оценка готовности: ${Math.round(warScore)}/100.`);
+  ev(W,`⚔️ ${a.name} объявила войну ${b.name}. Основание: ${GrandDiplomacy.CAUSES[cause.id].label}. Причина: ${cause.detail}. Цель войны: ${GrandDiplomacy.GOALS[goal].label}${claimRegions.length?` (${claimRegions.length} областей: ${claimRegions.slice(0,4).join(', ')}${claimRegions.length>4?'…':''})`:''}. Оценка готовности: ${Math.round(warScore)}/100.`);
  }
 }
 function fight(W,w,a,b,A){
@@ -217,10 +222,11 @@ function peace(W,w,a,b,A){
   }else if(margin>65&&win.power>lose.power*1.45&&Math.random()<(goalHit&&w.goal==='territory'?.42:.28)){lose.annexed=true;lose.owner=win.name;W.owners[lose.name]=win.name;win.pop+=lose.pop;win.gdp+=lose.gdp;ev(W,`🏴 ${win.name} полностью аннексировала ${lose.name}`)}
   else{W.owners[lose.name+':occupied']=win.name;
    const seedsL=(window.WORLD_SEEDS&&WORLD_SEEDS[lose.name])||[],freeL=seedsL.filter(x=>!W.regionOwners[lose.name+'|'+x.n]);
-   const takeR=(goalHit&&w.goal==='territory'&&w.claimRegion)?w.claimRegion:(freeL.length?freeL[Math.floor(Math.random()*freeL.length)].n:'');
-   if(takeR)W.regionOwners[lose.name+'|'+takeR]=win.name;
-   if(goalHit&&w.goal==='territory'&&w.claimRegion){lose.lostRegions=(lose.lostRegions||[]);lose.lostRegions.push({region:w.claimRegion,to:win.name,month:W.month});ev(W,`🗺 ${win.name} захватила область «${w.claimRegion}» страны ${lose.name}`)}
-   else ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки${takeR?` («${takeR}» перешла к ${win.name})`:''}`)}
+   const requested=(goalHit&&w.goal==='territory'&&Array.isArray(w.claimRegions)&&w.claimRegions.length)?w.claimRegions:(goalHit&&w.goal==='territory'&&w.claimRegion?[w.claimRegion]:[]);
+   const takenRegions=requested.length?requested.filter(n=>seedsL.some(x=>x.n===n)&&!W.regionOwners[lose.name+'|'+n]):(freeL.length?[freeL[Math.floor(Math.random()*freeL.length)].n]:[]);
+   takenRegions.forEach(region=>{W.regionOwners[lose.name+'|'+region]=win.name});
+   if(takenRegions.length){lose.lostRegions=lose.lostRegions||[];takenRegions.forEach(region=>lose.lostRegions.push({region,to:win.name,month:W.month}));ev(W,`🗺 ${win.name} получила ${takenRegions.length} областей страны ${lose.name}: ${takenRegions.slice(0,6).join(', ')}${takenRegions.length>6?'…':''}`)}
+   else ev(W,`🗺 ${win.name} навязала ${lose.name} территориальные уступки`)}
  }else ev(W,`🕊 ${a.name} и ${b.name} подписали мир без решающей победы`);
  try{GrandDiplomacy.goalOutcome(W,a,win===a&&margin>18?(w.goal==='tribute'?.6:1)+margin/150:-1)}catch(e){}
  if(w.goal==='regime'&&win===a&&margin<30)ev(W,`🏛 ${a.name} не смогла сменить власть в ${b.name}: перевес слишком мал`);

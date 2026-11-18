@@ -82,13 +82,21 @@ function tick(S,c,atWar){
   const tries=worst<CRIT?2:1;
   for(let n=0;n<tries;n++){
     const funds=canSpend(c),mid=costOf(c,'fuel',atWar);
-    const ok=i=>i===0||(rs.st[KEYS[i-1]]<92&&funds>=costOf(c,KEYS[i-1],atWar));
+    const ok=i=>i===0||(rs.st[KEYS[i-1]]<(atWar?78:LOW+15)&&funds>=costOf(c,KEYS[i-1],atWar));
     const x=feats(rs,c,atWar,funds/Math.max(1,mid));
     let k;
     if(window.NN&&!NN.off){
       const b=brain(S),net=NN.get(b,'nn',NIN,NH,NOUT,[.05,0,0,0,0]),q=NN.predict(net,x).slice();
       const cold=Math.max(.3,1-b.steps/6000);                                  // стартовая подсказка: когда запас мал — покупать; постепенно уступает опыту
-      KEYS.forEach((kk,i)=>{q[i+1]+=C((LOW+8-rs.st[kk])/(LOW+8),0,1)*.9*cold});
+      KEYS.forEach((kk,i)=>{
+        const shortage=C((LOW+8-rs.st[kk])/(LOW+8),0,1);
+        // Страны без собственных запасов должны надёжно получать приоритет на рынке.
+        // Это не отменяет решение сети, но не позволяет богатой недрами стране
+        // систематически вытеснять бедную из-за случайного исследования действий.
+        const depleted=kk==='food'?false:!(rs.left[kk]>0&&rs.tier[kk]>0);
+        const ownSupply=kk==='food'?rs.tier.food>0:(rs.left[kk]>0&&rs.tier[kk]>0);
+        q[i+1]+=shortage*.9*cold+(depleted?.48:ownSupply?-.12:0);
+      });
       k=NN.choose(q,ok,eps(b));
       if(k<0)k=0;
       // учимся на итоге прошлого решения этой страны

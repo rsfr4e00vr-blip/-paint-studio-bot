@@ -4476,7 +4476,7 @@ function mmRegionAt(x,y){const g=mmGeom(x,y);if(!g)return null;const {C,r}=g;
  const owner=regionOwner(C,r),mine=isMe(owner),war=(S.wars||[]).find(w=>w.n===C.name&&!w.won),occupied=!!(war&&(war.occ||[]).includes(r.id))||!!taken()[r.id];
  return{id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),x:Number.isFinite(r.cx)?r.cx:x,y:Number.isFinite(r.cy)?r.cy:y,country:C.name,mine,occupied,enemyWar:!!war&&!mine&&!occupied}}
 window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
- env(){return{GEO,WMAP,S:()=>S,save,toast,regionAt:mmRegionAt,
+ env(){return{GEO,WMAP,S:()=>S,save,toast,play,pause,regionAt:mmRegionAt,
   wars:()=>(S.wars||[]).filter(w=>!w.won),
   homeAnchor(){let C=null;try{C=GEO.c[wi(myName()).iso]}catch(e){}let r=C&&(C.regs||[]).find(q=>Number.isFinite(q.cx));
    if(!r){for(const c of Object.values(GEO.c)){const q=(c.regs||[]).find(z=>Number.isFinite(z.cx)&&isMe(regionOwner(c,z)));if(q){C=c;r=q;break}}}

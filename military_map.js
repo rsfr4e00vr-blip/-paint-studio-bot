@@ -333,7 +333,7 @@ function aiThink(){
     MM.spawnT[w.n]=(paid?22:30)/ind}
   }
  });
- const mine=MM.units.filter(u=>u.own===ME);if(!mine.length)return;
+ const mine=MM.units.filter(u=>u.own===ME);
  wars.forEach(w=>{try{commander(w,mine)}catch(err){console.warn('MM commander',err)}});
 }
 
@@ -388,7 +388,7 @@ function commander(w,mine){
  my.forEach(u=>{if(SPEC[u.sub].static)return;if(u.hp<30)u.heal=true;else if(u.hp>=75)u.heal=false;
   if(!u.heal)return;const k=kindOf(u);
   if(k==='air'){if(u.mission!=='rtb')orderRtb(u);return}
-  const b=nearestBase(u);if(b&&MM.t-(u.fight||-99)>1)go(u,k==='sea'?b.px:b.x,k==='sea'?b.py:b.y)});
+  const b=nearestBase(u);if(b&&(u.hp<=30||MM.t-(u.fight||-99)>1))go(u,k==='sea'?b.px:b.x,k==='sea'?b.py:b.y)});
  /* --- строительство обороны: укрепрайоны на угрожаемых направлениях и ПВО у баз (за счёт казны и ресурсов страны) --- */
  const nat=env.enemyNation&&env.enemyNation(w.n),pw0=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
  const forts=my.filter(u=>u.sub==='fort'),aas=my.filter(u=>u.sub==='aabat'),anchors=bases.length?bases:[home];
@@ -401,7 +401,7 @@ function commander(w,mine){
    if(bb){want='aabat';at=[bb.x+rnd(-5,5),bb.y+rnd(-5,5)]}}
   if(!want&&forts.length<Math.min(6,2+Math.floor(pw0/45))&&(thr.length||forts.length<1)){
    if(thr.length){const t0=thr[0],an=anchors.slice().sort((p,q)=>dist([p.x,p.y],[t0.x,t0.y])-dist([q.x,q.y],[t0.x,t0.y]))[0];
-    const dx=t0.x-an.x,dy=t0.y-an.y,d=Math.hypot(dx,dy)||1,off=Math.min(26,d*.45);at=[an.x+dx/d*off,an.y+dy/d*off]}
+    const dx=t0.x-an.x,dy=t0.y-an.y,d=Math.hypot(dx,dy)||1,off=Math.min(38,d*.72);at=[an.x+dx/d*off,an.y+dy/d*off]}
    else at=[home.x+rnd(-8,8),home.y+rnd(-8,8)];
    if(!forts.some(f=>dist([f.x,f.y],at)<20))want='fort'}
   if(want&&at){const q=snap('land',at[0],at[1],8);
@@ -670,6 +670,8 @@ function hud(){
  let p=document.getElementById('mm-panel');
  if(!p){p=document.createElement('div');p.id='mm-panel';p.className='mm-panel';p.hidden=true;
   ['pointerdown','pointerup','click','touchstart','wheel'].forEach(t=>p.addEventListener(t,ev=>ev.stopPropagation()));document.body.appendChild(p)}
+ let tc=box.querySelector('.mm-time-controls');
+ if(!tc){tc=document.createElement('div');tc.className='mm-time-controls';tc.innerHTML='<button type="button" data-mm-time="pause" aria-label="Пауза">Ⅱ</button><button type="button" data-mm-time="play" aria-label="Старт">▶</button>';tc.addEventListener('pointerdown',ev=>ev.stopPropagation());tc.addEventListener('click',ev=>{ev.stopPropagation();const a=ev.target.closest('[data-mm-time]');if(!a)return;const fn=a.dataset.mmTime==='pause'?'pause':'play';if(env&&typeof env[fn]==='function')env[fn]();MM.speed=a.dataset.mmTime==='pause'?0:1;MM.dirty=true;paintHud(true)});box.appendChild(tc)}
  return{p,fab:f}}
 const bar=(v,m,c)=>`<span class="mm-b"><i style="width:${clampN(v/m*100,0,100)}%;background:${c}"></i></span>`;
 const MISS={idle:'на месте',move:'в движении',patrol:'патрулирует',bomb:'идёт на цель',rtb:'возвращается'};
@@ -702,13 +704,15 @@ function restore(o){
 function persist(){if(!env||!MM.dirty)return;MM.dirty=false;try{const st=env.S();st.milmap=snapshot();env.save()}catch(e){}}
 
 /* ---------- запуск ---------- */
-let raf=0,last=0,acc=0,saveT=0;
+let raf=0,last=0,lastPaint=0,acc=0,saveT=0;
 function frame(ts){
  raf=requestAnimationFrame(frame);
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(document.hidden||!MM.ready)return;
  const sd=dt*MM.speed;
  if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{aiThink()}catch(e){console.warn('MM ai',e)}}}
- paint();paintHud(false);
+ // На мобильных устройствах не перерисовываем тяжёлый SVG чаще 30 раз/с.
+ // Шаг симуляции и таймер сохранения продолжают работать с исходной частотой.
+ if(ts-lastPaint>=33){lastPaint=ts;paint();paintHud(false)}
  saveT+=dt;if(saveT>4){saveT=0;persist()}}
 function attach(){
  const G=window.NG&&NG.__mm;if(!G)return;
