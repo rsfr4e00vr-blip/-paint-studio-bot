@@ -3007,7 +3007,8 @@ function enemyWill(w){
  const ex=loss*.30+front*.22+dur*.18+enc*.10+occ*.10+eco*.10;
  return Math.round(clamp(100-ex*100,0,100));
 }
-function dictOk(w){return !!(w.won||((w.p||0)>=60&&(w.m||0)>=6&&enemyWill(w)<=50))}
+// Военные преимущества сами по себе не завершают войну: условия мира должны быть приняты обеими сторонами.
+function dictOk(w){return false}
 function dictWhy(w){const wl=enemyWill(w);return `Противник ещё не сломлен: воля к войне ${wl}% (нужно ≤ 50%), война идёт ${w.m||0} мес. (нужно ≥ 6) и перевес от 60%. Давите фронтом, окружением, ударами по экономике — одной-двумя атаками враг не сдаётся.`}
 function peaceWith(name){
  const c=rel(name);S.wars=S.wars.filter(x=>x.n!==name);S.war=S.wars.length>0||!!S.martial;
@@ -3111,18 +3112,20 @@ function warTick(){
   }
   warEnemyCiv(w,d);enemyEcoTick(w,c,d);darkTickEnemy(w);enemyStrikes(w,c);branchTick(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(window.PVO){PVO.monthly(c,true);PVO.myMonthly(S);const nn1=aiNationOf(w.n);if(nn1)nn1.aa=c.aa}else if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
   if(w.m%3===0&&supply<30)log(`🚚 Критический кризис снабжения на фронте с ${w.n}: наступление замедлено.`);if(d>0&&w.m%6===0)log(`🪖 ${w.n} проводит мобилизацию, чтобы удержать фронт.`);c.value=clamp(c.value-.8,-100,100);
-  const surOK=(w.m||0)>=6&&enemyWill(w)<=50;if(w.p>=100&&!surOK)w.p=96;
-   if(w.p>=100){w.won=true;w.wm=0;log(`🏆 Победа над государством ${w.n}! Выбери плоды победы во вкладке «Штаб».`);say('Мы победили в войне!','🎉');toast('🏆 Победа над '+w.n+'!');pause();warResultModal('win',w)}
-  else if(surOK&&((w.p>=92&&(w.encirclement||0)>=3)||(w.p>=88&&(w.m||0)>=12&&(w.supply||75)<40)||(w.p>=85&&(w.m||0)>=18&&(w.kills||0)>(c.power||50)*50)||(w.p>=90&&(w.encirclement||0)>=4))){
-   w.p=100;w.won=true;w.wm=0;
-   var reasons=[];if((w.m||0)>=12)reasons.push('затяжная война');if((w.encirclement||0)>=3)reasons.push('окружение');if((w.supply||75)<40)reasons.push('снабжение');if((w.kills||0)>(c.power||50)*50)reasons.push('потери');
-   log('🏳️ '+w.n+' запросил капитуляцию ('+(reasons.join(', ')||'истощение')+').');toast('Противник капитулирует');pause();warResultModal('win',w,{why:reasons.join(', ')||'истощение'})}
-  else if(w.p<=0){
-   const loss=Math.min(S.money,1200);S.money-=loss;
-   ch({approval:-10,stability:-6,legitimacy:-8,threat:-10},false);c.value=clamp(c.value-10,-100,100);c.power=Math.round(c.power*1.1);w.dead=1;
-   log(`🏳 Поражение в войне с ${w.n}: вынужденный мир, контрибуция ${fmt(loss)} млн.`);say('Мы проиграли войну…','😢');toast('🏳 Поражение в войне');pause();const regs0=(S.regions||[]).map(r=>r.name);
-   if(w.def){aiGoalReward(w.n,w.goal==='tribute'?.6:1.2);if(w.goal==='territory')enemyTakesRegion(w);else if(w.goal==='regime'){log(`🏛 ${w.n} добивается смены власти в нашей стране.`);setTimeout(()=>{if(!S.out&&!S.campaignOver)ouster('Враг потребовал смены власти после поражения в войне с '+w.n)},50)}}
-   warResultModal('lose',w,{loss,lost:regs0.filter(n=>!(S.regions||[]).some(r=>r.name===n))});
+  // Даже полный прорыв фронта или окружение не завершают войну автоматически.
+  // Фронт фиксируется у края, а стороны продолжают воевать до принятого предложения мира.
+  if(w.p>=100){
+   w.p=99;
+   if(!w.edgeNotice){w.edgeNotice=1;log(`⚔️ ${w.n}: фронт противника практически рухнул, но война продолжается. Для завершения нужны переговоры и согласие обеих сторон.`);toast('Фронт прорван — предложите мир');}
+  }else if(w.p<=0){
+   w.p=1;
+   if(!w.edgeNotice){w.edgeNotice=1;log(`⚔️ ${w.n}: наши позиции почти полностью потеряны, но война продолжается. Автоматической капитуляции и принудительного мира нет — требуется согласие обеих сторон.`);toast('Критическое положение — доступно предложение мира');}
+  }
+  const surOK=(w.m||0)>=6&&enemyWill(w)<=50;
+  if(surOK&&((w.p>=92&&(w.encirclement||0)>=3)||(w.p>=88&&(w.m||0)>=12&&(w.supply||75)<40)||(w.p>=85&&(w.m||0)>=18&&(w.kills||0)>(c.power||50)*50)||(w.p>=90&&(w.encirclement||0)>=4))&&!w.enemyPeaceRequested){
+   w.enemyPeaceRequested=1;
+   log(`🕊 ${w.n} готова обсуждать прекращение войны после тяжёлых потерь. Война не закончится автоматически — требуется согласованное мирное соглашение.`);
+   toast(`${w.n} готова к переговорам`);
   }
  });
  S.wars=S.wars.filter(w=>!w.dead);try{baRefresh()}catch(e){}
@@ -3615,7 +3618,7 @@ const hccSearch=q=>{CC.query=String(q||'');const term=CC.query.trim().toLocaleLo
 H.ccr=(iso,rid)=>{hcc(iso);CC.info=rid;ccDraw();const el=document.querySelector('#ccm .cc-owner');if(el&&el.scrollIntoView)try{el.scrollIntoView({block:'nearest'})}catch(e){}};H.ccInfo=id=>{CC.info=CC.info===id?null:id;ccDraw()};Object.assign(H,{chooser:hchooser,chf:hchf,startAs:hstartAs,wz:hwz,cc:hcc,pick:hpick,ccClose:hccClose,take:htake,auto:hauto,confirm:hconfirm,ccSearch:hccSearch});
 H.planMap=n=>{wmLoad(ok=>{if(!ok||!regsOf(n))return toast('Карта ещё не загрузилась — выберите области из списка ниже');hplan(n)})};
 H.planOp=op=>{if(!CC.plan||!CC.war)return;H.rp(CC.war,op);CC.sel=planSel(CC.war);ccDraw()};
-H.dictate=(n,m,rid)=>{const w=S.wars.find(x=>x.n===n);if(!w)return;if(!dictOk(w))return toast(dictWhy(w));if(m==='regime'&&w.goal!=='regime')return toast('Для смены власти нужно было выбрать цель войны «Смена власти» при начале кризиса');if(m==='region'&&!w.won&&w.p<(w.goal==='territory'?60:70))return toast('Отторгнуть область можно при перевесе от '+(w.goal==='territory'?60:70)+'%');if(m==='annex'&&!w.won)return toast('Полный захват — только при полной победе (100%)');if(m==='region'){const Q=quota(n,w);if(!Q.free)return toast('В этой стране не осталось свободных регионов');if(!rid&&regsOf(n))return H.pick(n);const ids=Array.isArray(rid)?rid.slice(0,Q.q):Array.from({length:Q.q},()=>null),pop0=S.pop;ids.forEach((id,k)=>spoils(n,'region',id,k<ids.length-1));S.wars=S.wars.filter(x=>x.n!==n);S.war=S.wars.length>0||!!S.martial;log(`🗺 Итог войны с ${n}: отнято областей — ${ids.length} (фронт ${Math.round(Q.p)}%), население +${fmt(S.pop-pop0)}.`);save();render();return}spoils(n,m,rid);save();render()};
+H.dictate=(n,m,rid)=>{const w=S.wars.find(x=>x.n===n);if(!w)return;return toast('Условия победителя нельзя навязать автоматически. Предложите мир и дождитесь согласия противника — только после этого война завершится.');if(m==='regime'&&w.goal!=='regime')return toast('Для смены власти нужно было выбрать цель войны «Смена власти» при начале кризиса');if(m==='region'&&!w.won&&w.p<(w.goal==='territory'?60:70))return toast('Отторгнуть область можно при перевесе от '+(w.goal==='territory'?60:70)+'%');if(m==='annex'&&!w.won)return toast('Полный захват — только при полной победе (100%)');if(m==='region'){const Q=quota(n,w);if(!Q.free)return toast('В этой стране не осталось свободных регионов');if(!rid&&regsOf(n))return H.pick(n);const ids=Array.isArray(rid)?rid.slice(0,Q.q):Array.from({length:Q.q},()=>null),pop0=S.pop;ids.forEach((id,k)=>spoils(n,'region',id,k<ids.length-1));S.wars=S.wars.filter(x=>x.n!==n);S.war=S.wars.length>0||!!S.martial;log(`🗺 Итог войны с ${n}: отнято областей — ${ids.length} (фронт ${Math.round(Q.p)}%), население +${fmt(S.pop-pop0)}.`);save();render();return}spoils(n,m,rid);save();render()};
 /* ================= НОВЫЕ СИСТЕМЫ: ПОЛИТИКА, РАЗВЕДКА, МИРОВЫЕ КРИЗИСЫ ================= */
 function politicalSystemTick(){
  const P=S.polSys||(S.polSys={protest:12,lastUnrest:-99,lastCampaign:-99,lastCabinet:-99});
