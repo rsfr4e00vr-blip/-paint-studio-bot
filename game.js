@@ -1038,12 +1038,12 @@ function occupyTick(w){
 }
 /* очередь анимаций: каждый удар врага показывается по очереди (не больше 4 за месяц) */
 const FXQ=[];let fxBusy=false;
-function fxPush(o){/* окна атак отключены */}
+function fxPush(o){if(!o)return;FXQ.push(o);if(FXQ.length>6)FXQ.shift();fxNext()}
 function fxNext(){
  if(fxBusy||!FXQ.length)return;
- if(document.getElementById('strikeov')){setTimeout(fxNext,600);return}
+ if(WMAP&&WMAP.node&&WMAP.node.querySelector('#novaria-strike-fx')){setTimeout(fxNext,600);return}
  fxBusy=true;try{strikeScene(FXQ.shift())}catch(e){}
- setTimeout(function chk(){if(document.getElementById('strikeov'))setTimeout(chk,400);else{fxBusy=false;fxNext()}},1500);
+ setTimeout(function chk(){if(WMAP&&WMAP.node&&WMAP.node.querySelector('#novaria-strike-fx'))setTimeout(chk,400);else{fxBusy=false;fxNext()}},1500);
 }
 function warNews(w,ico,t){if(window.__salv||!w)return;w.news=w.news||[];w.news.unshift({m:ico,t,d:`${months[S.month].slice(0,3)}, год ${S.year}`});w.news.length=Math.min(w.news.length,12)}
 /* Удар по инфраструктуре: новость в карточке войны + отключение области на 2–4 месяца */
@@ -1512,22 +1512,20 @@ function launchSites(els,T,bb){
 }
 function runScene(o){
 
- const old=document.getElementById('strikeov');if(old){if(old._stop)old._stop();old.remove()}
- const ov=document.createElement('div');ov.id='strikeov';
- ov.innerHTML='<div class="strikebox"><div class="striketitle"></div><div class="strikesub"></div><div class="strikemap"></div></div>';
- ov.querySelector('.striketitle').textContent=o.title||'';ov.querySelector('.strikesub').textContent=o.sub||'';
- const host=ov.querySelector('.strikemap'),svg=WMAP.node.cloneNode(true);
- svg.removeAttribute('style');svg.setAttribute('preserveAspectRatio','xMidYMid meet');
- const old2=svg.querySelector('#fxl');if(old2)old2.remove();
- host.appendChild(svg);document.body.appendChild(ov);
- const hostW=host.getBoundingClientRect().width||340;
+ /* Сцена удара рисуется поверх ЖИВОЙ мировой карты, без отдельного окна и копии карты. */
+ const svg=WMAP&&WMAP.node;if(!svg)return;
+ const old=svg.querySelector('#novaria-strike-fx');if(old){if(old._stop)old._stop();else old.remove();}
+ const vb=svg.viewBox&&svg.viewBox.baseVal,rect=svg.getBoundingClientRect();
+ if(!vb||!vb.width||!rect.width)return;
+ const hostW=rect.width;
+ const L=document.createElementNS(SVGNS,'g');L.id='novaria-strike-fx';L.setAttribute('pointer-events','none');L.setAttribute('class','novaria-strike-fx');svg.appendChild(L);
  const meIso=wi(S.me||'').iso,enIso=wi(o.enemy).iso;
  const bb=el=>{const g=geoOf(el);if(g)return{x:g.cx,y:g.cy,w:g.w,h:g.h};try{const b=el.getBBox();return{x:b.x+b.width/2,y:b.y+b.height/2,w:b.width,h:b.height}}catch(e){return null}};
  const dOf=el=>{const g=geoOf(el);return g?g.d:(el.getAttribute('d')||'')};
  const all=[...svg.querySelectorAll('[data-r]')];
  const shotsIn=(o.shots&&o.shots.length)?o.shots:[{regId:o.regId,down:o.down}];const shots=[];shotsIn.forEach(s=>{let el=s.regId?all.find(e=>e.getAttribute('data-r')===s.regId):null;if(!el)el=svg.querySelector('[data-o="'+enIso+'"]');const c=el&&bb(el);if(c)shots.push({el,c,down:!!s.down})});let tEl=shots.length?shots[0].el:null;
  if(!tEl)tEl=svg.querySelector('[data-o="'+enIso+'"]');
- if(!shots.length){ov.remove();return}const T={x:shots.reduce((a,s)=>a+s.c.x,0)/shots.length,y:shots.reduce((a,s)=>a+s.c.y,0)/shots.length,w:shots[0].c.w,h:shots[0].c.h};
+ if(!shots.length){L.remove();return}const T={x:shots.reduce((a,s)=>a+s.c.x,0)/shots.length,y:shots.reduce((a,s)=>a+s.c.y,0)/shots.length,w:shots[0].c.w,h:shots[0].c.h};
  const fromIso=o.rev?enIso:meIso;   // откуда летит: при нашем ударе — наша страна, при ударе врага — его
  const srcEls=all.filter(e=>e.getAttribute('data-c')===fromIso);
  const outl=svg.querySelector('[data-o="'+fromIso+'"]');
@@ -1540,13 +1538,10 @@ function runScene(o){
  const LPt=i=>LP.pts.length?LP.pts[(i*5+Math.floor(Math.random()*4))%LP.pts.length]:O;
  const LPw=()=>LP.wide.length?LP.wide[Math.floor(Math.random()*LP.wide.length)]:O;
 
- const xs=[St.x,...shots.map(s=>s.c.x)],ys=[St.y,...shots.map(s=>s.c.y)];const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
- let w=Math.max(150,(maxx-minx)*1.5+70),h=Math.max(93,(maxy-miny)*1.5+45);
- if(h/w>.62)w=h/.62;else h=w*.62;
- const cx=(minx+maxx)/2,cy=(miny+maxy)/2;
- svg.setAttribute('viewBox',`${cx-w/2} ${cy-h/2} ${w} ${h}`);
- const px=n=>n*w/hostW;
- const L=document.createElementNS(SVGNS,'g');L.id='fxl';svg.appendChild(L);
+ const xs=[St.x,...shots.map(s=>s.c.x)],ys=[St.y,...shots.map(s=>s.c.y)];const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);const w=vb.width,h=vb.height;
+ /* Размеры эффектов зависят от текущего приближения: вдали они компактные, вблизи читаемые. */
+ const zoom=Math.max(1,1000/vb.width),zoomScale=Math.max(.22,Math.min(1,(zoom-1)*.55+.22));
+ const px=n=>n*vb.width/hostW*zoomScale;
  if(LP.el&&(()=>{const b=bb(LP.el);return !b||b.w*b.h<w*h*.3})()){const hl=document.createElementNS(SVGNS,'path');hl.setAttribute('d',LP.g?LP.g.d:(LP.el.getAttribute('d')||''));hl.setAttribute('fill-rule','evenodd');hl.setAttribute('fill',o.rev?'#ff5c66':'#d6b25e');hl.setAttribute('opacity','.32');hl.setAttribute('pointer-events','none');L.appendChild(hl)}
  const mk=(tag,at,par)=>{const e=document.createElementNS(SVGNS,tag);for(const k in at)e.setAttribute(k,at[k]);(par||L).appendChild(e);return e};
  const bez=(a,c,b,t)=>({x:(1-t)*(1-t)*a.x+2*(1-t)*t*c.x+t*t*b.x,y:(1-t)*(1-t)*a.y+2*(1-t)*t*c.y+t*t*b.y});
@@ -1641,10 +1636,10 @@ function runScene(o){
  const total=Math.max(...acts.slice(1).map(a=>a.t0+a.dur))+.5;acts[0].dur=total;
  const frame=()=>{if(stopped)return;const now=(performance.now()-t00)/1000;
   acts.forEach(a=>{if(a.fin)return;const p=(now-a.t0)/a.dur;if(p<0)return;if(!a.st)a.st=a.init();if(p>=1){a.upd(a.st,1);a.end(a.st);a.fin=true}else a.upd(a.st,p)});
-  if(now<total)raf=requestAnimationFrame(frame);else{ov.classList.add('out');setTimeout(()=>ov.remove(),400)}};
- ov._stop=()=>{stopped=true;cancelAnimationFrame(raf)};
+  if(now<total)raf=requestAnimationFrame(frame);else{stopped=true;L.remove()}};
+ const stop=()=>{stopped=true;cancelAnimationFrame(raf);if(L.isConnected)L.remove()};
+ L._stop=stop;
  raf=requestAnimationFrame(frame);
- ov.onclick=()=>{ov._stop();ov.classList.add('out');setTimeout(()=>ov.remove(),300)};
 }
 window.armyAttack=n=>{
  const w=S.wars.find(x=>x.n===n)||tgtWar();if(!w)return;
@@ -4490,10 +4485,23 @@ window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
   bombRegion(ra){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.p=Math.min(100,(Number(w.p)||50)+1.2);w.dmg=w.dmg||{};const d=w.dmg[ra.name]=w.dmg[ra.name]||{infra:0,civ:0,mil:0};d.infra+=1;d.mil+=1;WMAP.usig=''},
   blockadeTarget(x,y){let best=null,bd=28*28;for(const C of Object.values(GEO.c)){const w=(S.wars||[]).find(z=>z.n===C.name&&!z.won);if(!w)continue;for(const r of C.regs||[]){if(!Number.isFinite(r.cx)||!Number.isFinite(r.cy))continue;const d=(r.cx-x)**2+(r.cy-y)**2;if(d<bd){bd=d;best={id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),country:C.name,x:r.cx,y:r.cy,enemyWar:true}}}}return best},
   blockadeRegion(ra,u){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.blockade=w.blockade||{};w.blockade[ra.id]=Math.min(100,(Number(w.blockade[ra.id])||0)+1);w.blockadePower=Math.min(100,(Number(w.blockadePower)||0)+.35);w.blockadeLast=ra.name;w.p=Math.min(100,(Number(w.p)||50)+.12);WMAP.usig=''},
-  enemyRaid(ra){S.stability=clamp(S.stability-1.5);S.approval=clamp(S.approval-1);log('⚠️ Противник занял область «'+ra.name+'».');save()},
+  enemyRaid(ra){
+   /* Отбивание области снимает её из временной оккупации игрока — иначе она навсегда оставалась бы занятой. */
+   const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);
+   if(w){w.occ=(w.occ||[]).filter(id=>String(id)!==String(ra.id));w.p=Math.max(0,(Number(w.p)||0)-1.2)}
+   if(S.taken&&S.taken[ra.id])delete S.taken[ra.id];
+   S.stability=clamp(S.stability-1.5);S.approval=clamp(S.approval-1);
+   WMAP.usig='';try{updateWorld()}catch(e){}log('⚠️ Противник отбил область «'+ra.name+'» и вернул контроль.');save()
+  },
   enemyNation(name){const W=S.aiWorld;return W&&Array.isArray(W.nations)?(W.nations.find(x=>x.name===name)||null):null},
   countryPvoMarkers(){const out=[];try{(WORLD.list||[]).forEach(n=>{if(!n||n.name===myName())return;const C=GEO.c[n.iso];const rs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy)).sort((a,b)=>(b.s||0)-(a.s||0));if(!rs.length)return;const count=Math.max(1,Math.min(3,1+Math.floor((Number(n.power)||20)/65)));for(let i=0;i<count;i++){const r=rs[Math.min(rs.length-1,Math.floor(i*rs.length/count))];out.push({x:r.cx,y:r.cy,name:n.name})}})}catch(e){}return out},
-  enemySpawn(name){let C=null;try{C=GEO.c[wi(name).iso]}catch(e){}const rs=C&&(C.regs||[]).filter(q=>Number.isFinite(q.cx));if(!rs||!rs.length)return null;const r=rs[Math.floor(Math.random()*rs.length)];return{x:r.cx,y:r.cy}},
+  enemySpawn(name){
+   let C=null;try{C=GEO.c[wi(name).iso]}catch(e){}
+   const rs=C&&(C.regs||[]).filter(q=>Number.isFinite(q.cx)&&Number.isFinite(q.cy));if(!rs||!rs.length)return null;
+   let inv=[];try{const U=window.MilMap&&MilMap.core&&MilMap.core.MM.units||[];inv=U.filter(u=>u.own==='me'&&u.sub!=='fighter'&&u.sub!=='bomber'&&mmRegionAt(u.x,u.y)?.country===name)}catch(e){}
+   let r;if(inv.length){const ranked=rs.map(q=>({q,d:Math.min(...inv.map(u=>(u.x-q.cx)**2+(u.y-q.cy)**2))})).sort((a,b)=>a.d-b.d);r=ranked[Math.floor(Math.random()*Math.min(3,ranked.length))].q}
+   else r=rs[Math.floor(Math.random()*rs.length)];return{x:r.cx,y:r.cy}
+  },
   lostUnit(u){if(u.pid&&Array.isArray(S.militaryUnits))S.militaryUnits=S.militaryUnits.filter(x=>x.id!==u.pid)}}}};
 
 try{ensure()}catch(e){console.error('[Novaria] Ошибка подготовки состояния:',e)}

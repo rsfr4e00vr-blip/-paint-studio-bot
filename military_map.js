@@ -286,10 +286,11 @@ function capture(dt){
    u.cap+=dd;
    if(u.cap>=7){u.cap=0;u.capId=null;env.takeRegion(ra);addBase(ra);say('🚩 Захвачена область: '+ra.name,true);addFx(u.x,u.y,'flag',1)}
   }else{
-   if(!ra.mine||contested)return;
+   /* Враг может отбить не только исходно нашу область, но и область, временно занятую нами в этой войне. */
+   if(!(ra.mine||ra.occupied)||contested)return;
    if(u.capId!==ra.id){u.capId=ra.id;u.cap=0}
    u.cap+=dd;
-   if(u.cap>=14){u.cap=0;u.capId=null;if(env.enemyRaid)env.enemyRaid(ra);say('⚠️ Противник занял область: '+ra.name,true)}}
+   if(u.cap>=14){u.cap=0;u.capId=null;if(env.enemyRaid)env.enemyRaid(ra);MM.bases=MM.bases.filter(b=>b.id!==ra.id);addFx(u.x,u.y,'flag',1);say('⚠️ Противник отбил область: '+ra.name,true)}}
  })}
 function addBase(ra){if(MM.bases.some(b=>b.id===ra.id))return;const w=snap('sea',ra.x,ra.y,120,true),p=w>=0?cellPt(w):[ra.x,ra.y];MM.bases.push({id:ra.id,name:ra.name,x:ra.x,y:ra.y,px:p[0],py:p[1],own:ME})}
 
@@ -416,6 +417,7 @@ function commander(w,mine){
   const defending=invaders.some(i=>kindOf(i)==='land');
   let tgt=null;
   if(defending)tgt=invaders.filter(i=>kindOf(i)==='land').sort((p,q)=>dist([p.x,p.y],[home.x,home.y])-dist([q.x,q.y],[home.x,home.y]))[0];
+  else if(invaders.some(i=>kindOf(i)==='land')){tgt=invaders.filter(i=>kindOf(i)==='land').sort((p,q)=>dist([p.x,p.y],[home.x,home.y])-dist([q.x,q.y],[home.x,home.y]))[0]}
   else if(st.tact==='attack'){tgt=nearest({x:c[0],y:c[1]},mL);tgt=tgt?tgt.m:null;
    if(!tgt){const mb=MM.bases.filter(b=>b.own===ME).sort((p,q)=>dist(c,[p.x,p.y])-dist(c,[q.x,q.y]))[0];if(mb)tgt={x:mb.x,y:mb.y}}}
   const order=L.slice().sort((p,q)=>tgt?dist([p.x,p.y],[tgt.x,tgt.y])-dist([q.x,q.y],[tgt.x,tgt.y]):0);
@@ -578,16 +580,16 @@ function shotSvg(f,a,z){
  }return''}
 function paint(){
  const svg=MM.svg;if(!svg||!svg.isConnected)return;ensureLayer(svg);
- const r=svg.getBoundingClientRect();if(!r.width)return;const vb=svg.viewBox.baseVal,up=vb.width/r.width;MM.vis={x:vb.x,y:vb.y,w:vb.width,h:vb.height};
+ const r=svg.getBoundingClientRect();if(!r.width)return;const vb=svg.viewBox.baseVal,up=vb.width/r.width,zoom=Math.max(1,GW/vb.width),zoomAlpha=clampN((zoom-1.04)/.58,0,1);MM.vis={x:vb.x,y:vb.y,w:vb.width,h:vb.height};
  /* Статические маркеры ПВО стран мира: один–три на страну, не участвуют в физике подразделений. */
- const pvos=MM.pvoMarkers||[];const pSig=pvos.length+'|'+(MM.pvoSig||'')+'|'+up.toFixed(2);if(L.pvosig!==pSig){L.pvosig=pSig;const k=up*9/10;L.pvo.innerHTML=pvos.map(p=>`<g transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) scale(${k.toFixed(4)})" opacity=".92" pointer-events="none"><path d="M0 -8L7 -5V1Q6 6 0 9Q-6 6-7 1V-5Z" fill="#172d3d" stroke="#b8e1ff" stroke-width="1.4"/><path d="M-3 0H3M0 -3V3" stroke="#b8e1ff" stroke-width="1.5"/><title>ПВО: ${String(p.name||'').replace(/[&<>"]/g,'')}</title></g>`).join('')}
+ const pvos=MM.pvoMarkers||[];const pSig=pvos.length+'|'+(MM.pvoSig||'')+'|'+up.toFixed(2);if(L.pvosig!==pSig){L.pvosig=pSig;const k=up*9/10;L.pvo.innerHTML=pvos.map(p=>`<g transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) scale(${k.toFixed(4)})" opacity="${(.92*zoomAlpha).toFixed(2)}" pointer-events="none"><path d="M0 -8L7 -5V1Q6 6 0 9Q-6 6-7 1V-5Z" fill="#172d3d" stroke="#b8e1ff" stroke-width="1.4"/><path d="M-3 0H3M0 -3V3" stroke="#b8e1ff" stroke-width="1.5"/><title>ПВО: ${String(p.name||'').replace(/[&<>"]/g,'')}</title></g>`).join('')}
  /* базы */
- const sig=MM.bases.map(b=>b.id).join(',')+'|'+up.toFixed(3);
- if(L.bsig!==sig){L.bsig=sig;const k=up*13/10;L.bases.innerHTML=MM.bases.map(b=>{const c=(b.own&&b.own!==ME)?'#ff8a8a':'#f5d889';return `<g transform="translate(${b.x} ${b.y}) scale(${k})"><path d="M0 -9L8 6H-8Z" fill="#12233a" stroke="${c}" stroke-width="1.4"/><path d="M0 -3v6M-3 1h6" stroke="${c}" stroke-width="1.2"/></g>`}).join('')}
+ const sig=MM.bases.map(b=>b.id).join(',')+'|'+up.toFixed(3)+'|'+zoomAlpha.toFixed(2);
+ if(L.bsig!==sig){L.bsig=sig;const k=up*13/10;L.bases.innerHTML=MM.bases.map(b=>{const c=(b.own&&b.own!==ME)?'#ff8a8a':'#f5d889';return `<g transform="translate(${b.x} ${b.y}) scale(${k})" opacity="${zoomAlpha.toFixed(2)}"><path d="M0 -9L8 6H-8Z" fill="#12233a" stroke="${c}" stroke-width="1.4"/><path d="M0 -3v6M-3 1h6" stroke="${c}" stroke-width="1.2"/></g>`}).join('')}
  /* юниты */
  const seen={};
  /* масштаб значков зависит от зума: на общем виде мелкие, при приближении крупнее */
- const zoom=Math.max(1,(GW/vb.width)),zf=clampN(.36+.2*Math.log2(zoom),.36,1.05);MM.zf=zf;
+ const zf=clampN(.30+.22*Math.log2(zoom),.30,1.0);MM.zf=zf;
  /* группировка: части, слипающиеся на экране, сворачиваются в один значок со счётчиком */
  const all=MM.units.concat(MM.remoteUnits||[]),lead={},cl={};
  const thr=26*zf;
@@ -600,7 +602,8 @@ function paint(){
  all.forEach(u=>{seen[u.id]=1;const S=SPEC[u.sub];let e=L.els[u.id];
   if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#f5d889" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
   const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
-  e.g.setAttribute('display',isLead?'':'none');u.hid=!isLead;
+  const showAtZoom=zoomAlpha>.035||MM.sel===u.id;
+  e.g.setAttribute('display',isLead&&showAtZoom?'':'none');u.hid=!(isLead&&showAtZoom);
   if(isLead&&grp.length>1){e.cnt.setAttribute('display','');e.cn.textContent=grp.length}else e.cnt.setAttribute('display','none');
   if(!isLead)return;
   const k=up*S.px/24*zf;
