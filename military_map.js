@@ -664,6 +664,9 @@ function hud(){
  let f=box.querySelector('.mm-fab');
  if(!f){f=document.createElement('button');f.className='mm-fab';f.textContent='🪖 Войска';f.setAttribute('onclick','H.mmToggle()');
   ['pointerdown','pointerup','click','touchstart'].forEach(t=>f.addEventListener(t,ev=>ev.stopPropagation()));box.appendChild(f)}
+ let af=box.querySelector('.mm-ars-fab');
+ if(!af){af=document.createElement('button');af.className='mm-fab mm-ars-fab';af.textContent='💣 Арсенал';af.setAttribute('onclick','H.mmArsenal()');
+  ['pointerdown','pointerup','click','touchstart'].forEach(t=>af.addEventListener(t,ev=>ev.stopPropagation()));box.appendChild(af)}
  let p=document.getElementById('mm-panel');
  if(!p){p=document.createElement('div');p.id='mm-panel';p.className='mm-panel';p.hidden=true;
   ['pointerdown','pointerup','click','touchstart','wheel'].forEach(t=>p.addEventListener(t,ev=>ev.stopPropagation()));document.body.appendChild(p)}

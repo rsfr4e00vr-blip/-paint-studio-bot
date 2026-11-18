@@ -16,3 +16,11 @@
 .mm-panel summary{cursor:pointer;padding:6px 0;color:#f0e2b0}
 .mm-log{margin-top:6px;font-size:11px;color:#9fb2c8}.mm-log div{padding:1px 0}
 @media(min-width:700px){.mm-panel{left:auto;right:12px;bottom:12px;width:380px;border-radius:14px;border:1px solid #6b5a2a}}
+
+/* Кнопка арсенала рядом с панелью войск на мобильной карте */
+.mm-ars-fab{left:clamp(150px,32vw,240px);bottom:8px;border-color:#b78d39!important;color:#ffe5a3!important;background:#172235f2!important}
+.mm-ars-panel{position:fixed;left:8px;right:8px;bottom:calc(58px + env(safe-area-inset-bottom));z-index:100001;max-height:min(68vh,680px);overflow:auto;background:#0d1826f7;border:1px solid #b78d39;border-radius:14px;padding:10px;color:#eef3fa;box-shadow:0 10px 30px #000b;font:13px/1.4 system-ui,sans-serif}
+.mm-ars-head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:-10px;background:#0d1826;padding:2px 0 8px;z-index:2}
+.mm-ars-head b{color:#f5d58a;font-size:16px}.mm-ars-head button{background:#24364a;color:#fff;border:1px solid #53677b;border-radius:8px;min-width:36px;min-height:34px}
+.mm-ars-panel .panel{margin:0 0 8px}.mm-ars-panel .cards{grid-template-columns:1fr!important}.mm-ars-panel .armbtns{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:390px){.mm-ars-fab{left:150px}.mm-ars-panel{left:5px;right:5px}}
