@@ -145,7 +145,7 @@ function diplomacy(W,A){
   else if(a.stability<32){a.intent='Внутренняя стабилизация';a.growth=Math.max(.001,a.growth*.85)}
   else if(a.treasury>a.gdp*.03){a.intent='Экономическое развитие'}
   // Дипломатические связи теперь формируются по выгоде, а не случайным выбором цели.
-  if(a.allies.length<4&&Math.random()<.004){const opts=A.filter(b=>b!==a&&!b.annexed&&!b.war&&!a.war&&!a.allies.includes(b.name)&&!b.allies.includes(a.name)&&Math.abs(a.power-b.power)<65&&((a.relations||0)+(b.relations||0))>5).sort((x,y)=>((x.power/(a.power||1))+(x.gdp/(a.gdp||1)))-((y.power/(a.power||1))+(y.gdp/(a.gdp||1))));if(opts.length){const b=opts[0];a.allies.push(b.name);b.allies.push(a.name);W.alliances.push({a:a.name,b:b.name,formed:W.month});ev(W,`🤝 ${a.name} и ${b.name} заключили оборонительный союз: общая угроза и взаимная выгода`);}}
+  if(a.allies.length<4&&Math.random()<.008){const opts=A.filter(b=>b!==a&&!b.annexed&&!b.war&&!a.war&&!a.allies.includes(b.name)&&!b.allies.includes(a.name)&&Math.abs(a.power-b.power)<65&&((a.relations||0)+(b.relations||0))>5).sort((x,y)=>((x.power/(a.power||1))+(x.gdp/(a.gdp||1)))-((y.power/(a.power||1))+(y.gdp/(a.gdp||1))));if(opts.length){const b=opts[0];a.allies.push(b.name);b.allies.push(a.name);W.alliances.push({a:a.name,b:b.name,formed:W.month});ev(W,`🤝 ${a.name} и ${b.name} заключили оборонительный союз: общая угроза и взаимная выгода`);}}
   if(Math.random()<.006){const opts=A.filter(b=>b!==a&&!b.annexed&&!b.war&&!a.war&&!a.tradePartners.includes(b.name)&&b.tradePartners.length<8&&((a.imports||0)+(b.exports||0))>0&&Math.abs((a.relations||0)-(b.relations||0))<65);if(opts.length){const b=opts.sort((x,y)=>(y.exports||0)-(x.exports||0))[0];a.tradePartners.push(b.name);b.tradePartners.push(a.name);ev(W,`🚢 ${a.name} и ${b.name} открыли торговый коридор: взаимная экономическая выгода`);}}
  }
  if(window.GrandDiplomacy)GrandDiplomacy.monthly(W,A,W.month,ev);
@@ -153,9 +153,14 @@ function diplomacy(W,A){
 function declare(W,A){
  const live=A.filter(n=>!n.annexed),D=window.GrandDiplomacy&&GrandDiplomacy.ensureWorld(W);
  if(!D)return;
+ /* Сдержанность мировой политики: одновременно воюет лишь малая доля стран, а новые войны объявляются не чаще раза в 3 месяца */
+ const maxWars=Math.max(1,Math.round(live.length*.03));
+ if(W.wars.length>=maxWars)return;
+ if(W.lastDeclare!=null&&W.month-W.lastDeclare<2)return;
  for(const a of live){
-  if(a.war||a.cooldown||a.exhaustion>42||a.stability<38)continue;
-  if((a.debt||0)>a.gdp*.55||(a.fx||100)>185||a.treasury<a.gdp*.012)continue;
+  if(a.war||a.cooldown||a.exhaustion>30||a.stability<45)continue;
+  if((a.debt||0)>a.gdp*.45||(a.fx||100)>160||a.treasury<a.gdp*.03)continue;
+  if(Math.random()>.5)continue;                      /* решение о войне не принимается каждый месяц */
   const options=[];
   for(const cr of D.crises){
    if(cr.a!==a.name||cr.expires<=W.month)continue;
@@ -163,6 +168,12 @@ function declare(W,A){
    const cause={id:cr.cause,severity:cr.severity,detail:cr.detail};
    const allyA=a.allies.reduce((t,x)=>t+(live.find(n=>n.name===x)?.power||0)*.28,0),allyD=b.allies.reduce((t,x)=>t+(live.find(n=>n.name===x)?.power||0)*.32,0);
    const warScore=GrandDiplomacy.score(a,b,cause,{allyA,allyD,month:W.month});
+   /* профессиональный расчёт: сила с союзниками, сдерживание, подготовка и тыл */
+   const force=((+a.power||1)+allyA)/Math.max(1,(+b.power||1)+allyD);
+   if(force<1.15&&(cause.severity||0)<92)continue;        /* не нападаем без явного перевеса */
+   if(b.deterUntil&&b.deterUntil>W.month)continue;       /* недавний победитель защищён сдерживанием */
+   if(cr.age<6&&(cause.severity||0)<95)continue;         /* сначала время на подготовку, дипломатию и ультиматум */
+   if((+a.manpower||0)<(+a.pop||1)*.01)continue;         /* без людских ресурсов войну не начинают */
    const action=GrandDiplomacy.neuralAction(W,a,b,cause,{stage:cr.stage,allyA,allyD,warScore});
    options.push({b,cr,cause,action,warScore,allyA,allyD});
   }
@@ -176,8 +187,8 @@ function declare(W,A){
   if(action==='ultimatum'){cr.stage=Math.max(cr.stage,2);cr.ultimatumUntil=cr.ultimatumUntil||W.month+2;a.intent=`Ультиматум ${b.name}`;continue}
   if(action==='prepare'){cr.stage=Math.max(cr.stage,3);a.intent=`Подготовка к возможной войне с ${b.name}`;continue}
   // Даже решение нейросети не может обойти минимальную правовую и военную проверку.
-  if(action!=='war'||(cr.stage<3&&cr.severity<85)||warScore<64)continue;
-  const id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;
+  if(action!=='war'||cr.stage<3||warScore<70)continue;
+  const id=`${W.month}:${a.name}:${b.name}`;a.war=b.war=id;W.lastDeclare=W.month;
   const goal=GrandDiplomacy.chooseGoal(W,a,b,cause,{relations:a.relations,warScore});
   const claim=a.claims&&a.claims[b.name],claimRegion=goal==='territory'?((claim&&claim.region)||(()=>{const rg=(window.WORLD_SEEDS&&WORLD_SEEDS[b.name])||[];return rg.length?(rg[Math.floor(Math.random()*rg.length)].n||''):''})()):'';
   W.wars.push({id,a:a.name,b:b.name,started:W.month,months:0,score:0,front:50,lossA:0,lossB:0,goal,goalLabel:GrandDiplomacy.GOALS[goal].label,claimRegion,cause:cause.id,causeLabel:GrandDiplomacy.CAUSES[cause.id].label,reason:cause.detail,joinedA:[],joinedB:[]});
@@ -214,7 +225,7 @@ function peace(W,w,a,b,A){
  try{GrandDiplomacy.goalOutcome(W,a,win===a&&margin>18?(w.goal==='tribute'?.6:1)+margin/150:-1)}catch(e){}
  if(w.goal==='regime'&&win===a&&margin<30)ev(W,`🏛 ${a.name} не смогла сменить власть в ${b.name}: перевес слишком мал`);
  if(margin>18){lose.claims=lose.claims||{};lose.claims[win.name]={severity:C(68+margin*.15,68,90),expires:W.month+48,detail:'Требование пересмотра территориальных уступок'};ev(W,`🗺 ${lose.name} сохраняет территориальную претензию к ${win.name} после мирного договора`)}
- [a,b,...w.joinedA.map(x=>A.find(n=>n.name===x)),...w.joinedB.map(x=>A.find(n=>n.name===x))].filter(Boolean).forEach(n=>{n.war=null;n.cooldown=n===lose&&margin>18?24:10;n.exhaustion=C(n.exhaustion-18,0,100);n.morale=C(n.morale+(n===win?8:-8),15,100)});
+ [a,b,...w.joinedA.map(x=>A.find(n=>n.name===x)),...w.joinedB.map(x=>A.find(n=>n.name===x))].filter(Boolean).forEach(n=>{n.war=null;n.cooldown=n===lose&&margin>18?48:30;n.exhaustion=C(n.exhaustion-18,0,100);n.morale=C(n.morale+(n===win?8:-8),15,100)});
  ev(W,`📜 Мирный договор: ${win.name} получила преимущество, ${lose.name} принимает условия капитуляции/уступок. Потери армий: ${Math.round(w.lossA)} / ${Math.round(w.lossB)}`);
 }
 
@@ -338,7 +349,7 @@ function tick(S){
  W.nations.forEach(n=>{if(n.annexed)return;(n.gh||(n.gh=[])).push(Math.round(n.gdp*100)/100);if(n.gh.length>13)n.gh.shift();if(n.gdp>(n.gpeak||0))n.gpeak=n.gdp});
  {const m=med(A),wv=worldView(A);W.view={atWar:+wv.atWar.toFixed(3),growth:+wv.growth.toFixed(4)};A.forEach(n=>think(W,n,A,m,wv))}diplomacy(W,A);declare(W,A);
  W.wars=W.wars.filter(w=>{let a=W.nations.find(n=>n.name===w.a),b=W.nations.find(n=>n.name===w.b);if(!a||!b||a.annexed||b.annexed){if(a)a.war=null;if(b)b.war=null;return false}
- fight(W,w,a,b,A);if(!(w.peaceReq&&w.months>=3)&&(w.months<4||(w.months<8&&Math.abs(w.score)<18)||(w.months<18&&Math.abs(w.score)<32&&a.treasury>a.gdp*.002&&b.treasury>b.gdp*.002)&&w.encirclementA<4&&w.encirclementB<4))return true;
+ fight(W,w,a,b,A);const tired=w.months>=5&&(a.exhaustion>52||b.exhaustion>52||a.treasury<a.gdp*.002||b.treasury<b.gdp*.002);if(!tired&&!(w.peaceReq&&w.months>=3)&&(w.months<4||(w.months<8&&Math.abs(w.score)<18)||(w.months<18&&Math.abs(w.score)<32&&a.treasury>a.gdp*.002&&b.treasury>b.gdp*.002)&&w.encirclementA<4&&w.encirclementB<4))return true;
  peace(W,w,a,b,A);return false});
  if(W.month%12===0)ev(W,'📊 Годовой обзор: экономики, промышленность, резервы и торговля продолжают развиваться.');
  W.events.length=Math.min(W.events.length,80);

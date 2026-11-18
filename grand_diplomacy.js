@@ -53,12 +53,12 @@
   for(let i=0;i<A.length;i++)for(let j=i+1;j<A.length;j++){
    const a=A[i],b=A[j];if(a.annexed||b.annexed||a.war||b.war)continue;
    const ab=relation(a,b),ba=relation(b,a),dist=distanceKm(a,b);
-   if(a.ideology!==b.ideology&&Math.min(ab,ba)<-8&&hash(pairKey(a,b)+'ideology')%1000<6){
+   if(a.ideology!==b.ideology&&Math.min(ab,ba)<-8&&hash(pairKey(a,b)+'ideology')%1000<3){
     a.ideologyDisputes[b.name]=a.ideologyDisputes[b.name]||{severity:48,expires:month+18,detail:`Политическое противостояние: ${a.ideology} и ${b.ideology}`};
     b.ideologyDisputes[a.name]=b.ideologyDisputes[a.name]||{severity:48,expires:month+18,detail:`Политическое противостояние: ${b.ideology} и ${a.ideology}`};
    }
    // AI territorial claims are region-specific and arise only from sustained hostility between nearby states.
-   if(dist<1800&&Math.min(ab,ba)<-28&&month%3===0&&hash(pairKey(a,b)+'region-claim')%100<9&&!active(a.claims&&a.claims[b.name],month)){
+   if(dist<1800&&Math.min(ab,ba)<-28&&month%3===0&&hash(pairKey(a,b)+'region-claim')%100<5&&!active(a.claims&&a.claims[b.name],month)){
     const regions=(root.WORLD_SEEDS&&root.WORLD_SEEDS[b.name])||b.regions||[];
     if(regions.length){const idx=hash(pairKey(a,b)+':'+month)%regions.length,region=regions[idx].n||regions[idx].name;
      a.claims[b.name]={severity:68,expires:month+36,created:month,region,detail:`Территориальная претензия на область «${region}»`};
@@ -72,7 +72,7 @@
     b.economicGrievances[a.name]=b.economicGrievances[a.name]||{severity:sanctions?68:52,expires:month+18,detail:sanctions?'Санкции и ограничения торговли':'Спор за рынки и торговые потоки'};
    }
    // A border incident is possible only between geographically close, already tense states.
-   if(dist<850&&Math.min(ab,ba)<5&&hash(pairKey(a,b)+'border')%100<35&&month%2===0&&Math.random()<.0025){
+   if(dist<850&&Math.min(ab,ba)<5&&hash(pairKey(a,b)+'border')%100<35&&month%2===0&&Math.random()<.0012){
     const sev=C(55+Math.abs(Math.min(ab,ba))*.28+Math.random()*12,55,88);
     a.borderCases[b.name]={severity:sev,expires:month+18,detail:'Вооружённый инцидент в приграничной зоне'};
     b.borderCases[a.name]={severity:sev,expires:month+18,detail:'Вооружённый инцидент в приграничной зоне'};
@@ -97,13 +97,13 @@
  }
  function neuralAction(W,n,target,cause,ctx){
   ctx=ctx||{};
-  if(ctx.nnEnabled===false)return (ctx.stage>=3&&(cause.severity||0)>=55?'war':ctx.stage>=2?'ultimatum':ctx.stage>=1?'protest':'negotiate');
+  if(ctx.nnEnabled===false)return (ctx.stage>=3&&(cause.severity||0)>=70?'war':ctx.stage>=2?'ultimatum':ctx.stage>=1?'protest':'negotiate');
   const B=W.brain||(W.brain={});const net=root.NN&&root.NN.get?root.NN.get(B,'dipNN',10,14,5,[.15,.05,-.05,-.1,-.55]):null;
   const rel=C(+n.relations||0,-100,100),ratio=(+n.power||1)/Math.max(1,+target.power||1),severity=(cause.severity||0)/100;
   const x=[rel/100,severity,C(ratio/2,0,1),C((+n.stability||50)/100,0,1),C((+n.treasury||0)/Math.max(1,+n.gdp||1)*4,0,1),C((+n.debt||0)/Math.max(1,+n.gdp||1),0,1),C((+n.exhaustion||0)/100,0,1),C((ctx.stage||0)/3,0,1),C((ctx.allyA||0)/Math.max(1,(+n.power||1)),0,1),C((ctx.allyD||0)/Math.max(1,(+target.power||1)),0,1)];
-  if(!net)return (ctx.stage>=3&&severity>.55?'war':ctx.stage>=2?'ultimatum':ctx.stage>=1?'protest':'negotiate');
-  net.b2[4]=C(-.55+severity*.85+(ctx.stage||0)*.12+((ctx.warScore||50)-60)/100,-.8,.65);
-  const q=root.NN.predict(net,x),ok=i=>i===0||i===1||i===2&&ctx.stage>=1||i===3&&ctx.stage>=2||i===4&&(ctx.stage>=3||severity>=.85);
+  if(!net)return (ctx.stage>=3&&severity>.7?'war':ctx.stage>=2?'ultimatum':ctx.stage>=1?'protest':'negotiate');
+  net.b2[4]=C(-.9+severity*.85+(ctx.stage||0)*.1+((ctx.warScore||50)-70)/100,-1.1,.5);
+  const q=root.NN.predict(net,x),ok=i=>i===0||i===1||i===2&&ctx.stage>=1||i===3&&ctx.stage>=2||i===4&&ctx.stage>=3;
   const k=root.NN.choose(q,ok,C(.08+(ctx.stage>=3?.06:0),.03,.16));
   const names=['negotiate','protest','ultimatum','prepare','war'];
   if(n.dipLast&&n.dipLast.x){const reward=C(((+n.stability||50)-n.dipLast.stability)/18+((+n.gdp||1)-n.dipLast.gdp)/Math.max(1,n.dipLast.gdp)*5,-1.5,1.5);root.NN.train(net,n.dipLast.x,n.dipLast.k,reward+.82*Math.max(...q),.012)}

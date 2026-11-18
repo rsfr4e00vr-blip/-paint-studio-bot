@@ -11,6 +11,8 @@ const SPEC={
  frigate:{kind:'sea',name:'Фрегат',icon:'🚢',spd:5.6,rg:13,px:30,cost:{money:1200}},
  carrier:{kind:'sea',name:'Авианосец',icon:'🛳️',spd:4.4,rg:9,px:38,cost:{money:5200}},
  submarine:{kind:'sea',name:'Подводная лодка',icon:'🌊',spd:4.8,rg:12,px:30,cost:{money:2300}},
+fort:{kind:'land',name:'Укрепрайон',icon:'🛡',spd:0,rg:17,px:26,static:true},
+ aabat:{kind:'land',name:'Батарея ПВО',icon:'🎯',spd:0,rg:24,px:24,static:true},
  fighter:{kind:'air',name:'Истребители',icon:'✈️',spd:24,rg:16,px:28,range:170,cost:{money:950}},
  bomber:{kind:'air',name:'Бомбардировщики',icon:'🛩️',spd:17,rg:7,px:32,range:230,cost:{money:1450}}
 };
@@ -18,16 +20,26 @@ const SPEC={
 const ECOST={
  inf:{m:100,s:2,f:1,e:1,man:.8}, tank:{m:300,s:5,f:4,e:3,man:.5},
  destroyer:{m:950,s:9,f:6,e:4}, submarine:{m:1150,s:10,f:6,e:5},
- fighter:{m:475,s:5,f:5,e:4}, bomber:{m:725,s:7,f:6,e:5}
+ fighter:{m:475,s:5,f:5,e:4}, bomber:{m:725,s:7,f:6,e:5},
+ fort:{m:150,s:4,f:0,e:1}, aabat:{m:220,s:5,f:0,e:3}
 };
+/* оплата ИИ-страной: возвращает причину отказа или '' если оплачено */
+function ePay(nat,sub){
+ if(!nat)return '';const c=ECOST[sub];if(!c)return '';const rs=nat.rs&&nat.rs.st;let why='';
+ if((Number(nat.treasury)||0)<c.m)why='казна пуста';
+ else if(rs&&(rs.steel<c.s||rs.fuel<c.f||rs.energy<c.e))why=rs.steel<c.s?'нет стали':rs.fuel<c.f?'нет топлива':'нет энергии';
+ else if(c.man&&(Number(nat.manpower)||0)<c.man+1)why='нет людей';
+ if(why)return why;
+ nat.treasury-=c.m;if(rs){rs.steel-=c.s;rs.fuel-=c.f;rs.energy-=c.e}if(c.man)nat.manpower-=c.man;return ''}
 /* урон в секунду: DM[кто][по кому] */
 const DM={
  inf:{land:5,sea:0,air:.6}, tank:{land:8,sea:0,air:0},
  destroyer:{land:4,sea:7,air:3}, frigate:{land:3,sea:5,air:2.5}, carrier:{land:0,sea:3,air:1},
  submarine:{land:0,sea:10,air:0},
- fighter:{land:2,sea:2,air:9}, bomber:{land:10,sea:9,air:1}
+ fighter:{land:2,sea:2,air:9}, bomber:{land:10,sea:9,air:1},
+ fort:{land:6.5,sea:5.5,air:1.2}, aabat:{land:0,sea:0,air:11}
 };
-const NAMES={inf:'пехотная армия',tank:'танковая армия',destroyer:'эскадра эсминцев',frigate:'отряд фрегатов',carrier:'авианосная группа',submarine:'подводная лодка',fighter:'истребительная эскадрилья',bomber:'бомбардировочная группа'};
+const NAMES={inf:'пехотная армия',tank:'танковая армия',destroyer:'эскадра эсминцев',frigate:'отряд фрегатов',carrier:'авианосная группа',submarine:'подводная лодка',fort:'укрепрайон',aabat:'батарея ПВО',fighter:'истребительная эскадрилья',bomber:'бомбардировочная группа'};
 const MM={units:[],remoteUnits:[],seq:1,sel:null,mode:'move',speed:1,fx:[],log:[],bases:[],dirty:false,svg:null,ready:false,open:false,t:0,aiT:0};
 let mask=null;                       /* 1 — суша */
 let env=null;                        /* связь с игрой */
@@ -36,7 +48,46 @@ const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
 const clampN=(v,a,b)=>Math.max(a,Math.min(b,v));
 
 /* ---------- карта проходимости ---------- */
-function setMask(m){mask=m}
+function setMask(m){mask=m;SEA=null}
+/* Морская связность. На грубой карте проливы (Датские, Босфор, Ла-Манш и т.п.) часто закрыты сушей, и порт оказывается
+   в «кармане» воды, откуда не выплыть. Здесь вода делится на связные области; малые озёра становятся сушей,
+   а карманы и внутренние моря прорываются каналом до другой воды, если суши между ними мало (как реальные проливы и каналы). */
+let SEA=null;
+function fixSea(m){
+ const N=CW*CH,lab=new Int32Array(N),sizes=[],MINK=40,REACH=16;
+ const label=()=>{lab.fill(-1);sizes.length=0;const st=[];let c=0;
+  for(let i=0;i<N;i++){if(m[i]!==0||lab[i]>=0)continue;let n=0;st.length=0;st.push(i);lab[i]=c;
+   while(st.length){const a=st.pop();n++;const ax=a%CW,ay=(a/CW)|0;
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=ax+dx,ny=ay+dy;if(nx<0||ny<0||nx>=CW||ny>=CH)continue;const b=ny*CW+nx;if(m[b]===0&&lab[b]<0){lab[b]=c;st.push(b)}}}
+   sizes.push(n);c++}
+  return c};
+ const bigMain=()=>{let b=0;sizes.forEach((s,i)=>{if(s>sizes[b])b=i});return b};
+ for(let pass=0;pass<60;pass++){
+  if(label()<2)break;
+  const main=bigMain(),order=[];sizes.forEach((s,i)=>{if(i!==main&&s>=MINK)order.push(i)});
+  order.sort((a,b)=>sizes[a]-sizes[b]);
+  let carved=false;
+  for(const c of order){
+   const par=new Int32Array(N).fill(-2),dep=new Uint8Array(N);let q=[];
+   for(let i=0;i<N;i++)if(lab[i]===c){par[i]=-1;q.push(i)}
+   let hit=-1;
+   for(let d=0;d<REACH&&hit<0&&q.length;d++){const nq=[];
+    for(const a of q){const ax=a%CW,ay=(a/CW)|0;
+     for(let dy=-1;dy<=1&&hit<0;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=ax+dx,ny=ay+dy;if(nx<0||ny<0||nx>=CW||ny>=CH)continue;const b=ny*CW+nx;if(par[b]!==-2)continue;
+      if(m[b]===0){if(lab[b]!==c&&sizes[lab[b]]>=MINK){par[b]=a;hit=b;break}continue}
+      par[b]=a;nq.push(b)}
+     if(hit>=0)break}
+    q=nq}
+   if(hit>=0){let cur=par[hit];
+    while(cur>=0&&par[cur]!==-1){const cx=cur%CW,cy=(cur/CW)|0;
+     for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=cx+dx,ny=cy+dy;if(nx>=0&&ny>=0&&nx<CW&&ny<CH)m[ny*CW+nx]=0}
+     cur=par[cur]}
+    carved=true;break}}
+  if(!carved)break}
+ label();const main=bigMain();
+ for(let i=0;i<N;i++)if(m[i]===0&&sizes[lab[i]]<MINK)m[i]=1;      /* мелкие озёра — не препятствие, просто суша */
+ label();SEA={lab,main:bigMain(),sizes:sizes.slice()};
+ return m}
 function buildMask(){
  if(mask)return mask;
  const cv=document.createElement('canvas');cv.width=CW;cv.height=CH;
@@ -44,15 +95,24 @@ function buildMask(){
  Object.values(env.GEO.c).forEach(C=>{if(!C||!C.d)return;try{x.fill(new Path2D(C.d),'evenodd')}catch(e){}});
  const d=x.getImageData(0,0,CW,CH).data,m=new Uint8Array(CW*CH);
  for(let i=0;i<m.length;i++)m[i]=d[i*4+3]>110?1:0;
+ try{fixSea(m)}catch(e){console.warn('MM fixSea',e)}
  mask=m;return m}
 const cellOf=(x,y)=>{const cx=clampN(Math.floor(x/CELL),0,CW-1),cy=clampN(Math.floor(y/CELL),0,CH-1);return cy*CW+cx};
 const okCell=(kind,i)=>kind==='air'?true:kind==='land'?mask[i]===1:mask[i]===0;
 const cellPt=i=>[(i%CW)*CELL+CELL/2,Math.floor(i/CW)*CELL+CELL/2];
-function snap(kind,x,y,maxR){
+function snap(kind,x,y,maxR,main){
+ if(main&&kind==='sea'&&SEA){const r=snapMain(x,y,maxR);if(r>=0)return r}
  const c0=cellOf(x,y);if(okCell(kind,c0))return c0;
  const cx=c0%CW,cy=Math.floor(c0/CW);
  for(let r=1;r<=maxR;r++){let best=-1,bd=1e9;
   for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=CW||ny>=CH)continue;const i=ny*CW+nx;if(okCell(kind,i)){const d=dx*dx+dy*dy;if(d<bd){bd=d;best=i}}}
+  if(best>=0)return best}
+ return -1}
+function snapMain(x,y,maxR){
+ const c0=cellOf(x,y),cx=c0%CW,cy=Math.floor(c0/CW),ok=i=>mask[i]===0&&SEA.lab[i]===SEA.main;
+ if(ok(c0))return c0;
+ for(let r=1;r<=maxR;r++){let best=-1,bd=1e9;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=CW||ny>=CH)continue;const i=ny*CW+nx;if(ok(i)){const d=dx*dx+dy*dy;if(d<bd){bd=d;best=i}}}
   if(best>=0)return best}
  return -1}
 function los(kind,a,b){const n=Math.ceil(dist(a,b)/(CELL*.6));for(let k=1;k<n;k++){const t=k/n;if(!okCell(kind,cellOf(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t)))return false}return true}
@@ -61,7 +121,7 @@ function los(kind,a,b){const n=Math.ceil(dist(a,b)/(CELL*.6));for(let k=1;k<n;k+
 function findPath(kind,ax,ay,bx,by,maxSnap){
  if(kind==='air')return[[bx,by]];
  buildMask();
- const s=snap(kind,ax,ay,6),g=snap(kind,bx,by,maxSnap||16);
+ const s=snap(kind,ax,ay,kind==='sea'?12:6),g=snap(kind,bx,by,maxSnap||16);
  if(s<0||g<0)return null;
  const N=CW*CH,G=new Float32Array(N).fill(1e9),from=new Int32Array(N).fill(-1),closed=new Uint8Array(N);
  const hx=[],hi=[];                              /* бинарная куча: ключ f и индекс */
@@ -117,6 +177,7 @@ function step(dt){
  MM.t+=dt;
  MM.units.forEach(u=>{
   const S=SPEC[u.sub],k=S.kind;
+  if(k==='land'){if(u.fight>MM.t)u.fight=-99;if(!u.path.length&&MM.t-(u.fight||-99)>2)u.idleT=(u.idleT||0)+dt;else u.idleT=0;u.dug=u.idleT>6}
   /* топливо и возвращение */
   if(k==='air'){
    const b=u.base||nearestBase(u),onBase=b&&dist([u.x,u.y],[b.x,b.y])<5&&(u.mission==='idle'||u.mission==='rtb');
@@ -138,14 +199,32 @@ function step(dt){
     else{u.x+=Math.cos(a)*mv;u.y+=Math.sin(a)*mv;if(k==='air')u.fuel-=mv;mv=0}}
    if(!u.path.length)arrive(u)}
  });
+ /* визуальные следы: инверсия самолётов, кильватер кораблей, пыль армий, дым повреждённых, стройка укреплений */
+ const V=MM.vis,onScr=(x,y)=>!V||(x>V.x-40&&x<V.x+V.w+40&&y>V.y-40&&y<V.y+V.h+40);
+ MM.units.forEach(u=>{const S=SPEC[u.sub];if(!onScr(u.x,u.y))return;
+  if(u.build){u.hp=Math.min(100,u.hp+3.2*dt);u.bT=(u.bT||0)-dt;if(u.bT<=0&&MM.fx.length<170){u.bT=.35;MM.fx.push({kind:'dust',x:u.x+rnd(-4,4),y:u.y+rnd(-2,3),s:1,t0:MM.t,life:.9})}if(u.hp>=100){u.build=0;addFx(u.x,u.y,'ping',1)}}
+  if(S.static&&!u.build&&MM.t-(u.hurt||-99)>6)u.hp=Math.min(100,u.hp+1.1*dt);
+  if(u.path.length&&MM.fx.length<160){u.trT=(u.trT||0)-dt;
+   if(u.trT<=0){u.trT=S.kind==='air'?.16:S.kind==='sea'?.28:.4;
+    const bx=u.x-Math.cos(u.ang)*5,by=u.y-Math.sin(u.ang)*5;
+    MM.fx.push({kind:S.kind==='air'?'trail':S.kind==='sea'?'wake':'dust',x:bx,y:by,s:u.sub==='carrier'?1.4:1,t0:MM.t,life:S.kind==='air'?1.3:S.kind==='sea'?1.9:.9})}}
+  if(u.hp<45&&u.hp>0&&MM.fx.length<165){u.smT=(u.smT||0)-dt;if(u.smT<=0){u.smT=.55;MM.fx.push({kind:'smoke',x:u.x+rnd(-1,1),y:u.y,s:.55,t0:MM.t,life:1.7});if(u.hp<22)MM.fx.push({kind:'fire',x:u.x+rnd(-2,2),y:u.y+rnd(-1,1),s:1,t0:MM.t,life:.5})}}
+ });
  combat(dt);
  capture(dt);
  MM.units=MM.units.filter(u=>{if(u.hp>0)return true;
   const mine=u.own===ME;
   if(u.dead==='fuel')say((mine?'💀 Потеряно: ':'Противник потерял: ')+NAMES[u.sub]+' (без топлива)',mine);
   else say((mine?'💥 Уничтожено: ':'✅ Уничтожено у противника: ')+NAMES[u.sub],mine);
-  addFx(u.x,u.y,'boom',1.4);if(MM.sel===u.id)MM.sel=null;if(mine)env&&env.lostUnit&&env.lostUnit(u);return false});
- MM.fx=MM.fx.filter(f=>MM.t-f.t0<f.life);
+  {const kd=kindOf(u);MM.fx.push({kind:'ghost',sub:u.sub,own:u.own,x:u.x,y:u.y,ang:u.ang||0,dk:kd==='sea'?'sink':kd==='air'?'crash':'wreck',t0:MM.t,life:kd==='sea'?3.4:kd==='air'?1.7:2.2});
+   addFx(u.x,u.y,'boom',kd==='air'?.8:1.5);if(kd!=='air')addFx(u.x,u.y,'smoke',1.6)}
+  if(MM.sel===u.id)MM.sel=null;if(mine)env&&env.lostUnit&&env.lostUnit(u);return false});
+ const addF=[];
+ MM.fx=MM.fx.filter(f=>{if(MM.t-f.t0<f.life)return true;
+  if(f.kind==='ghost'&&f.dk==='crash'){const a=1,ex=f.x+Math.cos(f.ang)*14,ey=f.y+Math.sin(f.ang)*14+6;addF.push({x:ex,y:ey,kind:'boom',s:1.5,t0:MM.t,life:FXLIFE.boom});addF.push({x:ex,y:ey,kind:'smoke',s:1.6,t0:MM.t,life:FXLIFE.smoke})}
+  if(f.kind==='shot'){if(f.tk==='sea')addF.push({x:f.tx,y:f.ty,kind:'splash',s:1,t0:MM.t,life:.9});else if(f.tk==='land'&&f.after==='boom')addF.push({x:f.tx,y:f.ty,kind:'dust',s:1.7,t0:MM.t,life:1.1});addF.push({x:f.tx,y:f.ty,kind:f.after,s:f.as,t0:MM.t,life:FXLIFE[f.after]||.35});if(f.after==='boom'&&f.as>=.5)addF.push({x:f.tx,y:f.ty,kind:'smoke',s:1,t0:MM.t,life:FXLIFE.smoke})}
+  return false});
+ addF.forEach(f=>{if(MM.fx.length<200)MM.fx.push(f)});
 }
 function arrive(u){
  const k=kindOf(u);
@@ -161,7 +240,16 @@ function bombRun(u){
  if(u.own===ME&&ra&&env.bombRegion)env.bombRegion(ra);
  if(u.own===ME)say('💣 Бомбардировка: '+(ra?ra.name:'цель')+(hit?` · поражено целей: ${hit}`:''),true);
  u.mission='rtb';const b=nearestBase(u);if(b)u.path=[[b.x,b.y]]}
-function addFx(x,y,kind,s){if(MM.fx.length>40)MM.fx.shift();MM.fx.push({x,y,kind,s:s||1,t0:MM.t,life:kind==='boom'?1.1:.35})}
+const FXLIFE={boom:1.1,smoke:2.2,flash:.14};
+function addFx(x,y,kind,s){if(MM.fx.length>200)MM.fx.shift();MM.fx.push({x,y,kind,s:s||1,t0:MM.t,life:FXLIFE[kind]||.35})}
+/* выстрелы: для каждого рода войск свой снаряд (трассеры, снаряд, дуга, торпеда, бомба) */
+const SHOT={inf:{cd:.32,life:.26,after:'hit',as:1},tank:{cd:1.1,life:.45,after:'boom',as:.5},destroyer:{cd:.9,life:.7,after:'boom',as:.55},fort:{cd:1.2,life:.6,after:'boom',as:.6},aabat:{cd:.4,life:.42,after:'hit',as:.9},frigate:{cd:.8,life:.65,after:'boom',as:.5},carrier:{cd:1.6,life:.6,after:'hit',as:1},submarine:{cd:3.4,life:1.5,after:'boom',as:.8},fighter:{cd:.5,life:.34,after:'hit',as:1},bomber:{cd:1.3,life:.8,after:'boom',as:.7}};
+function shoot(a,t){const c=SHOT[a.sub];if(!c||MM.fx.length>110)return;
+ if(MM.t-(a.shotT||-9)<c.cd)return;a.shotT=MM.t+rnd(0,.12);
+ MM.fx.push({kind:'shot',tk:SPEC[t.sub].kind,sub:a.sub,mine:a.own===ME,x:a.x,y:a.y,tx:t.x+rnd(-1.2,1.2),ty:t.y+rnd(-1.2,1.2),t0:MM.t,life:c.life,after:c.after,as:c.as,seed:Math.random()});
+ if(a.sub!=='submarine'&&a.sub!=='bomber')MM.fx.push({kind:'flash',x:a.x,y:a.y,t0:MM.t,life:.14,s:1});
+ /* промахи: снаряды кораблей падают в воду рядом с целью */
+ if(SPEC[t.sub].kind==='sea'&&(a.sub==='destroyer'||a.sub==='frigate'||a.sub==='carrier'||a.sub==='bomber')&&Math.random()<.45&&MM.fx.length<150)MM.fx.push({kind:'splash',x:t.x+rnd(-7,7),y:t.y+rnd(-7,7),s:.8,t0:MM.t+c.life*.8,life:.9})}
 function combat(dt){
  const U=MM.units;
  for(let i=0;i<U.length;i++){const a=U[i];if(a.hp<=0)continue;const S=SPEC[a.sub];
@@ -176,8 +264,10 @@ function combat(dt){
    let dmg=DM[a.sub][SPEC[best.sub].kind]*(.5+.5*a.hp/100)*dt*rnd(.7,1.3);
    if(a.sub==='fighter'&&best.sub==='bomber')dmg*=1.5;
    if(best.sub==='tank')dmg*=.85;
+   if(best.sub==='fort')dmg*=.55;if(best.sub==='aabat')dmg*=.7;
    if(a.own===ME&&kindOf(a)==='land'&&MM.units.some(q=>q.own===ME&&SPEC[q.sub].kind==='air'&&q.mission==='support'&&dist([q.x,q.y],[a.x,a.y])<14))dmg*=1.18;
-   best.hp-=dmg;a.fight=MM.t;
+   if(SPEC[best.sub].kind==='land'){if(best.dug)dmg*=.85;if(best.fort)dmg*=.88}
+   best.hp-=dmg;a.fight=MM.t;best.hurt=MM.t;shoot(a,best);
    if(Math.random()<dt*3)addFx(best.x+rnd(-2,2),best.y+rnd(-2,2),'hit',1);
    /* истребители преследуют цель в воздухе */
    if(a.sub==='fighter'&&SPEC[best.sub].kind==='air'&&a.mission!=='rtb'&&a.fuel>dist([a.x,a.y],[best.x,best.y])+60)a.path=[[best.x,best.y]]}
@@ -201,7 +291,7 @@ function capture(dt){
    u.cap+=dd;
    if(u.cap>=14){u.cap=0;u.capId=null;if(env.enemyRaid)env.enemyRaid(ra);say('⚠️ Противник занял область: '+ra.name,true)}}
  })}
-function addBase(ra){if(MM.bases.some(b=>b.id===ra.id))return;const w=snap('sea',ra.x,ra.y,120),p=w>=0?cellPt(w):[ra.x,ra.y];MM.bases.push({id:ra.id,name:ra.name,x:ra.x,y:ra.y,px:p[0],py:p[1],own:ME})}
+function addBase(ra){if(MM.bases.some(b=>b.id===ra.id))return;const w=snap('sea',ra.x,ra.y,120,true),p=w>=0?cellPt(w):[ra.x,ra.y];MM.bases.push({id:ra.id,name:ra.name,x:ra.x,y:ra.y,px:p[0],py:p[1],own:ME})}
 
 /* ---------- ИИ противника ---------- */
 function aiThink(){
@@ -209,14 +299,16 @@ function aiThink(){
  const wars=env.wars();
  const alive=new Set(wars.map(w=>w.n));
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
+ MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
  wars.forEach(w=>{
   const mine=MM.units.filter(u=>u.own===w.n),nat=env.enemyNation&&env.enemyNation(w.n),pw=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
   const cap={land:2+Math.floor(pw/28),sea:1+(pw>55?1:0),air:2+(pw>60?1:0)};
-  const cnt=k=>mine.filter(u=>kindOf(u)===k).length;
+  const cnt=k=>mine.filter(u=>kindOf(u)===k&&!SPEC[u.sub].static).length;
   MM.spawnT=MM.spawnT||{};MM.spawnT[w.n]=(MM.spawnT[w.n]||0)-1.5;
   if(MM.spawnT[w.n]<=0){
    const sp=env.enemySpawn&&env.enemySpawn(w.n);
    if(sp){
+    const eb=addEnemyBase(w.n,sp);
     const defi={land:(cap.land-cnt('land'))/cap.land,sea:(cap.sea-cnt('sea'))/cap.sea,air:(cap.air-cnt('air'))/cap.air};
     /* перебираем роды войск по нехватке; если для одного нет места (нет выхода к морю), берём следующий */
     let pick='',sub=null,nm='',spot=null;
@@ -230,36 +322,155 @@ function aiThink(){
     else if(pick==='sea'){sub=Math.random()<.4?'submarine':'destroyer';nm='Флот противника'}
     else if(pick==='air'){sub=cnt('air')%2?'bomber':'fighter';nm='Авиация противника'}
     /* расходы: враг платит казной, сталью, топливом, энергией и людьми, как игрок */
-    let paid=true,why='';
-    if(sub&&nat){const c=ECOST[sub],rs=nat.rs&&nat.rs.st;
-     if((Number(nat.treasury)||0)<c.m)why='казна пуста';
-     else if(rs&&(rs.steel<c.s||rs.fuel<c.f||rs.energy<c.e))why=rs.steel<c.s?'нет стали':rs.fuel<c.f?'нет топлива':'нет энергии';
-     else if(c.man&&(Number(nat.manpower)||0)<c.man+1)why='нет людей';
-     if(why)paid=false;
-     else{nat.treasury-=c.m;if(rs){rs.steel-=c.s;rs.fuel-=c.f;rs.energy-=c.e}if(c.man)nat.manpower-=c.man}}
+    let why='',paid=true;
+    if(sub&&nat){why=ePay(nat,sub);if(why)paid=false}
     if(sub&&!paid){MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog[w.n]||-999)>90){MM.shortLog[w.n]=MM.t;say('📉 '+w.n+' не может пополнить '+(pick==='sea'?'флот':pick==='air'?'авиацию':'армию')+': '+why)}}
     else if(sub){
-     if(pick==='air'){const b={x:sp.x,y:sp.y,own:w.n,px:sp.x,py:sp.y};mk(w.n,sub,spot[0],spot[1],{name:nm,base:b})}
+     if(pick==='air')mk(w.n,sub,spot[0],spot[1],{name:nm,base:eb})
      else mk(w.n,sub,spot[0],spot[1],{name:nm,base:null})}
     /* промышленность определяет темп: слабая индустрия — медленнее */
     const ind=nat&&Number(nat.industry)>0?Math.max(.4,Math.min(3,Number(nat.industry))):1;
     MM.spawnT[w.n]=(paid?22:30)/ind}
   }
  });
- /* поведение */
  const mine=MM.units.filter(u=>u.own===ME);if(!mine.length)return;
- let calls=0;
- MM.units.filter(u=>u.own!==ME).forEach(u=>{
-  const k=kindOf(u);
-  const near=mine.filter(m=>k==='air'?true:kindOf(m)===k||(k==='land'&&kindOf(m)==='land')).sort((p,q)=>dist([u.x,u.y],[p.x,p.y])-dist([u.x,u.y],[q.x,q.y]))[0];
-  if(k==='air'){
-   const b=u.base;if(!b)return;
-   if(u.mission==='idle'||u.mission==='patrol'&&!u.path.length){
-    const tg=mine.filter(m=>u.sub==='fighter'?kindOf(m)==='air':kindOf(m)!=='air').filter(m=>dist([b.x,b.y],[m.x,m.y])<SPEC[u.sub].range*.42).sort((p,q)=>dist([b.x,b.y],[p.x,p.y])-dist([b.x,b.y],[q.x,q.y]))[0];
-    if(tg&&u.fuel>SPEC[u.sub].range*.8&&Math.random()<.35){u.path=[[tg.x,tg.y]];u.mission=u.sub==='bomber'?'bomb':'move'}}
-  }else if(!u.path.length&&near&&calls<2&&Math.random()<.5){
-   const d=dist([u.x,u.y],[near.x,near.y]),lim=k==='sea'?70:55;
-   if(d<lim||(k==='land'&&Math.random()<.12)){calls++;orderMove(u,near.x,near.y)}}
+ wars.forEach(w=>{try{commander(w,mine)}catch(err){console.warn('MM commander',err)}});
+}
+
+/* ---------- ИИ-командир: оборона, концентрация сил, засады, отступление и самообучение тактики ---------- */
+function addEnemyBase(n,sp){
+ const bs=MM.bases.filter(b=>b.own===n);
+ let near=null,nd=1e9;bs.forEach(b=>{const d=dist([b.x,b.y],[sp.x,sp.y]);if(d<nd){nd=d;near=b}});
+ if(near&&nd<14)return near;
+ if(bs.length>=4)return near;
+ const w=snap('sea',sp.x,sp.y,60,true),q=w>=0?cellPt(w):[sp.x,sp.y];
+ const b={id:'eb:'+n+':'+bs.length,name:'Оборона: '+n,x:sp.x,y:sp.y,px:q[0],py:q[1],own:n};MM.bases.push(b);return b}
+const TACT=['defend','attack','raid','turtle'];
+const VAL={inf:1,tank:1.6,destroyer:1.8,frigate:1.3,carrier:3,submarine:1.9,fighter:1.5,bomber:1.7,fort:1.3,aabat:.8};
+const pwr=u=>(VAL[u.sub]||1)*Math.max(0,u.hp)/100;
+const sumP=a=>a.reduce((s,u)=>s+pwr(u),0);
+function tBrain(){const st=env.S();if(!st.mmBrain||typeof st.mmBrain!=='object')st.mmBrain={q:{},n:{},steps:0};return st.mmBrain}
+function tPrior(c,a){const P=c.split('|'),r=P[0],th=P[1],air=P[2];let v={defend:.4,attack:.35,raid:.3,turtle:.2}[a];
+ if(th==='near'){if(a==='defend')v+=.3;if(a==='attack')v-=.15}
+ if(r==='strong'){if(a==='attack')v+=.3;if(a==='turtle')v-=.15}
+ if(r==='weak'){if(a==='turtle')v+=.25;if(a==='defend')v+=.1;if(a==='attack')v-=.2}
+ if(air==='airDown'&&a==='raid')v+=.2;
+ return v}
+function tPick(c){if(Math.random()<.12)return TACT[Math.floor(Math.random()*TACT.length)];
+ const b=tBrain();let best='defend',bv=-9;
+ TACT.forEach(a=>{const k=c+'|'+a,n=b.n[k]||0,pr=tPrior(c,a),q=b.q[k]==null?pr:(b.q[k]*n+pr*2)/(n+2);if(q>bv){bv=q;best=a}});
+ return best}
+function tLearn(c,a,rew){const b=tBrain(),k=c+'|'+a;b.n[k]=(b.n[k]||0)+1;const q=b.q[k]==null?tPrior(c,a):b.q[k];b.q[k]=q+.25*(rew-q);b.steps++;MM.dirty=true}
+MM.war=MM.war||{};
+function go(u,x,y){
+ if(u.aiTgt&&u.path.length&&dist(u.aiTgt,[x,y])<12)return;
+ u.aiTgt=[x,y];u.aiT=MM.t;orderMove(u,x,y)}
+function commander(w,mine){
+ const my=MM.units.filter(u=>u.own===w.n);if(!my.length)return;
+ const bases=MM.bases.filter(b=>b.own===w.n);
+ const home=bases[0]||{x:my[0].x,y:my[0].y,px:my[0].x,py:my[0].y};
+ const st=MM.war[w.n]=MM.war[w.n]||{tact:'defend',t:-99,c:'',hp:null};
+ if(st.t>MM.t)st.t=-99;
+ const inTerr=p=>{const ra=env.regionAt&&env.regionAt(p.x,p.y);return !!ra&&ra.country===w.n};
+ my.forEach(u=>{u.fort=kindOf(u)==='land'&&inTerr(u)});
+ const mL=mine.filter(m=>kindOf(m)==='land'),mS=mine.filter(m=>kindOf(m)==='sea'),mA=mine.filter(m=>kindOf(m)==='air');
+ const invaders=mL.filter(inTerr).concat(mS.filter(m=>bases.some(b=>dist([m.x,m.y],[b.px,b.py])<40)));
+ const near=invaders.length>0||mine.some(m=>kindOf(m)!=='air'&&dist([m.x,m.y],[home.x,home.y])<55);
+ const ePow=sumP(my),mPow=sumP(mine)+.1,myFi=mA.filter(m=>m.sub==='fighter').length,eFi=my.filter(u=>u.sub==='fighter').length;
+ const ctx=(ePow/mPow>1.4?'strong':ePow/mPow<.7?'weak':'even')+'|'+(near?'near':'far')+'|'+(myFi>eFi?'airDown':'airUp');
+ /* раз в 12 с: оценка прошлой тактики по результату боёв и выбор новой */
+ if(MM.t-st.t>12){
+  const eHP=my.reduce((a,u)=>a+u.hp,0),mHP=mine.reduce((a,u)=>a+u.hp,0);
+  if(st.hp){const dE=st.hp[0]-eHP,dM=st.hp[1]-mHP;tLearn(st.c,st.tact,clampN(.5+.5*(dM-dE)/(100*Math.max(2,my.length)),0,1))}
+  st.c=ctx;st.tact=tPick(ctx);st.hp=[eHP,mHP];st.t=MM.t}
+ const nearest=(u,arr)=>{let b=null;arr.forEach(m=>{const d=dist([u.x,u.y],[m.x,m.y]);if(!b||d<b.d)b={m,d}});return b};
+ /* отступление раненых на базу (лечатся у базы) */
+ my.forEach(u=>{if(SPEC[u.sub].static)return;if(u.hp<30)u.heal=true;else if(u.hp>=75)u.heal=false;
+  if(!u.heal)return;const k=kindOf(u);
+  if(k==='air'){if(u.mission!=='rtb')orderRtb(u);return}
+  const b=nearestBase(u);if(b&&MM.t-(u.fight||-99)>1)go(u,k==='sea'?b.px:b.x,k==='sea'?b.py:b.y)});
+ /* --- строительство обороны: укрепрайоны на угрожаемых направлениях и ПВО у баз (за счёт казны и ресурсов страны) --- */
+ const nat=env.enemyNation&&env.enemyNation(w.n),pw0=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
+ const forts=my.filter(u=>u.sub==='fort'),aas=my.filter(u=>u.sub==='aabat'),anchors=bases.length?bases:[home];
+ if(MM.t-(st.bT||-99)>26){
+  st.bT=MM.t;
+  const thr=mine.filter(m=>kindOf(m)!=='air'&&(inTerr(m)||anchors.some(b=>dist([m.x,m.y],[b.x,b.y])<135))).sort((p,q)=>dist([p.x,p.y],[home.x,home.y])-dist([q.x,q.y],[home.x,home.y]));
+  let want=null,at=null;
+  if(mA.length&&aas.length<Math.min(3,1+Math.floor(pw0/60))){
+   const bb=anchors.find(b=>!aas.some(a=>dist([a.x,a.y],[b.x,b.y])<32));
+   if(bb){want='aabat';at=[bb.x+rnd(-5,5),bb.y+rnd(-5,5)]}}
+  if(!want&&forts.length<Math.min(6,2+Math.floor(pw0/45))&&(thr.length||forts.length<1)){
+   if(thr.length){const t0=thr[0],an=anchors.slice().sort((p,q)=>dist([p.x,p.y],[t0.x,t0.y])-dist([q.x,q.y],[t0.x,t0.y]))[0];
+    const dx=t0.x-an.x,dy=t0.y-an.y,d=Math.hypot(dx,dy)||1,off=Math.min(26,d*.45);at=[an.x+dx/d*off,an.y+dy/d*off]}
+   else at=[home.x+rnd(-8,8),home.y+rnd(-8,8)];
+   if(!forts.some(f=>dist([f.x,f.y],at)<20))want='fort'}
+  if(want&&at){const q=snap('land',at[0],at[1],8);
+   if(q>=0){const pt=cellPt(q),why=ePay(nat,want);
+    if(!why){mk(w.n,want,pt[0],pt[1],{name:want==='fort'?'Укрепрайон':'Батарея ПВО',build:1,hp:30});addFx(pt[0],pt[1],'ping',1);
+     say('🏗 '+w.n+' возводит '+(want==='fort'?'укрепрайон':'батарею ПВО')+(want==='aabat'?' против вашей авиации':thr.length?' на угрожаемом направлении':' у столицы'))}
+    else{MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog['d'+w.n]||-999)>120){MM.shortLog['d'+w.n]=MM.t;say('📉 '+w.n+' не может достроить оборону: '+why)}}}}}
+ /* --- суша: оборона территории, сбор в кулак, наступление, окапывание --- */
+ const L=my.filter(u=>kindOf(u)==='land'&&!u.heal&&!SPEC[u.sub].static);
+ if(L.length){
+  const c=[L.reduce((a,u)=>a+u.x,0)/L.length,L.reduce((a,u)=>a+u.y,0)/L.length];
+  const defending=invaders.some(i=>kindOf(i)==='land');
+  let tgt=null;
+  if(defending)tgt=invaders.filter(i=>kindOf(i)==='land').sort((p,q)=>dist([p.x,p.y],[home.x,home.y])-dist([q.x,q.y],[home.x,home.y]))[0];
+  else if(st.tact==='attack'){tgt=nearest({x:c[0],y:c[1]},mL);tgt=tgt?tgt.m:null;
+   if(!tgt){const mb=MM.bases.filter(b=>b.own===ME).sort((p,q)=>dist(c,[p.x,p.y])-dist(c,[q.x,q.y]))[0];if(mb)tgt={x:mb.x,y:mb.y}}}
+  const order=L.slice().sort((p,q)=>tgt?dist([p.x,p.y],[tgt.x,tgt.y])-dist([q.x,q.y],[tgt.x,tgt.y]):0);
+  const send=defending?Math.max(2,Math.ceil(order.length*.75)):(order.length>=3?Math.ceil(order.length*.75):order.length);   /* при наступлении четверть армии остаётся в резерве */
+  /* глубокая оборона: если вторжение сильнее — отходим под защиту укрепрайона и бьём оттуда */
+  let fallback=null;
+  if(defending&&tgt){const loc=sumP(mine.filter(m=>dist([m.x,m.y],[tgt.x,tgt.y])<40)),ours=sumP(L.filter(q=>dist([q.x,q.y],[tgt.x,tgt.y])<70)),
+    fo=forts.filter(f=>f.hp>35).sort((p,q)=>dist([p.x,p.y],[tgt.x,tgt.y])-dist([q.x,q.y],[tgt.x,tgt.y]))[0],ral=fo||home;
+   if(loc>ours*1.35&&dist([tgt.x,tgt.y],[ral.x,ral.y])>(fo?SPEC.fort.rg-3:18)){fallback=ral;
+    if(MM.t-(st.fbT||-99)>45){st.fbT=MM.t;say('🛡 '+w.n+' отводит армию к '+(fo?'укрепрайону':'базе')+' и ждёт вторжение под огнём')}}}
+  order.forEach((u,i)=>{
+   if(MM.t-(u.fight||-99)<1.5&&!(fallback&&u.hp<45))return;                       /* в бою — стоим и бьём */
+   if(fallback){go(u,fallback.x+rnd(-5,5),fallback.y+rnd(-5,5));return}
+   if(tgt&&i<send){
+    const dT=dist([u.x,u.y],[tgt.x,tgt.y]);
+    if(!defending){
+     const loc=sumP(mine.filter(m=>dist([m.x,m.y],[tgt.x,tgt.y])<30)),ours=sumP(L.filter(q=>dist([q.x,q.y],[tgt.x,tgt.y])<60));
+     if(loc>ours*2.2&&dT<55)return;                         /* не лезем на превосходящие силы — окапываемся */
+     if(L.length>1&&dT>40&&dist([u.x,u.y],c)>40){go(u,c[0],c[1]);return}   /* сначала собираем армию */
+    }
+    go(u,tgt.x,tgt.y);return}
+   const b=nearestBase(u);if(!tgt&&b&&dist([u.x,u.y],[b.x,b.y])>90)go(u,b.x+rnd(-6,6),b.y+rnd(-6,6))   /* иначе держим позицию и окапываемся */
+  })}
+ /* --- флот: оборона побережья, засады подлодок, не лезет на превосходящих --- */
+ const SEA=my.filter(u=>kindOf(u)==='sea'&&!u.heal);
+ SEA.forEach(u=>{
+  if(MM.t-(u.fight||-99)<1.2)return;
+  const b=nearestBase(u),pp=b?[b.px,b.py]:[home.px,home.py],tg=nearest(u,mS);
+  if(u.sub==='submarine'){if(tg&&tg.d<45&&st.tact!=='turtle')go(u,tg.m.x,tg.m.y);return}
+  if(st.tact==='turtle'){if(dist([u.x,u.y],pp)>25)go(u,pp[0],pp[1]);return}
+  const threat=tg&&bases.some(q=>dist([tg.m.x,tg.m.y],[q.px,q.py])<75);
+  if(tg&&(threat||(st.tact==='attack'&&tg.d<120)||(st.tact==='raid'&&tg.d<150))){
+   const lp=sumP(mS.filter(m=>dist([m.x,m.y],[tg.m.x,tg.m.y])<35)),mp=sumP(SEA.filter(s=>dist([s.x,s.y],[tg.m.x,tg.m.y])<60));
+   if(threat||mp*2.2>=lp)go(u,tg.m.x,tg.m.y);else if(dist([u.x,u.y],pp)>25)go(u,pp[0],pp[1]);
+   return}
+  if(dist([u.x,u.y],pp)>30)go(u,pp[0]+rnd(-10,10),pp[1]+rnd(-6,6))   /* патруль у порта */
+ });
+ /* --- авиация: перехват, прикрытие, бомбёжка уязвимых целей без прикрытия истребителей --- */
+ my.filter(u=>kindOf(u)==='air'&&!u.heal).forEach(u=>{
+  const b=u.base||nearestBase(u);if(!b||u.mission==='rtb')return;
+  if(!(u.mission==='idle'||(u.mission==='patrol'&&!u.path.length)))return;
+  const S=SPEC[u.sub],R=S.range*.42;if(u.fuel<S.range*.7)return;
+  if(u.sub==='fighter'){
+   const ta=mA.filter(m=>dist([b.x,b.y],[m.x,m.y])<R).sort((p,q)=>dist([b.x,b.y],[p.x,p.y])-dist([b.x,b.y],[q.x,q.y]))[0];
+   if(ta&&(myFi<=eFi*2.5||near)){u.path=[[ta.x,ta.y]];u.mission='move';return}              /* перехват */
+   if((st.tact==='attack'||st.tact==='raid')&&L.length){const cx=L.reduce((a,q)=>a+q.x,0)/L.length,cy=L.reduce((a,q)=>a+q.y,0)/L.length;
+    if(dist([b.x,b.y],[cx,cy])<R&&MM.t-(u.aiT||-99)>10){u.aiT=MM.t;u.path=[[cx,cy]];u.mission='move'}}   /* прикрытие армии */
+   return}
+  if(st.tact==='turtle'||MM.t-(u.aiT||-99)<8)return;
+  const cand=mine.filter(m=>kindOf(m)!=='air'&&dist([b.x,b.y],[m.x,m.y])<R).map(m=>{
+   const danger=mA.filter(f=>f.sub==='fighter'&&dist([f.x,f.y],[m.x,m.y])<45).length,inside=inTerr(m)?2:0;
+   return{m,score:(VAL[m.sub]||1)+inside-danger*1.5}}).sort((p,q)=>q.score-p.score)[0];
+  if(!cand||cand.score<.6)return;
+  if(st.tact==='defend'&&!inTerr(cand.m))return;
+  u.aiT=MM.t;u.path=[[cand.m.x,cand.m.y]];u.mission='bomb';u.tgt=[cand.m.x,cand.m.y]
  });
 }
 
@@ -334,6 +545,8 @@ function sprite(sub,own){
  switch(sub){
   case'inf':return `<rect x="-12" y="-8.5" width="24" height="17" rx="2.5" fill="${c}" ${st}/><circle cx="-1" cy="-3.6" r="2" fill="#fff"/><path d="M-3.6 -1.4h5.2l1 6.4h-2.1l-.7-3.4-.7 3.4h-2.1z" fill="#fff"/><path d="M2 -1l6-4.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M-9 6.2h4M5 6.2h4" stroke="#fff" stroke-width="1" opacity=".6"/>`;
   case'tank':return `<rect x="-12" y="-8.5" width="24" height="17" rx="2.5" fill="${c}" ${st}/><rect x="-8" y="0" width="16" height="5" rx="2.5" fill="#fff"/><circle cx="-5" cy="2.5" r="1.1" fill="${c}"/><circle cx="0" cy="2.5" r="1.1" fill="${c}"/><circle cx="5" cy="2.5" r="1.1" fill="${c}"/><rect x="-4" y="-3.6" width="8.5" height="4.2" rx="1.6" fill="#fff"/><rect x="4" y="-2.6" width="8" height="1.5" fill="#fff"/>`;
+  case'fort':return `<rect x="-11" y="-8" width="22" height="16" rx="3" fill="${c}" ${st}/><path d="M-7 4a7 7 0 0 1 14 0z" fill="#fff"/><rect x="3" y="-3.2" width="11" height="2.6" rx="1" fill="#fff"/><path d="M-9 -5.5h18" stroke="#fff" stroke-width="1" stroke-dasharray="2 2" opacity=".6"/>`;
+  case'aabat':return `<circle r="10" fill="${c}" ${st}/><path d="M-4 4L-8 -8M0 4L0 -10M4 4L8 -8" stroke="#fff" stroke-width="2" stroke-linecap="round"/><circle r="2.4" cy="4" fill="#fff"/>`;
   case'destroyer':case'frigate':return `<path d="M-12 -3.2L6 -3.2L12.5 0L6 3.2L-12 3.2Z" fill="${c}" ${st}/><rect x="-3" y="-1.8" width="5" height="3.6" rx=".8" fill="#fff"/><circle cx="-8" cy="0" r="1.9" fill="#fff"/><circle cx="6" cy="0" r="1.6" fill="#fff"/><path d="M-12 0h-5" stroke="#fff" stroke-width="1" opacity=".5"/>`;
   case'carrier':return `<path d="M-13 -5L9 -5L13 -2.4V2.4L9 5L-13 5Z" fill="${c}" ${st}/><path d="M-11 0h20" stroke="#fff" stroke-width="1" stroke-dasharray="3 2.4"/><rect x="1" y="-5.4" width="5" height="3.2" fill="#fff"/><path d="M-9 -2.6l3 2.6-3 2.6" fill="none" stroke="#fff" stroke-width=".9"/>`;
   case'submarine':return `<ellipse cx="0" cy="0" rx="12" ry="3.1" fill="${c}" ${st}/><rect x="-2" y="-4.6" width="5" height="3.6" rx="1" fill="#fff"/><path d="M-12 0l-3 -2.4v4.8z" fill="${c}" ${st}/>`;
@@ -347,12 +560,29 @@ function ensureLayer(svg){
  const g=document.createElementNS(NS,'g');g.id='milmap';g.setAttribute('pointer-events','none');
  g.innerHTML='<g id="mm-bases"></g><g id="mm-range"></g><g id="mm-paths"></g><g id="mm-units"></g><g id="mm-fx"></g>';
  svg.appendChild(g);L={g,units:g.querySelector('#mm-units'),paths:g.querySelector('#mm-paths'),fx:g.querySelector('#mm-fx'),rng:g.querySelector('#mm-range'),bases:g.querySelector('#mm-bases'),els:{}}}
+function shotSvg(f,a,z){
+ const lp=p=>[f.x+(f.tx-f.x)*p,f.y+(f.ty-f.y)*p],dx=f.tx-f.x,dy=f.ty-f.y,len=Math.hypot(dx,dy)||1,nx=-dy/len,ny=dx/len,n2=v=>v.toFixed(2);
+ const col=f.mine?'#ffe27a':'#ff9a8a',ln=(p0,p1,w,c,o,extra)=>{const A=lp(p0),B=lp(p1);return `<line x1="${n2(A[0])}" y1="${n2(A[1])}" x2="${n2(B[0])}" y2="${n2(B[1])}" stroke="${c}" stroke-width="${w}" stroke-linecap="round" opacity="${o}" vector-effect="non-scaling-stroke" ${extra||''}/>`};
+ const dot=(P,r,c)=>`<circle cx="${n2(P[0])}" cy="${n2(P[1])}" r="${n2(r)}" fill="${c}"/>`;
+ switch(f.sub){
+  case'inf':case'fighter':case'aabat':{let o='';const k=f.sub==='inf'?2:f.sub==='aabat'?4:3;
+   for(let i=0;i<k;i++){const off=(i-(k-1)/2)*z*1.5,p1=clampN(a+i*.09,0,1),p0=clampN(p1-.32,0,1);const A=lp(p0),B=lp(p1);
+    o+=`<line x1="${n2(A[0]+nx*off)}" y1="${n2(A[1]+ny*off)}" x2="${n2(B[0]+nx*off)}" y2="${n2(B[1]+ny*off)}" stroke="${col}" stroke-width="1.6" stroke-linecap="round" vector-effect="non-scaling-stroke"/>`}
+   return o}
+  case'tank':{const H=lp(a);return ln(clampN(a-.3,0,1),a,1.8,'#ffd9a0',.8)+dot(H,z*1.8,'#fff3b0')}
+  case'destroyer':case'frigate':case'carrier':case'fort':{
+   const pt=p=>{const h=Math.sin(Math.PI*p)*len*.12,q=lp(p);return[q[0]+nx*h,q[1]+ny*h]};
+   const P=[a-.18,a-.12,a-.06,a].map(p=>pt(clampN(p,0,1)));
+   return `<polyline points="${P.map(q=>n2(q[0])+','+n2(q[1])).join(' ')}" fill="none" stroke="#ffd27a" stroke-width="1.6" stroke-dasharray="2 2" opacity=".85" vector-effect="non-scaling-stroke"/>`+dot(P[3],z*2,'#fff3b0')}
+  case'submarine':return ln(0,a,1.6,'#cfe8ff',.65,'stroke-dasharray="2 2"')+dot(lp(a),z*1.8,'#9fd0ff');
+  case'bomber':{const T=[f.tx,f.ty],r=z*(7*(1-a)+1.6);return `<circle cx="${n2(T[0])}" cy="${n2(T[1])}" r="${n2(r*1.6)}" fill="none" stroke="#fff" stroke-width="1" opacity="${n2(.5*a)}" vector-effect="non-scaling-stroke"/>`+dot(T,r,'#1c1f26')}
+ }return''}
 function paint(){
  const svg=MM.svg;if(!svg||!svg.isConnected)return;ensureLayer(svg);
- const r=svg.getBoundingClientRect();if(!r.width)return;const vb=svg.viewBox.baseVal,up=vb.width/r.width;
+ const r=svg.getBoundingClientRect();if(!r.width)return;const vb=svg.viewBox.baseVal,up=vb.width/r.width;MM.vis={x:vb.x,y:vb.y,w:vb.width,h:vb.height};
  /* базы */
  const sig=MM.bases.map(b=>b.id).join(',')+'|'+up.toFixed(3);
- if(L.bsig!==sig){L.bsig=sig;const k=up*13/10;L.bases.innerHTML=MM.bases.map(b=>`<g transform="translate(${b.x} ${b.y}) scale(${k})"><path d="M0 -9L8 6H-8Z" fill="#12233a" stroke="#f5d889" stroke-width="1.4"/><path d="M0 -3v6M-3 1h6" stroke="#f5d889" stroke-width="1.2"/></g>`).join('')}
+ if(L.bsig!==sig){L.bsig=sig;const k=up*13/10;L.bases.innerHTML=MM.bases.map(b=>{const c=(b.own&&b.own!==ME)?'#ff8a8a':'#f5d889';return `<g transform="translate(${b.x} ${b.y}) scale(${k})"><path d="M0 -9L8 6H-8Z" fill="#12233a" stroke="${c}" stroke-width="1.4"/><path d="M0 -3v6M-3 1h6" stroke="${c}" stroke-width="1.2"/></g>`}).join('')}
  /* юниты */
  const seen={};
  /* масштаб значков зависит от зума: на общем виде мелкие, при приближении крупнее */
@@ -373,10 +603,12 @@ function paint(){
   if(isLead&&grp.length>1){e.cnt.setAttribute('display','');e.cn.textContent=grp.length}else e.cnt.setAttribute('display','none');
   if(!isLead)return;
   const k=up*S.px/24*zf;
-  e.g.setAttribute('transform',`translate(${u.x.toFixed(2)} ${u.y.toFixed(2)}) scale(${k.toFixed(4)})`);
+  const fighting=MM.t-(u.fight||-99)<.25&&S.kind!=='air',airFight=S.kind==='air'&&MM.t-(u.fight||-99)<.6,jx=fighting?Math.sin(MM.t*55+u.x)*.55*up:airFight?Math.sin(MM.t*9+u.y)*1.1*up:0,jy=fighting?Math.cos(MM.t*47+u.y)*.55*up:airFight?Math.cos(MM.t*8+u.x)*1.1*up:0;
+  e.g.setAttribute('transform',`translate(${(u.x+jx).toFixed(2)} ${(u.y+jy).toFixed(2)}) scale(${k.toFixed(4)})`);
+  e.spr.setAttribute('opacity',MM.t-(u.hurt||-99)<.12?'.5':'1');
   const kind=S.kind;
   if(kind==='land'){e.spr.setAttribute('transform','')}
-  else{const deg=u.ang*180/Math.PI;e.spr.setAttribute('transform',`rotate(${deg.toFixed(1)})`)}
+  else{const deg=u.ang*180/Math.PI;e.spr.setAttribute('transform',`rotate(${deg.toFixed(1)})`+(airFight?` scale(1 ${Math.cos(MM.t*12+u.x).toFixed(2)})`:''))}
   e.bar.setAttribute('transform',`translate(0 ${kind==='land'?12:kind==='sea'?9:10})`);
   e.hp.setAttribute('width',(22*clampN(u.hp,0,100)/100).toFixed(1));e.hp.setAttribute('fill',u.hp>60?'#4ad66d':u.hp>30?'#f0c040':'#e0443e');
   const sel=MM.sel===u.id;e.ring.setAttribute('r',sel?(S.px*.62*zf).toFixed(1):'0');
@@ -389,11 +621,41 @@ function paint(){
   if(kindOf(u)==='air'){const b=u.base||nearestBase(u);if(b)rg=`<circle cx="${b.x}" cy="${b.y}" r="${SPEC[u.sub].range/2}" fill="#ffd76a10" stroke="#ffd76a" stroke-width="1" stroke-dasharray="2 4" vector-effect="non-scaling-stroke"/>`}}
  L.paths.innerHTML=pd;L.rng.innerHTML=rg;
  /* эффекты */
- L.fx.innerHTML=MM.fx.map(f=>{const a=(MM.t-f.t0)/f.life,s=up*(f.kind==='boom'?18:f.kind==='hit'?8:f.kind==='ping'?16:14)*f.s;
-  if(f.kind==='boom')return `<circle cx="${f.x}" cy="${f.y}" r="${(s*(.3+a)).toFixed(2)}" fill="#ff9d2e" opacity="${(.85*(1-a)).toFixed(2)}"/><circle cx="${f.x}" cy="${f.y}" r="${(s*(.15+a*.5)).toFixed(2)}" fill="#fff3b0" opacity="${(1-a).toFixed(2)}"/>`;
+ const z=up*zf,m30=30*up,inV=(x,y)=>x>vb.x-m30&&x<vb.x+vb.width+m30&&y>vb.y-m30&&y<vb.y+vb.height+m30;
+ L.fx.innerHTML=MM.fx.map(f=>{const a=(MM.t-f.t0)/f.life;
+  if(f.kind==='shot'){if(!inV(f.x,f.y)&&!inV(f.tx,f.ty))return'';return shotSvg(f,clampN(a,0,1),z)}
+  if(a<0)return'';
+  if(!inV(f.x,f.y))return'';
+  if(f.kind==='trail')return `<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(z*(1.1+a*2.4)).toFixed(2)}" fill="#fff" opacity="${(.5*(1-a)).toFixed(2)}"/>`;
+  if(f.kind==='wake'){const rr=z*(1.6+a*4.2)*f.s;return `<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${rr.toFixed(2)}" fill="none" stroke="#dff1ff" stroke-width="1.3" opacity="${(.55*(1-a)).toFixed(2)}" vector-effect="non-scaling-stroke"/><circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(z*1.3*f.s).toFixed(2)}" fill="#e8f6ff" opacity="${(.35*(1-a)).toFixed(2)}"/>`}
+  if(f.kind==='dust')return `<circle cx="${f.x.toFixed(2)}" cy="${(f.y-a*z*3).toFixed(2)}" r="${(z*(1.4+a*3.6)*f.s).toFixed(2)}" fill="#b89d72" opacity="${(.42*(1-a)).toFixed(2)}"/>`;
+  if(f.kind==='splash'){let o=`<circle cx="${f.x.toFixed(2)}" cy="${f.y.toFixed(2)}" r="${(z*(2+a*9)*f.s).toFixed(2)}" fill="none" stroke="#e9f7ff" stroke-width="1.6" opacity="${(.9*(1-a)).toFixed(2)}" vector-effect="non-scaling-stroke"/>`;
+   for(let i=0;i<5;i++){const an=i*1.26+1,h=Math.sin(Math.PI*Math.min(1,a*1.3)),rr=z*(2+a*7)*f.s;o+=`<circle cx="${(f.x+Math.cos(an)*rr*.7).toFixed(2)}" cy="${(f.y+Math.sin(an)*rr*.7-h*z*6*f.s).toFixed(2)}" r="${(z*.9).toFixed(2)}" fill="#fff" opacity="${(1-a).toFixed(2)}"/>`}
+   return o}
+  if(f.kind==='fire'){const fl=.7+.3*Math.sin(MM.t*30+f.x);return `<circle cx="${f.x.toFixed(2)}" cy="${(f.y-a*z*4).toFixed(2)}" r="${(z*(2.2-a)*fl).toFixed(2)}" fill="#ff7a1a" opacity="${(.85*(1-a)).toFixed(2)}"/><circle cx="${f.x.toFixed(2)}" cy="${(f.y-a*z*4).toFixed(2)}" r="${(z*1.1*fl).toFixed(2)}" fill="#ffe27a" opacity="${(1-a).toFixed(2)}"/>`}
+  if(f.kind==='ghost'){const S=SPEC[f.sub],k=up*S.px/24*zf,sp=sprite(f.sub,f.own),X=f.x,Y=f.y;
+   if(f.dk==='sink'){const deg=f.ang*180/Math.PI+a*32,op=Math.max(0,1-a*a),sc=k*(1-.3*a);
+    return `<circle cx="${X}" cy="${Y}" r="${(z*(5+a*12)).toFixed(2)}" fill="#071018" opacity="${(.5*Math.min(1,a*3)*(1-a*.4)).toFixed(2)}"/><g transform="translate(${X.toFixed(2)} ${Y.toFixed(2)}) scale(${sc.toFixed(4)})"><g transform="rotate(${deg.toFixed(1)})" opacity="${op.toFixed(2)}">${sp}</g></g>`+(a<.55?`<circle cx="${(X+Math.sin(MM.t*20)*z).toFixed(2)}" cy="${(Y-a*z*6).toFixed(2)}" r="${(z*2.4*(1-a)).toFixed(2)}" fill="#ff8a1f" opacity=".8"/>`:'')+`<circle cx="${(X+z*3).toFixed(2)}" cy="${(Y-z*4*a).toFixed(2)}" r="${(z*1.2).toFixed(2)}" fill="#fff" opacity="${(.5*(1-a)).toFixed(2)}"/>`}
+   if(f.dk==='crash'){const px=X+Math.cos(f.ang)*a*14,py=Y+Math.sin(f.ang)*a*14+a*a*6,deg=f.ang*180/Math.PI+a*640,sc=k*(1-.55*a);let tr='';
+    for(let i=1;i<=5;i++){const b=Math.max(0,a-i*.06);tr+=`<circle cx="${(X+Math.cos(f.ang)*b*14).toFixed(2)}" cy="${(Y+Math.sin(f.ang)*b*14+b*b*6).toFixed(2)}" r="${(z*(1.6+i*.5)).toFixed(2)}" fill="${i<3?'#ff9a2e':'#2b2f36'}" opacity="${(.7-i*.1).toFixed(2)}"/>`}
+    return tr+`<g transform="translate(${px.toFixed(2)} ${py.toFixed(2)}) scale(${sc.toFixed(4)})"><g transform="rotate(${deg.toFixed(1)})">${sp}</g></g>`}
+   return `<g transform="translate(${X.toFixed(2)} ${Y.toFixed(2)}) scale(${k.toFixed(4)})" opacity="${(.55*(1-a)).toFixed(2)}" style="filter:grayscale(1) brightness(.6)">${sp}</g><circle cx="${X.toFixed(2)}" cy="${(Y-a*z*5).toFixed(2)}" r="${(z*(2+a*3)).toFixed(2)}" fill="#2b2f36" opacity="${(.5*(1-a)).toFixed(2)}"/>`}
+  if(f.kind==='flash')return `<circle cx="${f.x}" cy="${f.y}" r="${(z*(2.5+a*4)).toFixed(2)}" fill="#fff3b0" opacity="${(1-a).toFixed(2)}"/>`;
+  if(f.kind==='smoke'){const cy=f.y-a*z*11*f.s,r=z*(3+a*8)*f.s;return `<circle cx="${f.x}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="#2b2f36" opacity="${(.5*(1-a)).toFixed(2)}"/><circle cx="${(f.x+z*2).toFixed(2)}" cy="${(cy-z*3).toFixed(2)}" r="${(r*.7).toFixed(2)}" fill="#454b55" opacity="${(.4*(1-a)).toFixed(2)}"/>`}
+  const s=up*((f.kind==='boom'||f.kind==='hit')?zf:1)*(f.kind==='boom'?18:f.kind==='hit'?8:f.kind==='ping'?16:14)*f.s;
+  if(f.kind==='boom')return `<circle cx="${f.x}" cy="${f.y}" r="${(s*(.6+a*1.8)).toFixed(2)}" fill="none" stroke="#fff" stroke-width="1.4" opacity="${(.6*(1-a)).toFixed(2)}" vector-effect="non-scaling-stroke"/><circle cx="${f.x}" cy="${f.y}" r="${(s*(.3+a)).toFixed(2)}" fill="#ff9d2e" opacity="${(.85*(1-a)).toFixed(2)}"/><circle cx="${f.x}" cy="${f.y}" r="${(s*(.15+a*.5)).toFixed(2)}" fill="#fff3b0" opacity="${(1-a).toFixed(2)}"/>`;
   if(f.kind==='ping')return `<circle cx="${f.x}" cy="${f.y}" r="${(s*(.2+a)).toFixed(2)}" fill="none" stroke="#ffd76a" stroke-width="1.6" opacity="${(1-a).toFixed(2)}" vector-effect="non-scaling-stroke"/>`;
   if(f.kind==='flag')return `<circle cx="${f.x}" cy="${f.y}" r="${(s*(.3+a)).toFixed(2)}" fill="none" stroke="#fff" stroke-width="2" opacity="${(1-a).toFixed(2)}" vector-effect="non-scaling-stroke"/>`;
   return `<circle cx="${f.x}" cy="${f.y}" r="${(s*(.3+a*.6)).toFixed(2)}" fill="#ffe27a" opacity="${(.9*(1-a)).toFixed(2)}"/>`}).join('');
+ /* солдаты в бою и окопы: перебежки вокруг армии, траншея у окопавшихся */
+ let extra='';
+ MM.units.forEach(u=>{const S=SPEC[u.sub];if(S.kind!=='land'||u.hid||!inV(u.x,u.y))return;
+  const R=z*(S.px/24)*12;
+  if(u.dug&&!S.static)extra+=`<ellipse cx="${u.x.toFixed(2)}" cy="${(u.y+R*.55).toFixed(2)}" rx="${(R*1.1).toFixed(2)}" ry="${(R*.38).toFixed(2)}" fill="none" stroke="#7a6038" stroke-width="2" stroke-dasharray="4 2" opacity=".85" vector-effect="non-scaling-stroke"/>`;
+  if(!S.static&&MM.t-(u.fight||-99)<.45){const col=u.own===ME?'#cfe2ff':'#ffd0d0';
+   for(let i=0;i<5;i++){const an=i*1.2566+MM.t*2.4,rr=R*(1.15+.25*Math.sin(MM.t*9+i*2));extra+=`<circle cx="${(u.x+Math.cos(an)*rr).toFixed(2)}" cy="${(u.y+Math.sin(an)*rr*.7).toFixed(2)}" r="${(z*1.15).toFixed(2)}" fill="${col}" stroke="#101820" stroke-width=".8" vector-effect="non-scaling-stroke"/>`}}
+  if(u.build)extra+=`<circle cx="${u.x.toFixed(2)}" cy="${u.y.toFixed(2)}" r="${(R*1.15).toFixed(2)}" fill="none" stroke="#ffd76a" stroke-width="1.6" stroke-dasharray="3 3" opacity="${(.5+.4*Math.sin(MM.t*6)).toFixed(2)}" vector-effect="non-scaling-stroke"/>`});
+ L.fx.innerHTML+=extra;
 }
 
 /* ---------- панель управления ---------- */
@@ -454,9 +716,10 @@ function attach(){
  const st=env.S();
  if(!MM.ready){
   const home=env.homeAnchor&&env.homeAnchor();
-  MM.bases=[];if(home){const w=snap('sea',home.x,home.y,260),p=w>=0?cellPt(w):[home.x,home.y];MM.bases.push({id:'home',name:home.name,x:home.x,y:home.y,px:p[0],py:p[1],own:ME})}
+  MM.bases=[];if(home){const w=snap('sea',home.x,home.y,260,true),p=w>=0?cellPt(w):[home.x,home.y];MM.bases.push({id:'home',name:home.name,x:home.x,y:home.y,px:p[0],py:p[1],own:ME})}
   if(st.milmap&&st.milmap.units&&st.milmap.units.length)restore(st.milmap);
   else{seedPlayer();MM.dirty=true}
+  MM.units.forEach(u=>{if(SPEC[u.sub].kind==='sea'&&!okCell('sea',cellOf(u.x,u.y))){const q=snap('sea',u.x,u.y,40,true);if(q>=0){const c=cellPt(q);u.x=c[0];u.y=c[1];u.path=[]}}});   /* корабль, оказавшийся на суше, возвращается в воду */
   try{ensureFleet()}catch(e){console.warn('MM fleet',e)}
   MM.ready=true;
   if(!raf){last=performance.now();raf=requestAnimationFrame(frame)}}
@@ -471,7 +734,7 @@ const API={
  speed(s){MM.speed=s;MM.dirty=true;paintHud(true)},
  deploy,deployProd:deployProduced
 };
-const core={MM,SPEC,DM,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
+const core={MM,SPEC,DM,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
 if(typeof module!=='undefined'&&module.exports){module.exports=core}
 if(typeof window!=='undefined'&&root===window){
  window.MilMap={depToggle(o){MM.depOpen=!!o},handleTap,attach,core,setNetworkState:core.setNetworkState};
