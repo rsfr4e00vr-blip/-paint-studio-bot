@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 global.window=global;require('./ai_nations.js');
 const cap=NationsAI.debtLimit({gdp:100,war:true,stability:20});
-assert.ok(Math.abs(cap-115)<1e-8,'wartime debt limit must be 115% GDP');
+assert.ok(Math.abs(cap-150)<1e-8,'ordinary wartime debt limit must be 150% GDP');
 assert.ok(NationsAI.debtLimit({gdp:100,war:false,stability:70})<100,'peacetime debt limit remains lower');
 const game=fs.readFileSync('./game.js','utf8');
 assert.match(game,/function strikeScene\(o\)\{[\s\S]*?if\(!o\)return;/,'strike scene must accept automatic calls');
@@ -10,7 +10,13 @@ assert.match(game,/strikeScene\(\{manual:1,kind:'strike',k,enemy:wname/,'arsenal
 const map=fs.readFileSync('./military_map.js','utf8');
 assert.match(map,/MM\.mode==='placeAA'/,'PVO placement mode exists');
 assert.match(map,/if\(q<0\)return null;const c=cellPt\(q\)/,'fleet seed must require a sea cell');
-assert.match(map,/const frameMs=isMobile\?42:33/,'mobile map redraw is throttled');
+assert.match(map,/const frameMs=sd>0\?\(IS_MOBILE\?50:33\):140/,'mobile map redraw is throttled');
 assert.match(map,/mm-pvo/,'world PVO marker layer exists');
 assert.match(fs.readFileSync('./game.js','utf8'),/countryPvoMarkers\(\)/,'country PVO markers are sourced from map geography');
-console.log('OK: automatic arsenal animation, sea-only fleet spawn, player PVO placement, mobile redraw throttle, 115% wartime debt cap');
+
+assert.match(map,/u\.autoRoute/,'auto-plan routes have a dedicated visual state');
+assert.match(map,/u\.own===ME\?\(zoomAlpha>\.035\|\|MM\.sel===u\.id\):zoomAlpha>\.002/,'enemy army icons remain visible at strategic zoom');
+assert.match(map,/const ceiling=gdp\*1\.5/,'map procurement credit is capped at 150% GDP');
+assert.match(game,/w\.wonBy='total-occupation'/,'total enemy occupation produces a completed victory state');
+assert.match(game,/w\.lostBy='total-occupation'/,'total occupation of player regions produces a defeat result');
+console.log('OK: automatic arsenal animation, sea-only fleet spawn, player PVO placement, mobile redraw throttle, strict 150% wartime debt ceiling');
