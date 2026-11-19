@@ -139,7 +139,7 @@ function townCond(regionCond,fate,hit){return Math.max(0,Math.min(100,100-(100-r
 let ITEMS=[],VER=0,LASTKEY='',LAYER=null;
 /* радиус города в единицах карты: 10 тыс. → 0.5, 100 тыс. → 1.25, 1 млн → 2, 10 млн → 2.75 (но не больше доли области) */
 function radius(pop,cap){const r=.5+.75*Math.log10(Math.max(1e4,pop||1e4)/1e4);return Math.max(.35,Math.min(r,cap?Math.max(.4,cap*.6):9))}
-const MAXVIS=260;
+const MAXVIS=typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width: 700px)').matches?90:160;
 /* Выбираем неперекрывающиеся значки: крупные города имеют приоритет,
    а мелкие появляются по мере приближения карты. Координаты проверяются в экранных пикселях. */
 function declutter(items,ppu,max=MAXVIS){

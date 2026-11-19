@@ -344,7 +344,7 @@ function aiThink(){
  if(!env||!env.wars)return;
  const difficulty=env.difficulty?env.difficulty():'normal';
  const aiScale=difficulty==='hard'?1.22:difficulty==='easy'?.78:1;
- const wars=env.wars();
+ const wars=env.wars().filter(w=>!w.won&&!w.dead&&!w.lost);
  const alive=new Set(wars.map(w=>w.n));
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
@@ -650,7 +650,7 @@ function paint(){
  all.forEach(u=>{seen[u.id]=1;const S=SPEC[u.sub];let e=L.els[u.id];
   if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#f5d889" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
   const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
-  const showAtZoom=u.own===ME?(zoomAlpha>.035||MM.sel===u.id):zoomAlpha>.002;
+  const showAtZoom=u.own===ME?(zoomAlpha>.035||MM.sel===u.id):true; // вражеские части видны и на общем масштабе
   e.g.setAttribute('display',isLead&&showAtZoom?'':'none');u.hid=!(isLead&&showAtZoom);
   if(isLead&&grp.length>1){e.cnt.setAttribute('display','');e.cn.textContent=grp.length}else e.cnt.setAttribute('display','none');
   if(!isLead)return;
@@ -755,7 +755,7 @@ function paintHud(force){if(force)paintClock();
 function snapshot(){return{v:1,fleetGiven:true,seq:MM.seq,speed:MM.speed,bases:MM.bases,units:MM.units.map(u=>({...u,base:u.base?(u.base.id?u.base.id:{...u.base}):null}))}}
 function restore(o){
  MM.seq=o.seq||1;MM.speed=o.speed==null?1:o.speed;MM.bases=o.bases||[];
- MM.units=(o.units||[]).filter(u=>SPEC[u.sub]).map(u=>{let b=null;if(SPEC[u.sub].kind==='air'){b=typeof u.base==='string'?(MM.bases.find(x=>x.id===u.base)||MM.bases[0]||null):(u.base&&typeof u.base==='object'?u.base:(MM.bases[0]||null))}return{...u,base:b,path:u.path||[],autoRoute:!!(u.autoRoute||u.autoTgt)}})}
+ MM.units=(o.units||[]).filter(u=>SPEC[u.sub]).map(u=>{let b=null;if(SPEC[u.sub].kind==='air'){b=typeof u.base==='string'?(MM.bases.find(x=>x.id===u.base)||MM.bases[0]||null):(u.base&&typeof u.base==='object'?u.base:(MM.bases[0]||null))}const legacyAuto=!!u.autoTgt;return{...u,base:b,path:u.path||[],autoRoute:!!(u.autoRoute||legacyAuto),autoTgt:u.autoTgt||null}})}
 function persist(){if(!env||!MM.dirty)return;MM.dirty=false;try{const st=env.S();st.milmap=snapshot();env.save()}catch(e){}}
 
 /* ---------- запуск ---------- */
@@ -766,9 +766,15 @@ function frame(ts){
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  const sd=running?dt*MM.speed:0;
  if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}}
- // На мобильных устройствах не перерисовываем тяжёлый SVG чаще 30 раз/с.
- // Шаг симуляции и таймер сохранения продолжают работать с исходной частотой.
- const frameMs=sd>0?(IS_MOBILE?50:33):140;if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>250||MM.hsig===null){lastHud=ts;paintHud(false)}}
+ // Экономный режим карты: симуляция и бои продолжают считать каждый кадр,
+ // но тяжёлый SVG обновляется реже. На телефоне — до 8 раз/с,
+ // на ПК — до 12 раз/с; на паузе — только 2 раза/с.
+ const frameMs=sd>0?(IS_MOBILE?125:83):500;
+ if(ts-lastPaint>=frameMs){
+  lastPaint=ts;
+  paint();
+  if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}
+ }
  saveT+=dt;if(saveT>4){saveT=0;persist()}}
 function attach(){
  if(!MM.visBound){MM.visBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&MM.ready&&!raf){last=performance.now();raf=requestAnimationFrame(frame)}})}
@@ -823,6 +829,6 @@ if(typeof window!=='undefined'&&root===window){
     }
   },150);
 };
- setInterval(()=>{try{attach()}catch(e){console.warn('MilMap',e)}},600);
+ setInterval(()=>{try{attach()}catch(e){console.warn('MilMap',e)}},1500);
 }
 })(typeof window!=='undefined'?window:globalThis);
