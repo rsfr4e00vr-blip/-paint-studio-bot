@@ -221,7 +221,7 @@ function regionOwner(C,r){const mp=mpRegionOwner(C,r);if(mp)return mp;const nm=C
 function ownerColor(owner,C,i){if(owner==='Вассал: '+C.name)return VAS;if(isMe(owner))return MYC;const w=WORLD.map[owner];return baseCol(w?(w.iso||w.name):owner,i)}
 function regFill(C,r,i){const owner=regionOwner(C,r);if(isMe(owner))return MYC;return owner===C.name?baseCol(C.iso,i):ownerColor(owner,C,i)}
 const ownSig=()=>JSON.stringify(S.captured||[])+'|'+Object.keys(taken()).join(',')+'|'+S.relations.filter(r=>r.annexed).map(r=>r.name).join(',')+'|'+myName()+'|'+(S.puppets||[]).join(',')+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.owners||{})+'|'+JSON.stringify(S.aiWorld&&S.aiWorld.regionOwners||{})+'|'+JSON.stringify(S.lostTo||{})+'|'+JSON.stringify(S.mpTerritories||{});
-function cityDamageSignature(){return (S.regions||[]).map(r=>(r.name||'')+':'+(r.assets||[]).map(a=>Math.round(Number(a.condition)||0)).join(',')+JSON.stringify(Object.fromEntries(Object.entries(r.townHit||{}).map(([k,v])=>[k,Math.round(v)])))).join('|')+'|'+(S.wars||[]).map(w=>Math.round(Object.values(w.regEco||{}).reduce((a,b)=>a+b,0))+':'+Math.round(Object.values(w.dmg||{}).reduce((a,d)=>a+d.infra+d.civ+d.mil,0))).join(',')}
+function cityDamageSignature(){return (S.regions||[]).map(r=>(r.name||'')+':'+(r.assets||[]).map(a=>Math.round(Number(a.condition)||0)).join(',')+JSON.stringify(Object.fromEntries(Object.entries(r.townHit||{}).map(([k,v])=>[k,Math.round(v)])))).join('|')+'|'+(S.wars||[]).map(w=>Math.round(Object.values(w.regEco||{}).reduce((a,b)=>a+b,0))+':'+Math.round(Object.values(w.dmg||{}).reduce((a,d)=>a+d.infra+d.civ+d.mil,0))).join(',')+'|rd:'+JSON.stringify(S.aiWorld&&S.aiWorld.regionDamage||{})}
 /* ---------- города в областях: у каждой области несколько городов (число зависит от населения) ---------- */
 const TWC={},TWPOS={},TWRAD={};
 const hstr=s=>{let h=0;s=String(s);for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h};
@@ -273,7 +273,7 @@ function drawCityMarkers(svg){
    const rb=r.cell&&r.cell.length>2?rbox(r.cell):[r.cx-1,r.cy-1,r.cx+1,r.cy+1],pad=Math.max(2,WZ.w*.035),zoomScale=GEO.W/Math.max(1,WZ.w);
    if(rb[2]<WZ.x-pad||rb[0]>WZ.x+WZ.w+pad||rb[3]<WZ.y-pad||rb[1]>WZ.y+WZ.h+pad||Math.max(rb[2]-rb[0],rb[3]-rb[1])*zoomScale<2.4)return;
    let cond=100;
-   if(war){const n=String(r.n||''),n0=n.replace(/ \(.*\)/,''),d=(war.dmg||{})[n]||(war.dmg||{})[n0],e=(war.regEco||{})[n]||(war.regEco||{})[n0]||0;cond=100-Math.min(98,e*1.1+(d?d.infra*4+d.civ*6+d.mil*2:0))}
+   if(war){const n=String(r.n||''),n0=n.replace(/ \(.*\)/,''),d=(war.dmg||{})[n]||(war.dmg||{})[n0],e=(war.regEco||{})[n]||(war.regEco||{})[n0]||0;cond=100-Math.min(98,e*1.1+(d?d.infra*4+d.civ*6+d.mil*2:0));if((war.cityDestroyed||[]).some(id=>String(id)===String(r.id))||Number(S.aiWorld&&S.aiWorld.regionDamage&&S.aiWorld.regionDamage[r.id])>=100)cond=0}
    const rp=Math.max(2e4,cpop*(r.s||100/Math.max(1,C.regs.length))/100),key='f'+r.id+'#'+Math.round(Math.log10(rp)*4);
    if(!TWC[key]){TWC[key]=CitySat.towns(r.id,r.n,rp,C.name,W0.cont,null);
     let rad=Math.min(r.cell&&r.cell.length>2?Math.min(rbox(r.cell)[2]-rbox(r.cell)[0],rbox(r.cell)[3]-rbox(r.cell)[1]):12,(C.bb[2]-C.bb[0]),(C.bb[3]-C.bb[1]))*.28;
@@ -342,13 +342,18 @@ function drawOcc(svg){
  g.replaceChildren();
  ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');const gg=geoOf(e);p.setAttribute('d',gg?gg.d:(e.getAttribute('d')||''));p.setAttribute('fill-rule','evenodd');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
 function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
- const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>r.d?`<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/>`:'').join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
+ const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/><path d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
  body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
  if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="none" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
  <linearGradient id="oceanGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071521"/><stop offset=".48" stop-color="#102b3b"/><stop offset="1" stop-color="#07131f"/></linearGradient>
  <radialGradient id="oceanGlow"><stop offset="0" stop-color="#2c7180" stop-opacity=".22"/><stop offset="1" stop-color="#0a1c2a" stop-opacity="0"/></radialGradient>
  <pattern id="oceanTexture" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M0 12 Q10 7 21 12 T42 12 M-8 31 Q2 26 13 31 T34 31" fill="none" stroke="#6fc3d1" stroke-opacity=".09" stroke-width=".7"/></pattern>
  <pattern id="terrainTexture" width="18" height="18" patternUnits="userSpaceOnUse"><path d="M-3 15 Q4 7 10 12 T22 5 M2 20 L8 14" fill="none" stroke="#f5e7c5" stroke-opacity=".42" stroke-width=".65"/><circle cx="4" cy="4" r=".8" fill="#fff" fill-opacity=".28"/></pattern>
+ <pattern id="terrainMountain" width="30" height="24" patternUnits="userSpaceOnUse"><path d="M2 21L10 7 18 21M12 21L21 4 29 21" fill="none" stroke="#f4f0df" stroke-opacity=".38" stroke-width="1.3"/><path d="M8 10l2-3 2 3M19 7l2-3 2 3" fill="none" stroke="#fff" stroke-opacity=".32"/></pattern>
+ <pattern id="terrainForest" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M5 17l4-9 4 9zM14 20l3-7 3 7z" fill="#244d37" fill-opacity=".16" stroke="#d8e5c5" stroke-opacity=".3" stroke-width=".7"/></pattern>
+ <pattern id="terrainHill" width="26" height="20" patternUnits="userSpaceOnUse"><path d="M-3 16Q5 4 13 16T29 16M-3 21Q5 9 13 21T29 21" fill="none" stroke="#f4e5c6" stroke-opacity=".32" stroke-width="1"/></pattern>
+ <pattern id="terrainWinter" width="26" height="22" patternUnits="userSpaceOnUse"><path d="M2 18L9 5 16 18M13 18L20 7 26 18" fill="none" stroke="#eaf6ff" stroke-opacity=".48" stroke-width="1.2"/><path d="M7 9l2-4 2 4M18 11l2-4 2 4" stroke="#fff" stroke-opacity=".55" fill="none"/></pattern>
+ <pattern id="terrainPlantation" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 5v14m0-10l-3-3m3 6l3-3M16 4v15m0-11l-3-3m3 6l3-3" fill="none" stroke="#d6e3b4" stroke-opacity=".34" stroke-width=".9"/></pattern>
  <style>.far [data-r]{stroke:none}</style>${cl.join('')}</defs>
  <rect class="ocean-base" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanGradient)"/>
  <rect class="ocean-lines" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanTexture)"/>
@@ -3112,6 +3117,15 @@ function warTick(){
   }else if(d > 1.8 && enemyHeld.length && Math.random()<.62){
    const name=enemyHeld[0],r=S.regions.find(x=>x.name===name);if(r){r.enemyOccupied=false;try{recordWarAttack(w,'ours','inf',r,false);fxPush({kind:'inf',k:'inf',enemy:w.n,regId:r.geo,title:`🚩 Освобождена «${r.name}»`,sub:'Контрнаступление'})}catch(e){}delete r.enemyOccupiedBy;S.gdp+=Math.max(0,r.occGdpLoss||0);delete r.occGdpLoss;delete S.enemyOccupied[name];S.stability=clamp(S.stability+.5);warNews(w,'🚩',`${name}: наши войска освободили область и восстановили её экономику.`);log(`🚩 Освобождена область «${name}» от войск ${w.n}; экономика региона восстановлена.`)}
   }
+  // Симметричное условие поражения: полный захват всех регионов игрока.
+  const homeRegions=S.regions||[];
+  if(homeRegions.length&&homeRegions.every(r=>r.enemyOccupied||S.enemyOccupied[r.name]===w.n)){
+   w.lost=1;w.lostBy='total-occupation';
+   log(`🏳 ${w.n}: все регионы страны заняты противником. Кампания потерпела поражение.`);
+   try{pause()}catch(e){}
+   try{warResultModal('loss',w,{})}catch(e){}
+   return;
+  }
   warEnemyCiv(w,d);enemyEcoTick(w,c,d);darkTickEnemy(w);enemyStrikes(w,c);branchTick(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(window.PVO){PVO.monthly(c,true);PVO.myMonthly(S);const nn1=aiNationOf(w.n);if(nn1)nn1.aa=c.aa}else if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
   if(w.m%3===0&&supply<30)log(`🚚 Критический кризис снабжения на фронте с ${w.n}: наступление замедлено.`);if(d>0&&w.m%6===0)log(`🪖 ${w.n} проводит мобилизацию, чтобы удержать фронт.`);c.value=clamp(c.value-.8,-100,100);
   // Даже полный прорыв фронта или окружение не завершают войну автоматически.
@@ -3128,6 +3142,17 @@ function warTick(){
    w.enemyPeaceRequested=1;
    log(`🕊 ${w.n} готова обсуждать прекращение войны после тяжёлых потерь. Война не закончится автоматически — требуется согласованное мирное соглашение.`);
    toast(`${w.n} готова к переговорам`);
+  }
+ });
+ // Полная оккупация всех регионов противника завершает войну и открывает итоги.
+ S.wars.forEach(w=>{
+  if(w.won||w.dead)return;
+  const all=regsOf(w.n)||[],occ=new Set((w.occ||[]).map(String));
+  if(all.length&&all.every(r=>occ.has(String(r.id))||!!taken()[r.id])){
+   w.p=100;w.won=1;w.wonBy='total-occupation';
+   log(`🏆 ${w.n}: все регионы заняты. Война завершена полной победой — выберите условия итогов.`);
+   try{updateWorld()}catch(e){}
+   try{toast(`🏆 Полная победа над ${w.n}!`)}catch(e){}
   }
  });
  S.wars=S.wars.filter(w=>!w.dead);try{baRefresh()}catch(e){}
@@ -4476,10 +4501,12 @@ function mmGeom(x,y){const key=Math.floor(y/2)*500+Math.floor(x/2);if(mmCache.ha
  for(const C of Object.values(GEO.c)){if(!C||!C.bb||!C.rings||x<C.bb[0]||x>C.bb[2]||y<C.bb[1]||y>C.bb[3])continue;if(!inside(x,y,C.rings))continue;
   let r=null,bd=1e18;for(const rg of C.regs||[]){let q=null;try{q=regClip(C,rg)}catch(e){}if(q&&q.polys&&inside(x,y,q.polys)){r=rg;break}if(Number.isFinite(rg.cx)){const d=(rg.cx-x)**2+(rg.cy-y)**2;if(d<bd){bd=d;r=rg}}}
   if(r){hit={C,r};break}}
- if(mmCache.size>12000)mmCache.clear();mmCache.set(key,hit);return hit}
+ if(mmCache.size>12000){let n=0;for(const k of mmCache.keys()){mmCache.delete(k);if(++n>=2000)break}}mmCache.set(key,hit);return hit}
 function mmRegionAt(x,y){const g=mmGeom(x,y);if(!g)return null;const {C,r}=g;
  const owner=regionOwner(C,r),mine=isMe(owner),war=(S.wars||[]).find(w=>w.n===C.name&&!w.won),occupied=!!(war&&(war.occ||[]).includes(r.id))||!!taken()[r.id];
- return{id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),x:Number.isFinite(r.cx)?r.cx:x,y:Number.isFinite(r.cy)?r.cy:y,country:C.name,mine,occupied,enemyWar:!!war&&!mine&&!occupied}}
+ const key=String(r.id||r.n||C.iso);let h=2166136261;for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),16777619)>>>0;
+ const terrains=['mountain','forest','hill','winter','plantation'];
+ return{id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),x:Number.isFinite(r.cx)?r.cx:x,y:Number.isFinite(r.cy)?r.cy:y,country:C.name,mine,occupied,enemyWar:!!war&&!mine&&!occupied,terrain:terrains[h%terrains.length]}}
 window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
  env(){return{GEO,WMAP,S:()=>S,save,toast,play,pause,isRunning:()=>running,difficulty:()=>S.difficulty||'normal',regionAt:mmRegionAt,
   wars:()=>(S.wars||[]).filter(w=>!w.won),
@@ -4489,7 +4516,7 @@ window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
    if(!r){for(const c of Object.values(GEO.c)){const q=(c.regs||[]).find(z=>Number.isFinite(z.cx)&&isMe(regionOwner(c,z)));if(q){C=c;r=q;break}}}
    if(!r){C=Object.values(GEO.c).find(c=>(c.regs||[]).some(z=>Number.isFinite(z.cx)));r=C&&C.regs.find(z=>Number.isFinite(z.cx))}
    return r?{x:r.cx,y:r.cy,name:String(r.n||C.name).replace(/ \(.*\)$/,'')}:null},
-  takeRegion(ra){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.occ=w.occ||[];if(!w.occ.includes(ra.id))w.occ.push(ra.id);w.p=Math.min(100,(Number(w.p)||50)+3);log('🚩 Армия заняла область «'+ra.name+'» ('+ra.country+').');WMAP.usig='';try{updateWorld()}catch(e){}save()},
+  takeRegion(ra){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.occ=w.occ||[];if(!w.occ.includes(ra.id))w.occ.push(ra.id);w.cityDestroyed=w.cityDestroyed||[];if(!w.cityDestroyed.some(id=>String(id)===String(ra.id)))w.cityDestroyed.push(ra.id);S.aiWorld=S.aiWorld||{};S.aiWorld.regionDamage=S.aiWorld.regionDamage||{};S.aiWorld.regionDamage[ra.id]=100;w.dmg=w.dmg||{};const d=w.dmg[ra.name]=w.dmg[ra.name]||{infra:0,civ:0,mil:0};d.infra=Math.max(d.infra||0,8);d.civ=Math.max(d.civ||0,8);d.mil=Math.max(d.mil||0,5);w.p=Math.min(100,(Number(w.p)||50)+3);log('🚩 Область «'+ra.name+'» ('+ra.country+') захвачена: городская инфраструктура уничтожена.');WMAP.usig='';try{updateWorld()}catch(e){}save()},
   bombRegion(ra){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.p=Math.min(100,(Number(w.p)||50)+1.2);w.dmg=w.dmg||{};const d=w.dmg[ra.name]=w.dmg[ra.name]||{infra:0,civ:0,mil:0};d.infra+=1;d.mil+=1;WMAP.usig=''},
   blockadeTarget(x,y){let best=null,bd=28*28;for(const C of Object.values(GEO.c)){const w=(S.wars||[]).find(z=>z.n===C.name&&!z.won);if(!w)continue;for(const r of C.regs||[]){if(!Number.isFinite(r.cx)||!Number.isFinite(r.cy))continue;const d=(r.cx-x)**2+(r.cy-y)**2;if(d<bd){bd=d;best={id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),country:C.name,x:r.cx,y:r.cy,enemyWar:true}}}}return best},
   blockadeRegion(ra,u){const w=(S.wars||[]).find(x=>x.n===ra.country&&!x.won);if(!w)return;w.blockade=w.blockade||{};w.blockade[ra.id]=Math.min(100,(Number(w.blockade[ra.id])||0)+1);w.blockadePower=Math.min(100,(Number(w.blockadePower)||0)+.35);w.blockadeLast=ra.name;w.p=Math.min(100,(Number(w.p)||50)+.12);WMAP.usig=''},

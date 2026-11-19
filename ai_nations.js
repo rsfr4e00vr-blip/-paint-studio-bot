@@ -10,7 +10,7 @@ function init(S){
  const W=S.aiWorld;W.version=3;W.player=player;W.events||=[];W.wars||=[];W.alliances||=[];W.owners||={};W.regionOwners||={};
  W.brain||={nn:null,steps:0,stat:{},mem:[],avg:0};
  /* gdp0 — ВВП на старте игры. Для старых сохранений восстанавливаем по той же формуле, по которой мир создавался. */
- W.nations.forEach(n=>{if(!(n.gdp0>0)){const c=window.WORLD&&WORLD.map&&WORLD.map[n.name];n.gdp0=c?Math.max(1,(+c.pop||1)*(+c.inc||1)*100):n.gdp}n.gh||=[];n.gpeak??=n.gdp});
+ W.nations.forEach(n=>{if(!(n.gdp0>0)){const c=window.WORLD&&WORLD.map&&WORLD.map[n.name];n.gdp0=c?Math.max(1,(+c.pop||1)*(+c.inc||1)*100):n.gdp}n.power0??=Math.max(1,Number(n.power)||1);n.gh||=[];n.gpeak??=n.gdp});
  W.nations.forEach(n=>{n.aa??=(window.PVO?PVO.base(n):Math.round(n.power/25));n.dmg??=0;n.manpower??=n.pop*.035;n.morale??=75;n.exhaustion??=0;n.industry??=1;n.infrastructure??=1;n.research??=1;n.exports??=0;n.imports??=0;n.cooldown??=0;n.tradePartners||=[];n.allies||=[];n.rivals||={};n.intrigue??=0;n.intent??='Развитие экономики';n.warPlan??=0;n.debt??=0;n.arrears??=0;n.defaults??=0;n.human=n.name===player});
 }
 let curS=null;
@@ -46,7 +46,12 @@ function ev(W,s){W.events.unshift(s);W.events.length=Math.min(W.events.length,80
 /* Мировая обстановка влияет на рост: война у торговых партнёров и общая «горячность» мира тормозят экономику. */
 let worldDrag=0,byNameCur={},curW=null;
 /* Госдолг ИИ-страны: на тяжёлой войне лимит долга выше (военные займы и облигации), казна может уходить в минус (дефицит). */
-const debtLimit=n=>n.gdp*(n.war?1.15:C(.25+n.stability/220,.35,.68));
+/* Военный долг: 150% ВВП — обычный предел. При критическом истощении армии страна может открыть чрезвычайное финансирование до 1000% ВВП. */
+const debtLimit=n=>n.gdp*(n.war?1.5:C(.25+n.stability/220,.35,.68));
+const warDebtCeiling=n=>{
+ // Единый предел военного заимствования: 150% ВВП, даже при критическом положении.
+ return n.gdp*(n.war?1.5:debtLimit(n)/Math.max(1,n.gdp));
+};
 function defaultNow(n){
  const W=curW,cut=n.debt*.6;n.debt-=cut;n.treasury=0;n.arrears=0;n.defaults=(n.defaults||0)+1;n.defMonth=W?W.month:0;n.noCredit=(W?W.month:0)+24;
  n.stability=C(n.stability-15,5,96);n.gdp*=.96;n.fx=C((n.fx||100)*1.4,45,700);n.relations-=15;
@@ -65,7 +70,7 @@ function debtService(n){
  const dr=n.debt/Math.max(1,n.gdp),rate=.0015+.004*Math.max(0,dr-.3)+(n.war?.001:0)+Math.max(0,50-n.stability)*.00004,it=n.debt*rate;
  n.treasury-=it;
  if(!n.war&&n.treasury>n.gdp*.04){const p=Math.min(n.debt,n.debt*.006+n.treasury*.02);n.debt-=p;n.treasury-=p}
- if(n.arrears>=8||n.debt>debtLimit(n)*1.35)defaultNow(n);
+ if(n.arrears>=8||n.debt>warDebtCeiling(n)*1.02)defaultNow(n);
 }
 /* Послевоенное восстановление ИИ-стран: разрыв с прежним пиком ВВП не исчезает сам.
    Пока страна не воюет, она медленно отстраивает инфраструктуру/промышленность и догоняет пик, но не быстрее, чем чинится инфраструктура. */
@@ -93,8 +98,8 @@ function economy(n){
  /* Разрешаем уходить в минус (бюджетный дефицит до -5% ВВП) при тяжёлых расходах */
  n.treasury=C(n.treasury+income-upkeep,-n.gdp*.05,n.gdp*.25);debtService(n);
  /* Военные займы ИИ при тяжёлой войне: кредит при дефиците казны, истощении или низком духе; каждый заём ослабляет валюту */
- if(n.war&&(n.treasury<n.gdp*.018||n.exhaustion>32||n.morale<48)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<debtLimit(n)){
-  const emer=Math.min(debtLimit(n)-n.debt,n.gdp*.07);
+ if(n.war&&(n.treasury<n.gdp*.018||n.exhaustion>32||n.morale<48||n.power<25)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<warDebtCeiling(n)){
+  const emer=Math.min(warDebtCeiling(n)-n.debt,n.gdp*.07);
   if(emer>n.gdp*.002){
    n.debt+=emer;n.treasury+=emer;
    n.power=C(n.power+emer*.14,2,150);
@@ -283,7 +288,7 @@ function think(W,n,A,m,wv){
  /* 2) допустимые действия и бюджет */
  const s=Math.min(n.treasury*.025,n.gdp*.0012),rich=s>=.5,peaceW=n.war?W.wars.find(w=>w.id===n.war):null;
  const ok=i=>{const a=ACTS[i];
-  if(a==='borrow')return(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.995&&n.treasury<n.gdp*.22;
+  if(a==='borrow')return(!n.noCredit||W.month>=n.noCredit)&&n.debt<warDebtCeiling(n)*.995&&n.treasury<n.gdp*.22;
   if(a==='repay')return n.debt>0&&n.treasury>n.gdp*.004;
   if(a==='mobilize'||a==='peace')return !!peaceW&&(a==='mobilize'?n.manpower>.05:peaceW.months>=2&&!peaceW.peaceReq);
   if(a==='rate')return (n.inflation||0)>8&&n.cbRate<15;
@@ -298,7 +303,7 @@ function think(W,n,A,m,wv){
  const debtR=(n.debt||0)/Math.max(1,n.gdp),cashR=n.treasury/Math.max(1,n.gdp),infl=n.inflation||0;
  if(debtR>.35){q[13]+=.22+Math.min(.55,(debtR-.35)*.8);q[0]+=.08}
  if(debtR>.65)q[13]+=.35;
- if(cashR<.018&&(!n.noCredit||W.month>=n.noCredit)&&n.debt<debtLimit(n)*.97)q[12]+=.36;
+ if(cashR<.018&&(!n.noCredit||W.month>=n.noCredit)&&n.debt<warDebtCeiling(n)*.97)q[12]+=.36;
  if(cashR<.004){q[0]+=.18;q[1]-=.12;q[4]-=.08}
  if(infl>10){q[14]+=.18+Math.min(.4,(infl-10)*.025);q[15]+=.1;q[16]+=.12}
  if(n.war){
@@ -335,7 +340,7 @@ function think(W,n,A,m,wv){
   case'trade':{const o=A.filter(b=>b!==n&&!b.war&&!n.tradePartners.includes(b.name)&&b.tradePartners.length<8);
    if(o.length&&Math.random()<.5){const b=P(o);n.tradePartners.push(b.name);b.tradePartners.push(n.name);ev(W,`🚢 ${n.name} и ${b.name} договорились о торговле`)}break}
   case'mobilize':{const r=Math.min(n.manpower*.05,2);n.power=C(n.power+r,2,150);n.manpower=Math.max(0,n.manpower-r*.5);n.morale=C(n.morale-1.5,15,100);n.exhaustion=C(n.exhaustion+1,0,100);break}
-  case'borrow':{const amt=Math.min(debtLimit(n)-n.debt,n.gdp*(n.war?.05:.02),n.gdp*.2-n.treasury);
+  case'borrow':{const amt=Math.min(warDebtCeiling(n)-n.debt,n.gdp*(n.war?.05:.02),n.gdp*.2-n.treasury);
    if(amt>n.gdp*.002){n.debt+=amt;n.treasury+=amt;
     if(n.war){n.power=C(n.power+amt*.15,2,150);n.morale=C(n.morale+1,15,100);if(Math.random()<.2)ev(W,`💳 ${n.name} берёт заём ${Math.round(amt)} на войну (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`)}
     else if(Math.random()<.05)ev(W,`💳 ${n.name} берёт заём ${Math.round(amt)} на развитие`)}
