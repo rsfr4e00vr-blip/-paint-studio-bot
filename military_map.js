@@ -269,12 +269,32 @@ function shoot(a,t){const c=SHOT[a.sub];if(!c||MM.fx.length>110)return;
  if(a.sub!=='submarine'&&a.sub!=='bomber')MM.fx.push({kind:'flash',x:a.x,y:a.y,t0:MM.t,life:.14,s:1});
  /* промахи: снаряды кораблей падают в воду рядом с целью */
  if(SPEC[t.sub].kind==='sea'&&(a.sub==='destroyer'||a.sub==='frigate'||a.sub==='carrier'||a.sub==='bomber')&&Math.random()<.45&&MM.fx.length<150)MM.fx.push({kind:'splash',x:t.x+rnd(-7,7),y:t.y+rnd(-7,7),s:.8,t0:MM.t+c.life*.8,life:.9})}
+/* Пространственная сетка боя: сохраняет порядок отрядов, но не сравнивает каждую
+   пару на глобальной карте. Радиус ячейки равен максимальной дальности атаки. */
+const COMBAT_CELL=24;
+function combatGrid(units){
+ const grid=new Map();
+ for(let i=0;i<units.length;i++){
+  const u=units[i],cx=Math.floor(u.x/COMBAT_CELL),cy=Math.floor(u.y/COMBAT_CELL),key=cx+','+cy;
+  let bucket=grid.get(key);if(!bucket)grid.set(key,bucket=[]);bucket.push(i);
+ }
+ return grid;
+}
+function combatNearby(grid,x,y,r){
+ const out=[],x0=Math.floor((x-r)/COMBAT_CELL),x1=Math.floor((x+r)/COMBAT_CELL),
+       y0=Math.floor((y-r)/COMBAT_CELL),y1=Math.floor((y+r)/COMBAT_CELL);
+ for(let cy=y0;cy<=y1;cy++)for(let cx=x0;cx<=x1;cx++){
+  const bucket=grid.get(cx+','+cy);if(bucket)for(let i=0;i<bucket.length;i++)out.push(bucket[i]);
+ }
+ out.sort((a,b)=>a-b);return out;
+}
 function combat(dt){
- const U=MM.units;
+ const U=MM.units,grid=combatGrid(U);
  for(let i=0;i<U.length;i++){const a=U[i];if(a.hp<=0)continue;const S=SPEC[a.sub];
   if(a.mission==='rtb'&&S.kind==='air'&&a.sub==='bomber')continue;
   let best=null,bd=1e9;
-  for(let j=0;j<U.length;j++){const t=U[j];if(t.hp<=0||!isEnemy(a,t))continue;
+  const nearby=combatNearby(grid,a.x,a.y,S.rg);
+  for(let n=0;n<nearby.length;n++){const j=nearby[n],t=U[j];if(t.hp<=0||!isEnemy(a,t))continue;
    const dm=DM[a.sub][SPEC[t.sub].kind];if(!dm)continue;
    let d=dist([a.x,a.y],[t.x,t.y]);
    if(t.sub==='submarine'&&a.sub!=='submarine'&&d>7)continue;  /* лодку видно только вблизи */
@@ -284,7 +304,7 @@ function combat(dt){
    if(a.sub==='fighter'&&best.sub==='bomber')dmg*=1.5;
    if(best.sub==='tank')dmg*=.85;
    if(best.sub==='fort')dmg*=.55;if(best.sub==='aabat')dmg*=.7;
-   if(a.own===ME&&kindOf(a)==='land'&&MM.units.some(q=>q.own===ME&&SPEC[q.sub].kind==='air'&&q.mission==='support'&&dist([q.x,q.y],[a.x,a.y])<14))dmg*=1.18;
+   if(a.own===ME&&kindOf(a)==='land'&&combatNearby(grid,a.x,a.y,14).some(qi=>{const q=U[qi];return q.own===ME&&SPEC[q.sub].kind==='air'&&q.mission==='support'&&dist([q.x,q.y],[a.x,a.y])<14}))dmg*=1.18;
    if(SPEC[best.sub].kind==='land'){if(best.dug)dmg*=.85;if(best.fort)dmg*=.88}
    best.hp-=dmg;a.fight=MM.t;best.hurt=MM.t;shoot(a,best);
    if(Math.random()<dt*3)addFx(best.x+rnd(-2,2),best.y+rnd(-2,2),'hit',1);
