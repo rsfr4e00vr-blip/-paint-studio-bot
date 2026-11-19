@@ -761,8 +761,8 @@ function persist(){if(!env||!MM.dirty)return;MM.dirty=false;try{const st=env.S()
 /* ---------- запуск ---------- */
 let raf=0,last=0,lastPaint=0,lastHud=0,acc=0,saveT=0;const IS_MOBILE=!!(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));
 function frame(ts){
- raf=requestAnimationFrame(frame);
- const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(document.hidden||!MM.ready)return;
+ if(!document.hidden)raf=requestAnimationFrame(frame);else{raf=0;return}
+ const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(!MM.ready)return;
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  const sd=running?dt*MM.speed:0;
  if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}}
@@ -771,6 +771,7 @@ function frame(ts){
  const frameMs=sd>0?(IS_MOBILE?50:33):140;if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>250||MM.hsig===null){lastHud=ts;paintHud(false)}}
  saveT+=dt;if(saveT>4){saveT=0;persist()}}
 function attach(){
+ if(!MM.visBound){MM.visBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&MM.ready&&!raf){last=performance.now();raf=requestAnimationFrame(frame)}})}
  const G=window.NG&&NG.__mm;if(!G)return;
  if(!G.WMAP.node||G.GEO.st!=='ready')return;
  if(MM.svg===G.WMAP.node&&MM.ready)return;
