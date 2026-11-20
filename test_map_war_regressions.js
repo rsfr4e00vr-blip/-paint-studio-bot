@@ -24,3 +24,6 @@ check(map.includes("if(!MM.open){fab.textContent='🪖 Войска · '+mine.le
 check(map.includes('stationed.forEach(g=>{const extra='),'peacetime garrisons become active AI units when war begins');
 check(map.includes('function ownerColor(own)'),'each country receives a distinct 2D force colour');
 check(game.includes('playerCountry:()=>myName()'),"map garrison layer can exclude the player's own country");
+
+check(game.includes('Игровые армии и территории сохранены')&&!game.includes('trim(compact.milmap.units,180)'),'quota fallback preserves saved military units and territories');
+check(game.includes('Текущая партия остаётся открытой')&&game.includes('return saved;'),'failed local save reports the problem without resetting the live campaign');
