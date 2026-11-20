@@ -474,6 +474,8 @@ function commander(w,mine){
   const eHP=my.reduce((a,u)=>a+u.hp,0),mHP=mine.reduce((a,u)=>a+u.hp,0);
   if(st.hp){const dE=st.hp[0]-eHP,dM=st.hp[1]-mHP;tLearn(st.c,st.tact,clampN(.5+.5*(dM-dE)/(100*Math.max(2,my.length)),0,1))}
   st.c=ctx;st.tact=tPick(ctx);st.hp=[eHP,mHP];st.t=MM.t}
+ /* Даже если доктрина выбрала оборону, ИИ регулярно переходит в контратаку. */
+ if(MM.t-(st.lastOffensive||-99)>30){st.tact='attack';st.lastOffensive=MM.t}
  const nearest=(u,arr)=>{let b=null;arr.forEach(m=>{const d=dist([u.x,u.y],[m.x,m.y]);if(!b||d<b.d)b={m,d}});return b};
  /* отступление раненых на базу (лечатся у базы) */
  my.forEach(u=>{if(SPEC[u.sub].static)return;if(u.hp<30)u.heal=true;else if(u.hp>=75)u.heal=false;
@@ -700,7 +702,7 @@ const byId=id=>MM.units.find(u=>u.id===id)||(MM.garrisons||[]).find(u=>u.id===id
 
 /* ---------- 2D-модели ---------- */
 const COL={me:'#2f6fd0',en:'#d33a45'};
-function ownerColor(own){if(own===ME)return COL.me;if(String(own).startsWith('mp:'))return COL.en;let h=0;for(const ch of String(own||''))h=(h*31+ch.charCodeAt(0))%360;return `hsl(${h} 58% 47%)`}
+function ownerColor(own){return own===ME?COL.me:COL.en}
 const sym=pts=>pts.concat(pts.slice(0,-1).reverse().map(p=>[p[0],-p[1]])).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join('')+'Z';
 function sprite(sub,own){
  const c=ownerColor(own),st='stroke="#fff" stroke-width="1.1" stroke-linejoin="round"';
