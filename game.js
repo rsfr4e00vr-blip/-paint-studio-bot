@@ -416,16 +416,37 @@ function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GE
 function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{renderTerrainOverlays()}catch(e){}try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
 /* Не держим десятки тысяч дублирующих SVG-путей рельефа в DOM. Текстуры прежние,
    но создаются только для провинций в текущем окне просмотра. */
+const TERRAIN_GRID=new WeakMap(),TERRAIN_CELL=24,TERRAIN_MAX=180;
+function terrainIndex(C){
+ let idx=TERRAIN_GRID.get(C);if(idx)return idx;
+ idx=new Map();
+ for(const r of C.regs||[]){
+  if(!r.d||!Number.isFinite(r.cx)||!Number.isFinite(r.cy))continue;
+  const key=Math.floor(r.cx/TERRAIN_CELL)+','+Math.floor(r.cy/TERRAIN_CELL);
+  let bucket=idx.get(key);if(!bucket)idx.set(key,bucket=[]);bucket.push(r);
+ }
+ TERRAIN_GRID.set(C,idx);return idx;
+}
 function renderTerrainOverlays(){
- const svg=WMAP.node;if(!svg)return;const far=WZ.w>GEO.W*.4;
- for(const C of Object.values(GEO.c)){const g=document.getElementById('terrain-detail-'+C.iso);if(!g)continue;
-  if(far){if(g.childNodes.length)g.replaceChildren();continue}
-  const pad=WZ.w*.08,x0=WZ.x-pad,x1=WZ.x+WZ.w+pad,y0=WZ.y-WZ.h*.08,y1=WZ.y+WZ.h*1.08;
-  if(C.bb&&(C.bb[2]<x0||C.bb[0]>x1||C.bb[3]<y0||C.bb[1]>y1)){if(g.childNodes.length)g.replaceChildren();continue}
-  const parts=[];for(const r of C.regs||[]){if(!r.d||!Number.isFinite(r.cx)||!Number.isFinite(r.cy)||r.cx<x0||r.cx>x1||r.cy<y0||r.cy>y1)continue;
-   const key=String(r.id||r.n||C.iso);let h=2166136261;for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),16777619)>>>0;
-   const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5];parts.push(`<path d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`)
+ const svg=WMAP.node;if(!svg)return;
+ const far=WZ.w>GEO.W*.4,pad=WZ.w*.08,x0=WZ.x-pad,x1=WZ.x+WZ.w+pad,y0=WZ.y-WZ.h*.08,y1=WZ.y+WZ.h*1.08;
+ for(const C of Object.values(GEO.c)){
+  const g=document.getElementById('terrain-detail-'+C.iso);if(!g)continue;
+  if(far){if(g.childNodes.length)g.replaceChildren();g.dataset.sig='';continue}
+  if(C.bb&&(C.bb[2]<x0||C.bb[0]>x1||C.bb[3]<y0||C.bb[1]>y1)){if(g.childNodes.length)g.replaceChildren();g.dataset.sig='';continue}
+  const idx=terrainIndex(C),found=[],seen=new Set(),cx0=Math.floor(x0/TERRAIN_CELL),cx1=Math.floor(x1/TERRAIN_CELL),cy0=Math.floor(y0/TERRAIN_CELL),cy1=Math.floor(y1/TERRAIN_CELL);
+  for(let cy=cy0;cy<=cy1;cy++)for(let cx=cx0;cx<=cx1;cx++){
+   const bucket=idx.get(cx+','+cy);if(!bucket)continue;
+   for(const r of bucket)if(r.cx>=x0&&r.cx<=x1&&r.cy>=y0&&r.cy<=y1&&!seen.has(r.id)){seen.add(r.id);found.push(r)}
   }
+  const mx=(x0+x1)/2,my=(y0+y1)/2;
+  if(found.length>TERRAIN_MAX){found.sort((a,b)=>(a.cx-mx)**2+(a.cy-my)**2-((b.cx-mx)**2+(b.cy-my)**2));found.length=TERRAIN_MAX}
+  const sig=found.map(r=>r.id).join('|');if(g.dataset.sig===sig)continue;g.dataset.sig=sig;
+  const parts=found.map(r=>{
+   const key=String(r.id||r.n||C.iso);let h=2166136261;for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),16777619)>>>0;
+   const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5];
+   return `<path d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`;
+  });
   g.innerHTML=parts.join('');
  }
 }
