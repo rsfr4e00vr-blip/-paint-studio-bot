@@ -3396,6 +3396,18 @@ function offerPeaceOne(name){
  }
  save();render();
 }
+function finalizeAnnexedCountry(name,c){
+ if(!c)return;c.annexed=true;c.power=0;c.popLeft=0;
+ S.puppets=(S.puppets||[]).filter(x=>x!==name);
+ for(const k of ['puppetData','regimes','spyNetworks','spyReports','spyCooldowns','pacts','embassies'])if(S[k])delete S[k][name];
+ if(Array.isArray(S.allies))S.allies=S.allies.filter(x=>x!==name);
+ if(S.aiWorld){
+  const an=(S.aiWorld.nations||[]).find(x=>x.name===name);if(an){an.annexed=1;an.eliminated=1;an.power=0}
+  S.aiWorld.owners=S.aiWorld.owners||{};S.aiWorld.owners[name]=myName();
+  const ro=S.aiWorld.regionOwners||{};Object.keys(ro).forEach(k=>{if(k.startsWith(name+'|'))ro[k]=myName()});
+ }
+ S.wars=(S.wars||[]).filter(x=>x.n!==name);S.war=S.wars.length>0||!!S.martial;
+}
 function spoils(name,mode,rid,keep){
  const w=S.wars.find(x=>x.n===name),c=rel(name);if(!w||!c)return;if(w.def)aiGoalReward(name,-1);
  const k=w.won?1:.4+.6*w.p/100,W=wi(name);let shock=0;
@@ -3414,9 +3426,9 @@ function spoils(name,mode,rid,keep){
   const basePop=W.pop?W.pop*1e6:c.power*3500;let p=Math.round(Math.min(basePop*(R.s/100),c.popLeft,S.pop*.12));p=Math.max(p,Math.min(60000,c.popLeft));const g=Math.round(Math.min(p*gpc,S.gdp*.1));
   shock=Math.max(.04,Math.min(.35,R.s/100));c.popLeft=Math.max(0,c.popLeft-p);c.regLost=n;grab(R.n,p,g,false,R.res);ch({stability:-2,threat:3,legitimacy:-1},false);c.value=clamp(-45,-100,100);c.power=Math.max(10,Math.round(c.power*.8));
   log(`🗺 Вы захватили регион: ${R.n} (${name}). Население +${fmt(p)}, ВВП +${fmt(g)}.`);if(!keep)intlReact(name,'region');
-  if(rg&&rg.every(x=>taken()[x.id])){c.annexed=true;S.puppets=S.puppets.filter(x=>x!==name);log(`🏴 Вы захватили все регионы — ${name} исчезла с карты мира.`)}}
+  if(rg&&rg.length&&rg.every(x=>taken()[x.id])){finalizeAnnexedCountry(name,c);log(`🏴 Вы захватили все регионы — ${name} присоединена и исключена из активного ИИ.`)}}
  if(mode==='annex'){const p=Math.round(Math.min(c.popLeft,S.pop*.5)),g=Math.round(Math.min(p*gpc*1.1,S.gdp*.35));
-  grab(`Земли ${name}`,p,g,true);{const rg=regsOf(name)||[];S.captured[S.captured.length-1].regs=rg.filter(x=>!taken()[x.id]).map(x=>x.n);rg.forEach(x=>taken()[x.id]=1)}shock=1;c.annexed=true;c.power=0;c.popLeft=0;S.puppets=(S.puppets||[]).filter(x=>x!==name);if(S.puppetData)delete S.puppetData[name];if(S.regimes)delete S.regimes[name];if(S.spyNetworks)delete S.spyNetworks[name];if(S.spyReports)delete S.spyReports[name];if(S.allies)S.allies=S.allies.filter(x=>x!==name);if(S.pacts)delete S.pacts[name];if(S.embassies)delete S.embassies[name];S.wars=(S.wars||[]).filter(x=>x.n!==name);S.war=S.wars.length>0||!!S.martial;ch({stability:-5,legitimacy:-2,threat:8,rel:-6,reg:4},false);log(`🏴 Полностью захвачено государство ${name}: население +${fmt(p)}, ВВП +${fmt(g)}. Страна исчезла с карты мира, её земли показаны на вашей карте.`);intlReact(name,'annex')}
+  grab(`Земли ${name}`,p,g,true);{const rg=regsOf(name)||[];S.captured[S.captured.length-1].regs=rg.filter(x=>!taken()[x.id]).map(x=>x.n);rg.forEach(x=>taken()[x.id]=1)}shock=1;finalizeAnnexedCountry(name,c);ch({stability:-5,legitimacy:-2,threat:8,rel:-6,reg:4},false);log(`🏴 Полностью захвачено государство ${name}: население +${fmt(p)}, ВВП +${fmt(g)}. Страна исчезла с карты мира, её земли показаны на вашей карте.`);intlReact(name,'annex')}
  if(mode==='regime'){shock=.1;const prev=c.ideology||GrandDiplomacy.orientation(c),me={name:S.name||S.me||'Игрок',ideology:S.ideology||'прагматизм'},an=((S.aiWorld&&S.aiWorld.nations)||[]).find(x=>x.name===name);
   S.regimes=S.regimes||{};S.regimes[name]={month:mt(),prev,loyalty:62,supported:0};
   c.ideology=me.ideology;c.value=clamp(Math.max(c.value,10)+45,-100,100);c.power=Math.max(10,Math.round(c.power*.85));c.aggr=Math.max(.05,(c.aggr||.4)*.4);
