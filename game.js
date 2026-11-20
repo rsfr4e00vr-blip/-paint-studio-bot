@@ -3113,11 +3113,47 @@ function warTick(){
   /* ИИ не только обороняется: при успехе он занимает наши области, а при переломе фронта мы их освобождаем. */
   S.enemyOccupied=S.enemyOccupied||{};
   const enemyHeld=Object.keys(S.enemyOccupied).filter(k=>S.enemyOccupied[k]===w.n);
-  if(d < -1.8 && w.p < 48 && S.regions.length && Math.random()<.42){
-   const target=(S.regions.filter(r=>!r.enemyOccupied).sort((a,b)=>(b.industry*.55+b.infra*.25+b.pop/1000000*.2)-(a.industry*.55+a.infra*.25+a.pop/1000000*.2))[0]);
-   if(target){const share=clamp(target.pop/Math.max(1,S.pop),.015,.18),loss=Math.max(1,S.gdp*share*.22);target.enemyOccupied=true;try{recordWarAttack(w,'enemy','inf',target,false);fxPush({kind:'inf',rev:1,k:'inf',enemy:w.n,regId:target.geo,title:`🪖 ${w.n} занимает «${target.name}»`,sub:'Область занята противником'})}catch(e){}target.enemyOccupiedBy=w.n;target.occGdpLoss=loss;S.enemyOccupied[target.name]=w.n;S.gdp=Math.max(100,S.gdp-loss);S.money=Math.max(0,S.money-30);S.stability=clamp(S.stability-1.2);warNews(w,'🏴',`${target.name}: противник занял область! Регион временно потерян, ВВП страны снизился.`);log(`🏴 ${w.n} захватила область «${target.name}». ВВП −${fmt(loss)} млрд; регион отмечен как оккупированный.`)}
-  }else if(d > 1.8 && enemyHeld.length && Math.random()<.62){
-   const name=enemyHeld[0],r=S.regions.find(x=>x.name===name);if(r){r.enemyOccupied=false;try{recordWarAttack(w,'ours','inf',r,false);fxPush({kind:'inf',k:'inf',enemy:w.n,regId:r.geo,title:`🚩 Освобождена «${r.name}»`,sub:'Контрнаступление'})}catch(e){}delete r.enemyOccupiedBy;S.gdp+=Math.max(0,r.occGdpLoss||0);delete r.occGdpLoss;delete S.enemyOccupied[name];S.stability=clamp(S.stability+.5);warNews(w,'🚩',`${name}: наши войска освободили область и восстановили её экономику.`);log(`🚩 Освобождена область «${name}» от войск ${w.n}; экономика региона восстановлена.`)}
+  /* Territory changes require a real land unit at the province. */
+  const mapCore=window.MilMap&&MilMap.core;
+  const mapUnits=mapCore&&mapCore.MM&&Array.isArray(mapCore.MM.units)?mapCore.MM.units:[];
+  const geo=window.NG&&NG.__mm&&NG.__mm.env?NG.__mm.env().GEO:null;
+  let coordCache=window.__novariaWarRegionCoords;
+  if(geo&&geo.c&&(!coordCache||coordCache.geo!==geo)){
+    const byId=new Map(),byName=new Map();
+    Object.values(geo.c).forEach(C=>(C.regs||[]).forEach(q=>{
+      if(!Number.isFinite(q.cx)||!Number.isFinite(q.cy))return;
+      const p={x:q.cx*1000/Math.max(1,Number(geo.W)||1000),y:q.cy*575/Math.max(1,Number(geo.H)||575)};
+      if(q.id!=null)byId.set(String(q.id),p);
+      const n=String(q.n||'').replace(/ \\(.*\\)$/,'');if(n&&!byName.has(n))byName.set(n,p);
+    }));
+    coordCache=window.__novariaWarRegionCoords={geo,byId,byName};
+  }
+  const regionPoint=r=>coordCache&&(r.geo!=null?coordCache.byId.get(String(r.geo)):null)||coordCache&&coordCache.byName.get(String(r.name))||null;
+  const groundUnitAt=(owner,r)=>{
+    const p=regionPoint(r);if(!p)return false;
+    return mapUnits.some(u=>u&&u.own===owner&&u.hp>0&&(u.sub==='inf'||u.sub==='tank')&&Math.hypot(Number(u.x)-p.x,Number(u.y)-p.y)<=18);
+  };
+  if(d < -1.8 && w.p < 48 && S.regions.length){
+    const target=S.regions.filter(r=>!r.enemyOccupied&&groundUnitAt(w.n,r)).sort((x,y)=>(y.industry*.55+y.infra*.25+y.pop/1000000*.2)-(x.industry*.55+x.infra*.25+x.pop/1000000*.2))[0];
+    if(target){
+      const share=clamp(target.pop/Math.max(1,S.pop),.015,.18),loss=Math.max(1,S.gdp*share*.22);
+      target.enemyOccupied=true;
+      try{recordWarAttack(w,'enemy','inf',target,false);fxPush({kind:'inf',rev:1,k:'inf',enemy:w.n,regId:target.geo,title:`🪖 ${w.n} занимает «${target.name}»`,sub:'Область занята противником'})}catch(e){}
+      target.enemyOccupiedBy=w.n;target.occGdpLoss=loss;S.enemyOccupied[target.name]=w.n;
+      S.gdp=Math.max(100,S.gdp-loss);S.money=Math.max(0,S.money-30);S.stability=clamp(S.stability-1.2);
+      warNews(w,'🏴',`${target.name}: противник занял область! Регион временно потерян, ВВП страны снизился.`);
+      log(`🏴 ${w.n} захватила область «${target.name}». ВВП −${fmt(loss)} млрд; регион отмечен как оккупированный.`);
+    }
+  }else if(d > 1.8 && enemyHeld.length){
+    const name=enemyHeld.find(k=>{const r=S.regions.find(x=>x.name===k);return r&&groundUnitAt('me',r)});
+    const r=name&&S.regions.find(x=>x.name===name);
+    if(r){
+      r.enemyOccupied=false;
+      try{recordWarAttack(w,'ours','inf',r,false);fxPush({kind:'inf',k:'inf',enemy:w.n,regId:r.geo,title:`🚩 Освобождена «${r.name}»`,sub:'Контрнаступление'})}catch(e){}
+      delete r.enemyOccupiedBy;S.gdp+=Math.max(0,r.occGdpLoss||0);delete r.occGdpLoss;delete S.enemyOccupied[name];
+      S.stability=clamp(S.stability+.5);warNews(w,'🚩',`${name}: наши войска освободили область и восстановили её экономику.`);
+      log(`🚩 Освобождена область «${name}» от войск ${w.n}; экономика региона восстановлена.`);
+    }
   }
   // Симметричное условие поражения: полный захват всех регионов игрока.
   const homeRegions=S.regions||[];
