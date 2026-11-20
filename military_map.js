@@ -378,10 +378,13 @@ function aiThink(){
  const alive=new Set(wars.map(w=>w.n));
  wars.forEach(w=>{
   const stationed=(MM.garrisons||[]).filter(u=>u.own===w.n);
-  if(!stationed.length)return;
-  const first=stationed[0],base=addEnemyBase(w.n,{x:first.x,y:first.y});
-  stationed.forEach(g=>{const extra={name:g.name,base:SPEC[g.sub].kind==='air'?base:null};mk(w.n,g.sub,g.x,g.y,extra)});
-  MM.garrisons=MM.garrisons.filter(u=>u.own!==w.n);
+  if(stationed.length){
+   const first=stationed[0],base=addEnemyBase(w.n,{x:first.x,y:first.y});
+   stationed.forEach(g=>{if(!MM.units.some(u=>u.own===w.n&&u.sub===g.sub))mk(w.n,g.sub,g.x,g.y,{name:g.name,base:SPEC[g.sub].kind==='air'?base:null})});
+   MM.garrisons=MM.garrisons.filter(u=>u.own!==w.n);
+  }
+  /* Если у страны не было мирных маркеров, разворачиваем начальные силы прямо при первом тике войны. */
+  if(!MM.units.some(u=>u.own===w.n))activateWarForces(w.n);
  });
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
@@ -594,6 +597,48 @@ function seedWorldGarrisons(){
   let sea=-1;for(const rr of pts.slice(0,Math.min(pts.length,8))){const rp=toSim({x:rr.cx,y:rr.cy});sea=snap('sea',rp.x,rp.y,18,true);if(sea>=0)break}
   if(sea>=0){const q=cellPt(sea);add('destroyer',q[0],q[1],'Флот '+C.name)}
  });
+}
+function activateWarForces(name){
+ if(!name||!env||!MM.ready)return 0;
+ const already=MM.units.filter(u=>u.own===name);
+ const garrison=(MM.garrisons||[]).filter(u=>u.own===name);
+ if(garrison.length){
+  const first=garrison[0],base=addEnemyBase(name,{x:first.x,y:first.y});
+  garrison.forEach(u=>mk(name,u.sub,u.x,u.y,{name:u.name,base:SPEC[u.sub].kind==='air'?base:null}));
+  MM.garrisons=MM.garrisons.filter(u=>u.own!==name);
+ }
+ const C=env.GEO&&env.GEO.c&&env.GEO.c[name];
+ const regs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
+ let sp=null;
+ try{if(env.enemySpawn)sp=toSim(env.enemySpawn(name))}catch(e){}
+ if(!sp&&regs.length){const r=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0))[0];sp=toSim({x:r.cx,y:r.cy})}
+ if(!sp&&already.length)sp={x:already[0].x,y:already[0].y};
+ if(!sp)return MM.units.filter(u=>u.own===name).length;
+ const base=addEnemyBase(name,sp);
+ const ensure=(sub,x,y,label)=>{
+  if(MM.units.some(u=>u.own===name&&u.sub===sub))return;
+  const q=mk(name,sub,x,y,{name:label,base:SPEC[sub].kind==='air'?base:null});
+  q.fuel=SPEC[sub].range||q.fuel;return q;
+ };
+ const land=(dx,dy)=>{
+  const q=snap('land',sp.x+dx,sp.y+dy,Math.max(14,Math.hypot(dx,dy)+10));
+  return q>=0?cellPt(q):null;
+ };
+ const p1=land(0,0),p2=land(5,4),p3=land(-5,-4);
+ if(p1&&!MM.units.some(u=>u.own===name&&SPEC[u.sub].kind==='land'&&!SPEC[u.sub].static))ensure('inf',p1[0],p1[1],'Пехота '+name);
+ if(p2&&!MM.units.some(u=>u.own===name&&u.sub==='tank'))ensure('tank',p2[0],p2[1],'Танки '+name);
+ if(p3&&!MM.units.some(u=>u.own===name&&u.sub==='aabat'))ensure('aabat',p3[0],p3[1],'ПВО '+name);
+ const air=land(2,-3)||p1||p2;
+ if(air){ensure('fighter',air[0],air[1],'Истребители '+name);ensure('bomber',air[0]+.8,air[1]+.8,'Бомбардировщики '+name)}
+ let sea=-1;
+ for(const r of regs.slice(0,Math.min(regs.length,12))){
+  const rp=toSim({x:r.cx,y:r.cy});if(!rp)continue;
+  sea=snap('sea',rp.x,rp.y,40,true);if(sea>=0)break;
+ }
+ if(sea>=0){const q=cellPt(sea);ensure('destroyer',q[0],q[1],'Эсминец '+name);ensure('submarine',q[0]+.8,q[1]+.8,'Подлодка '+name)}
+ MM.dirty=true;MM.hsig=null;
+ try{paint();paintHud(true)}catch(e){}
+ return MM.units.filter(u=>u.own===name).length;
 }
 function ensureFleet(){
  const st=env.S();if(!st.milmap)st.milmap={};
@@ -879,7 +924,7 @@ const API={
  speed(s){MM.speed=s;MM.dirty=true;paintHud(true)},
  deploy(sub){if(sub==='aabat'){MM.mode='placeAA';say('🛡️ Выберите точку на суше для размещения батареи ПВО · 500 млн',true);paintHud(true);return}deploy(sub)},deployProd:deployProduced
 };
-const core={MM,SPEC,DM,ECOST,ePay,autoCommand,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
+const core={MM,SPEC,DM,ECOST,ePay,autoCommand,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,activateWar:activateWarForces,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
 if(typeof module!=='undefined'&&module.exports){module.exports=core}
 if(typeof window!=='undefined'&&root===window){
  window.MilMap={depToggle(o){MM.depOpen=!!o},handleTap,attach,core,setNetworkState:core.setNetworkState};
