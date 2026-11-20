@@ -344,8 +344,8 @@ function drawOcc(svg){
  g.replaceChildren();
  ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');const gg=geoOf(e);p.setAttribute('d',gg?gg.d:(e.getAttribute('d')||''));p.setAttribute('fill-rule','evenodd');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
 function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
- const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/><path class="terrain-overlay" d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
- body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
+ const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
+ body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><g class="terrain-detail" id="terrain-detail-${C.iso}" clip-path="url(#c-${C.iso})"></g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
  if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="none" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
  <linearGradient id="oceanGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071521"/><stop offset=".48" stop-color="#102b3b"/><stop offset="1" stop-color="#07131f"/></linearGradient>
  <radialGradient id="oceanGlow"><stop offset="0" stop-color="#2c7180" stop-opacity=".22"/><stop offset="1" stop-color="#0a1c2a" stop-opacity="0"/></radialGradient>
@@ -404,7 +404,22 @@ H.wmTap=(iso,rid)=>{
 let WZ={x:0,y:0,w:1000,h:575};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
 function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
-function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
+function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{renderTerrainOverlays()}catch(e){}try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
+/* Не держим десятки тысяч дублирующих SVG-путей рельефа в DOM. Текстуры прежние,
+   но создаются только для провинций в текущем окне просмотра. */
+function renderTerrainOverlays(){
+ const svg=WMAP.node;if(!svg)return;const far=WZ.w>GEO.W*.4;
+ for(const C of Object.values(GEO.c)){const g=document.getElementById('terrain-detail-'+C.iso);if(!g)continue;
+  if(far){if(g.childNodes.length)g.replaceChildren();continue}
+  const pad=WZ.w*.08,x0=WZ.x-pad,x1=WZ.x+WZ.w+pad,y0=WZ.y-WZ.h*.08,y1=WZ.y+WZ.h*1.08;
+  if(C.bb&&(C.bb[2]<x0||C.bb[0]>x1||C.bb[3]<y0||C.bb[1]>y1)){if(g.childNodes.length)g.replaceChildren();continue}
+  const parts=[];for(const r of C.regs||[]){if(!r.d||!Number.isFinite(r.cx)||!Number.isFinite(r.cy)||r.cx<x0||r.cx>x1||r.cy<y0||r.cy>y1)continue;
+   const key=String(r.id||r.n||C.iso);let h=2166136261;for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),16777619)>>>0;
+   const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5];parts.push(`<path d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`)
+  }
+  g.innerHTML=parts.join('');
+ }
+}
 const hwz=m=>{if(!WMAP.node)return;if(m==='full'){WMAP.full=!WMAP.full;const sl=document.getElementById('wm-slot');if(sl)sl.classList.toggle('full',!!WMAP.full);document.body.style.overflow=WMAP.full?'hidden':'';const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';return wzApply()}if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
 function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted"><b id="province-total">Провинции: подсчёт…</b><br>Нажмите на страну, чтобы открыть её провинции. Внутри страны можно выбирать провинции на карте или через поиск. Перетаскивайте карту и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}
 function mountWorldMap(){if(!document.getElementById('wm-slot'))return;wmLoad(ok=>{const sl=document.getElementById('wm-slot');if(!sl)return;if(!ok){sl.innerHTML='<p class="muted" style="padding:12px">Не удалось загрузить карту мира (нет интернета или библиотека заблокирована).</p>';return}
