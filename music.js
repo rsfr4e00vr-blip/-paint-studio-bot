@@ -72,7 +72,7 @@ function stop(){if(eng&&eng.ctx.state==='running')eng.ctx.suspend()}
 function label(){if(ui&&eng)ui.lab.textContent=eng.mode==='war'?'⚔ тема войны':'🕊 тема мира'}
 function build(){
   const css=document.createElement('style');
-  css.textContent='#mus-btn{position:fixed;right:10px;left:auto;top:calc(72px + env(safe-area-inset-top,0px));bottom:auto;z-index:10010;width:42px;height:42px;border-radius:50%;border:1px solid #60788b;background:#142331ee;color:#eef4f8;font-size:20px;cursor:pointer}#mus-btn.off{opacity:.55}#mus-pan{position:fixed;right:10px;left:auto;top:calc(122px + env(safe-area-inset-top,0px));bottom:auto;z-index:10010;display:none;background:#142331f2;border:1px solid #60788b;border-radius:12px;padding:10px 12px;color:#eef4f8;font:13px system-ui,sans-serif;min-width:190px}#mus-pan input{width:100%}#mus-pan button{margin:6px 0;padding:7px 10px;border-radius:8px;border:1px solid #60788b;background:#263a4b;color:#fff;width:100%}';
+  css.textContent='#mus-btn{position:fixed;left:10px;right:auto;top:auto;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:10010;width:42px;height:42px;border-radius:50%;border:1px solid #60788b;background:#142331ee;color:#eef4f8;font-size:20px;cursor:pointer}#mus-btn.off{opacity:.55}#mus-pan{position:fixed;left:10px;right:auto;top:auto;bottom:calc(62px + env(safe-area-inset-bottom,0px));z-index:10010;display:none;background:#142331f2;border:1px solid #60788b;border-radius:12px;padding:10px 12px;color:#eef4f8;font:13px system-ui,sans-serif;min-width:190px}#mus-pan input{width:100%}#mus-pan button{margin:6px 0;padding:7px 10px;border-radius:8px;border:1px solid #60788b;background:#263a4b;color:#fff;width:100%}';
   document.head.appendChild(css);
   const b=document.createElement('button');b.id='mus-btn';b.textContent='♪';b.setAttribute('aria-label','Музыка');
   const p=document.createElement('div');p.id='mus-pan';p.innerHTML='<div id="mus-lab" style="margin-bottom:4px">музыка выключена</div><button id="mus-tg"></button><input id="mus-vol" type="range" min="0" max="100">';
@@ -84,7 +84,7 @@ function build(){
   ui.vol.oninput=()=>{st.vol=ui.vol.value/100;save();if(eng)eng.master.gain.value=.9*st.vol*2};
   paint();
   /* браузер разрешает звук только после касания — запускаем при первом нажатии */
-  const first=()=>{start();label();if(eng)removeEventListener('pointerdown',first,true)};
+  const first=()=>{start();label();if(eng){removeEventListener('pointerdown',first,true);removeEventListener('touchend',first,true)}};
   addEventListener('pointerdown',first,true);addEventListener('touchend',first,{capture:true,passive:true});
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();else if(st.on&&eng)start()});
 }
