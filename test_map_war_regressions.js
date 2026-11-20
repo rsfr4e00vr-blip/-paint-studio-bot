@@ -11,6 +11,8 @@ check(game.includes("if(S.out&&tab!=='comeback')t=null"), 'opposition panel does
 check(map.includes("MM.pvoMarkers=[];MM.pvoSig=''"),'world shield markers are disabled');
 check(map.includes('const aiInterval=warCount>=10?4.5:warCount>=5?3:1.5'),'AI planning cadence adapts to war count');
 check(map.includes('warCount>=10?(IS_MOBILE?220:150):warCount>=5?(IS_MOBILE?170:110)'),'map paint cadence adapts to heavy war load');
+check(map.includes('const forceLoad=MM.units.length+(MM.garrisons||[]).length+(MM.remoteUnits||[]).length'),'map renderer measures actual unit load, not only war count');
+check(map.includes('forceLoad>=240?7:forceLoad>=150?5.5:forceLoad>=90?4:'),'AI planning interval grows with unit count to reduce mobile load');
 
 check(map.includes("const warCount=env&&typeof env.wars==='function'?env.wars().filter"),'war count is defined in the render frame scope');
 check(map.includes("support:Math.max(1,Math.round((1+Math.floor(pw/90))*aiScale))"),'enemy AI has an anti-air support force target');
