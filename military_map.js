@@ -929,6 +929,9 @@ function attach(){
   MM.units=MM.units.filter(u=>{if(SPEC[u.sub].kind!=='sea'||okCell('sea',cellOf(u.x,u.y)))return true;const q=snap('sea',u.x,u.y,80,true);if(q<0)return false;const c=cellPt(q);u.x=c[0];u.y=c[1];u.path=[];return true});   /* корабль, оказавшийся на суше, возвращается в воду */
   try{ensureFleet()}catch(e){console.warn('MM fleet',e)}
   MM.ready=true;
+  /* Если война уже идёт до первого открытия карты, разворачиваем силы врага сразу,
+     даже когда игровая пауза включена и обычный AI tick ещё не запускался. */
+  try{(env.wars?env.wars():[]).filter(w=>w&&!w.won&&!w.dead&&!w.lost).forEach(w=>activateWarForces(w.n))}catch(e){console.warn('MM initial war deployment',e)}
   if(!raf){last=performance.now();raf=requestAnimationFrame(frame)}}
  L={g:null,els:{}};hud();paintHud(true)}
 
