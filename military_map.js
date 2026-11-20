@@ -615,7 +615,9 @@ function activateWarForces(name){
   garrison.forEach(u=>mk(name,u.sub,u.x,u.y,{name:u.name,base:SPEC[u.sub].kind==='air'?base:null}));
   MM.garrisons=MM.garrisons.filter(u=>u.own!==name);
  }
- const C=env.GEO&&env.GEO.c&&env.GEO.c[name];
+ /* GEO.c в разных наборах карты индексируется то названием, то ISO-кодом. */
+ const countries=Object.values(env.GEO&&env.GEO.c||{});
+ const C=(env.GEO&&env.GEO.c&&env.GEO.c[name])||countries.find(c=>c&&(c.name===name||c.iso===name));
  const regs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
  let sp=null;
  try{if(env.enemySpawn)sp=toSim(env.enemySpawn(name))}catch(e){}
@@ -629,10 +631,14 @@ function activateWarForces(name){
   q.fuel=SPEC[sub].range||q.fuel;return q;
  };
  const land=(dx,dy)=>{
-  const q=snap('land',sp.x+dx,sp.y+dy,Math.max(14,Math.hypot(dx,dy)+10));
+  const q=snap('land',sp.x+dx,sp.y+dy,Math.max(24,Math.hypot(dx,dy)+16));
   return q>=0?cellPt(q):null;
  };
- const p1=land(0,0),p2=land(5,4),p3=land(-5,-4);
+ /* Координата столицы может оказаться на воде/границе: пробуем соседние крупные провинции. */
+ let anchor=sp,p1=land(0,0);
+ if(!p1&&regs.length){const ranked=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0));for(const r of ranked.slice(0,24)){const q0=toSim({x:r.cx,y:r.cy});const q=snap('land',q0.x,q0.y,28);if(q>=0){anchor=q0;p1=cellPt(q);break}}}
+ if(anchor!==sp){sp=anchor;}
+ const p2=land(5,4),p3=land(-5,-4);
  if(p1&&!MM.units.some(u=>u.own===name&&SPEC[u.sub].kind==='land'&&!SPEC[u.sub].static))ensure('inf',p1[0],p1[1],'Пехота '+name);
  if(p2&&!MM.units.some(u=>u.own===name&&u.sub==='tank'))ensure('tank',p2[0],p2[1],'Танки '+name);
  if(p3&&!MM.units.some(u=>u.own===name&&u.sub==='aabat'))ensure('aabat',p3[0],p3[1],'ПВО '+name);
