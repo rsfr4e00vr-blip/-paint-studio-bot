@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const game=fs.readFileSync('./game.js','utf8');
+const save=game.match(/function save\(\)\{[\s\S]*?\n\}/);
+assert.ok(save,'save() must exist');
+assert.match(save[0],/localStorage\.setItem\('novariaSave',JSON\.stringify\(S\)\)/,'local save must run even when multiplayer mode is flagged');
+assert.doesNotMatch(save[0],/if\(window\.__NG_MP\)\{[\s\S]*?return\}/,'multiplayer flag must not skip local storage');
+assert.match(save[0],/return false/,'save must report failure');
+assert.match(save[0],/return true/,'save must report success');
+assert.match(game,/onclick="if\(save\(\)\)toast\('Игра сохранена'\)"/,'manual save must not show success when storage failed');
+console.log('OK: manual/local save cannot silently skip localStorage and success toast is conditional');
