@@ -250,8 +250,8 @@ function townDecay(){(S.regions||[]).forEach(r=>{const h=r.townHit;if(!h)return;
 function drawCityMarkers(svg){
  if(!window.CitySat)return;
  const NS='http://www.w3.org/2000/svg';let layer=svg.querySelector('#city-markers');if(!layer){layer=document.createElementNS(NS,'g');layer.id='city-markers';layer.setAttribute('pointer-events','none');svg.appendChild(layer)}
- /* Во время автоплана скрываем декоративные маркеры городов: они похожи на жёлтые цели и перегружают карту. */
- const autoPlanActive=(S.wars||[]).some(w=>w.auto&&!w.won&&!w.dead);layer.style.display=autoPlanActive?'none':'';if(autoPlanActive)return;
+ /* Города остаются видимыми и во время автоплана: автоуправление не должно скрывать слой населённых пунктов. */
+ layer.style.display='';
  const items=[],mine={};
  /* 1) наши области: все города области, состояние — из объектов инфраструктуры + прямые попадания */
  (S.regions||[]).forEach((r,ri)=>{

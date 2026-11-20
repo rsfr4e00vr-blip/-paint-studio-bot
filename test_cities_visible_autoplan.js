@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./game.js','utf8');
+const i=s.indexOf('function drawCityMarkers(svg)');
+assert.notEqual(i,-1,'city marker renderer exists');
+const f=s.slice(i,s.indexOf('function updateEthnicOverlay',i));
+assert.match(f,/layer\.style\.display='';/,'city layer is always visible');
+assert.doesNotMatch(f,/autoPlanActive/,'auto-plan does not hide city markers');
+assert.match(f,/CitySat\.setItems\(items\);CitySat\.refresh\(svg,WZ,GEO\.W\)/,'original city generation and renderer are retained');
+console.log('OK: cities remain visible with auto-plan on; city generation/rendering unchanged');
