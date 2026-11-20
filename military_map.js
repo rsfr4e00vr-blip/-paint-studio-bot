@@ -731,9 +731,7 @@ function paint(){
  MM.units.forEach(u=>{const S=SPEC[u.sub];if(S.kind!=='land'||u.hid||!inV(u.x,u.y))return;
   const R=z*(S.px/24)*12;
   if(u.dug&&!S.static)extra+=`<ellipse cx="${u.x.toFixed(2)}" cy="${(u.y+R*.55).toFixed(2)}" rx="${(R*1.1).toFixed(2)}" ry="${(R*.38).toFixed(2)}" fill="none" stroke="#7a6038" stroke-width="2" stroke-dasharray="4 2" opacity=".85" vector-effect="non-scaling-stroke"/>`;
-  if(!S.static&&MM.t-(u.fight||-99)<.45){const col=u.own===ME?'#cfe2ff':'#ffd0d0';
-   for(let i=0;i<5;i++){const an=i*1.2566+MM.t*2.4,rr=R*(1.15+.25*Math.sin(MM.t*9+i*2));extra+=`<circle cx="${(u.x+Math.cos(an)*rr).toFixed(2)}" cy="${(u.y+Math.sin(an)*rr*.7).toFixed(2)}" r="${(z*1.15).toFixed(2)}" fill="${col}" stroke="#101820" stroke-width=".8" vector-effect="non-scaling-stroke"/>`}}
-  if(u.build)extra+=`<circle cx="${u.x.toFixed(2)}" cy="${u.y.toFixed(2)}" r="${(R*1.15).toFixed(2)}" fill="none" stroke="#ffd76a" stroke-width="1.6" stroke-dasharray="3 3" opacity="${(.5+.4*Math.sin(MM.t*6)).toFixed(2)}" vector-effect="non-scaling-stroke"/>`});
+  /* Декоративные вращающиеся точки и жёлтые кольца убраны: визуальные эффекты не изображают отдельные боевые единицы. */});
  fxHtml+=extra;if(fxHtml!==L.fxs){L.fxs=fxHtml;L.fx.innerHTML=fxHtml}
 }
 
