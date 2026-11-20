@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const game=fs.readFileSync('./game.js','utf8');
+const save=game.slice(game.indexOf('function save()'),game.indexOf('function toast('));
+assert.match(save,/localStorage\.setItem\('novariaSave',snapshot\)/,'always writes local save');
+assert.ok(save.indexOf("localStorage.setItem('novariaSave',snapshot)")<save.indexOf('window.NGMP.saveLocal'),'local persistence happens before multiplayer sync');
+assert.doesNotMatch(save,/if\(window\.__NG_MP\).*return/,'multiplayer mode must not skip local save');
+assert.match(save,/typeof window\.NGMP\.saveLocal==='function'/,'guard optional multiplayer save hook');
+assert.match(save,/typeof window\.NGMP\.reportState==='function'/,'guard optional multiplayer report hook');
+console.log('OK: local save is durable before optional NGMP sync');
