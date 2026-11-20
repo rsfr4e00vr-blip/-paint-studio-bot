@@ -196,7 +196,7 @@ function draw(layer,svg,wz){
     o.showLab=show;
   });
   host.innerHTML=vis.map(o=>{
-    const c=o.c,lv=o.lv,tier=o.tier,sr=o.sr,s=o.r/(9*ppu),cl=c.cond<35?'ru':c.cond<75?'dm':'ok',
+    const c=o.c,lv=o.lv,tier=o.tier,sr=o.sr,s=Math.max(.38,Math.min(2.2,(o.r/9)*Math.pow(1/Math.max(.08,ppu),.35))),cl=c.cond<35?'ru':c.cond<75?'dm':'ok',
      sym=ensure(layer,tier,lv,hash(c.id)%VARIANTS),
      tt=`${c.name}${c.sub?' · '+c.sub:''} · ${LV_NAME[lv]} (${Math.round(c.cond)}%)`+(c.pop?` · ${Math.round(c.pop/1000)} тыс. жителей`:'')+(c.own!=null?'. Нажмите, чтобы открыть город и восстановление.':''),
      hit=Math.max(o.r,7)/ppu;
