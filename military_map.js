@@ -579,7 +579,7 @@ function seedWorldGarrisons(){
  const active=new Set((env&&env.wars?env.wars():[]).filter(w=>!w.won&&!w.dead&&!w.lost).map(w=>w.n));
  const countries=Object.values(env&&env.GEO&&env.GEO.c||{});
  countries.forEach(C=>{
-  if(!C||!C.name||C.name===ME||active.has(C.name))return;
+  if(!C||!C.name||C.name===ME||(env.playerCountry&&C.name===env.playerCountry())||active.has(C.name))return;
   if(MM.garrisons.some(u=>u.own===C.name)||MM.units.some(u=>u.own===C.name))return;
   const regs=(C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
   if(!regs.length)return;
