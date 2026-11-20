@@ -409,7 +409,7 @@ function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Objec
  <rect class="ocean-base" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanGradient)"/>
  <rect class="ocean-lines" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanTexture)"/>
  <ellipse cx="${GEO.W*.51}" cy="${GEO.H*.48}" rx="${GEO.W*.44}" ry="${GEO.H*.52}" fill="url(#oceanGlow)"/>
- ${body.join('')}</svg><div class="terrain-legend" style="position:absolute;right:8px;top:8px;z-index:5;pointer-events:none;background:#071521dd;border:1px solid #66808a;border-radius:9px;padding:6px 8px;color:#eef6f5;font:11px/1.45 system-ui;max-width:164px"><b>Местность</b><div>🏔 Горы · 🌲 Леса</div><div>⛰ Холмы · ❄️ Снег</div><div>🌾 Равнины / посадки</div></div><div class="wzoom"><button onclick="H.wz('in')">＋</button><button onclick="H.wz('out')">−</button><button onclick="H.wz('reset')">⟲</button><button onclick="H.wz('full')" id="wfull">⛶</button></div>`;
+ ${body.join('')}</svg><div class="terrain-legend" style="position:absolute;right:8px;bottom:58px;z-index:4;pointer-events:none;background:#071521dd;border:1px solid #66808a;border-radius:9px;padding:6px 8px;color:#eef6f5;font:11px/1.45 system-ui;max-width:164px"><b>Местность</b><div>🏔 Горы · 🌲 Леса</div><div>⛰ Холмы · ❄️ Снег</div><div>🌾 Равнины / посадки</div></div><div class="wzoom"><button onclick="H.wz('in')">＋</button><button onclick="H.wz('out')">−</button><button onclick="H.wz('reset')">⟲</button><button onclick="H.wz('full')" id="wfull">⛶</button></div>`;
  const svg=n.querySelector('svg');svg.classList.add('far');WMAP.node=svg;WMAP.box=n;WZ={x:0,y:0,w:GEO.W,h:GEO.H};
  const ptr=new Map();let gs=null;const rc=()=>svg.getBoundingClientRect();
  const startG=()=>({V0:{...WZ},pts:[...ptr.values()].map(p=>({...p})),moved:0,V1:null,multi:ptr.size>1});
@@ -455,7 +455,24 @@ let WZ={x:0,y:0,w:MAP_WIDTH,h:MAP_HEIGHT};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
 function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
 function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
-const hwz=m=>{if(!WMAP.node)return;if(m==='full'){WMAP.full=!WMAP.full;const sl=document.getElementById('wm-slot');if(sl)sl.classList.toggle('full',!!WMAP.full);document.body.style.overflow=WMAP.full?'hidden':'';const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';return wzApply()}if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
+const hwz=m=>{if(!WMAP.node)return;if(m==='full'){
+  const sl=document.getElementById('wm-slot');if(!sl)return;
+  WMAP.full=!WMAP.full;
+  if(WMAP.full){
+   if(!WMAP.fullHome){const marker=document.createComment('wm-slot-home');sl.parentNode.insertBefore(marker,sl);WMAP.fullHome={marker,parent:sl.parentNode,next:sl.nextSibling}}
+   document.body.appendChild(sl);
+   sl.classList.add('full');document.body.classList.add('wm-fullscreen');document.body.style.overflow='hidden';
+  }else{
+   sl.classList.remove('full');document.body.classList.remove('wm-fullscreen');document.body.style.overflow='';
+   const home=WMAP.fullHome;
+   if(home&&home.marker&&home.marker.parentNode){home.marker.parentNode.insertBefore(sl,home.marker);home.marker.remove()}
+   else if(home&&home.parent){home.parent.insertBefore(sl,home.next&&home.next.parentNode===home.parent?home.next:null)}
+   WMAP.fullHome=null;
+  }
+  const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';
+  requestAnimationFrame(()=>{if(WMAP.node){wzApply();if(window.CitySat)try{CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}}});
+  return;
+ }if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
 function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted"><b id="province-total">Провинции: подсчёт…</b><br>Нажмите на страну, чтобы открыть её провинции. Внутри страны можно выбирать провинции на карте или через поиск. Перетаскивайте карту и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}
 function mountWorldMap(){if(!document.getElementById('wm-slot'))return;wmLoad(ok=>{const sl=document.getElementById('wm-slot');if(!sl)return;if(!ok){sl.innerHTML='<p class="muted" style="padding:12px">Не удалось загрузить карту мира (нет интернета или библиотека заблокирована).</p>';return}
  if(!WMAP.box)buildWorldNode();if(sl.firstChild!==WMAP.box)sl.replaceChildren(WMAP.box);sl.classList.toggle('full',!!WMAP.full);const fb=document.getElementById('wfull');if(fb)fb.textContent=WMAP.full?'✕':'⛶';const pc=document.getElementById('province-total');if(pc)pc.textContent=`Провинций на карте: ${Number(window.NOVARIA_PROVINCE_COUNT||0).toLocaleString('ru-RU')}`;updateWorld()})}
