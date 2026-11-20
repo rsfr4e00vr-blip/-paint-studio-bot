@@ -206,7 +206,9 @@ function step(dt){
   if(u.path.length){
    let terrainFactor=1;
    if(k==='land'&&env&&typeof env.regionAt==='function'){
-    const tr=env.regionAt(u.x,u.y);const type=tr&&tr.terrain;
+    u._terrainT=(u._terrainT||0)-dt;
+    if(u._terrainT<=0){const tr=env.regionAt(u.x,u.y);u._terrain=tr&&tr.terrain||'plain';u._terrainT=.9}
+    const type=u._terrain;
     terrainFactor=type==='mountain'?.58:type==='forest'?.78:type==='hill'?.86:type==='winter'?.76:type==='plantation'?.94:1;
    }
    let mv=S.spd*dt*(u.hp<35?.7:1)*terrainFactor;
@@ -229,8 +231,10 @@ function step(dt){
     MM.fx.push({kind:S.kind==='air'?'trail':S.kind==='sea'?'wake':'dust',x:bx,y:by,s:u.sub==='carrier'?1.4:1,t0:MM.t,life:S.kind==='air'?1.3:S.kind==='sea'?1.9:.9})}}
   if(u.hp<45&&u.hp>0&&MM.fx.length<165){u.smT=(u.smT||0)-dt;if(u.smT<=0){u.smT=.55;MM.fx.push({kind:'smoke',x:u.x+rnd(-1,1),y:u.y,s:.55,t0:MM.t,life:1.7});if(u.hp<22)MM.fx.push({kind:'fire',x:u.x+rnd(-2,2),y:u.y+rnd(-1,1),s:1,t0:MM.t,life:.5})}}
  });
- combat(dt);
- capture(dt);
+ MM._combatAcc=(MM._combatAcc||0)+dt;
+ if(MM._combatAcc>=.10){const cd=MM._combatAcc;MM._combatAcc=0;combat(cd)}
+ MM._captureAcc=(MM._captureAcc||0)+dt;
+ if(MM._captureAcc>=1){const cd=MM._captureAcc;MM._captureAcc=0;capture(cd)}
  MM.units=MM.units.filter(u=>{if(u.hp>0)return true;
   const mine=u.own===ME;
   if(u.dead==='fuel')say((mine?'💀 Потеряно: ':'Противник потерял: ')+NAMES[u.sub]+' (без топлива)',mine);
@@ -662,10 +666,10 @@ function paint(){
  const all=MM.units.concat(MM.remoteUnits||[]),lead={},cl={};
  const thr=26*zf;
  const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
- const leaders=[];
- order.forEach(u=>{const ux=u.x/up,uy=u.y/up;let g=null;
-  for(const l of leaders){if(l.own===u.own&&Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}}
-  if(g){lead[u.id]=g.id;cl[g.id].push(u)}else{leaders.push(u);lead[u.id]=u.id;cl[u.id]=[u]}});
+ const leaders=[],buckets=new Map(),cell=thr;
+ order.forEach(u=>{const ux=u.x/up,uy=u.y/up,cx=Math.floor(ux/cell),cy=Math.floor(uy/cell);let g=null;
+  for(let oy=-1;oy<=1&&!g;oy++)for(let ox=-1;ox<=1&&!g;ox++){const bucket=buckets.get((cx+ox)+','+(cy+oy));if(!bucket)continue;for(let j=0;j<bucket.length;j++){const l=bucket[j];if(l.own===u.own&&Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}}}
+  if(g){lead[u.id]=g.id;cl[g.id].push(u)}else{leaders.push(u);lead[u.id]=u.id;cl[u.id]=[u];const key=cx+','+cy;let bucket=buckets.get(key);if(!bucket)buckets.set(key,bucket=[]);bucket.push(u)}});
  MM.clusters=cl;MM.leadOf=lead;
  all.forEach(u=>{seen[u.id]=1;const S=SPEC[u.sub];let e=L.els[u.id];
   if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#607d9b" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
@@ -779,22 +783,18 @@ function restore(o){
 function persist(){if(!env||!MM.dirty)return;MM.dirty=false;try{const st=env.S();st.milmap=snapshot();env.save()}catch(e){}}
 
 /* ---------- запуск ---------- */
-let raf=0,last=0,lastPaint=0,lastHud=0,acc=0,saveT=0;const IS_MOBILE=!!(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));
+let raf=0,last=0,lastPaint=0,lastHud=0,acc=0,simAcc=0,saveT=0;const IS_MOBILE=!!(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));
 function frame(ts){
  if(!document.hidden)raf=requestAnimationFrame(frame);else{raf=0;return}
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(!MM.ready)return;
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  const sd=running?dt*MM.speed:0;
- if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}}
- // Экономный режим карты: симуляция и бои продолжают считать каждый кадр,
- // но тяжёлый SVG обновляется реже. На телефоне — до 8 раз/с,
- // на ПК — до 12 раз/с; на паузе — только 2 раза/с.
+ if(sd>0){simAcc=Math.min(simAcc+sd,.20);let ticks=0;while(simAcc>=1/30&&ticks<5){step(1/30);simAcc-=1/30;ticks++}
+  acc+=sd;if(acc>=1.5){acc%=1.5;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
+ }else simAcc=0;
+ // Сохраняем прежний визуальный стиль; физика ограничена 30 тиками/с.
  const frameMs=sd>0?(IS_MOBILE?125:83):500;
- if(ts-lastPaint>=frameMs){
-  lastPaint=ts;
-  paint();
-  if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}
- }
+ if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}}
  saveT+=dt;if(saveT>4){saveT=0;persist()}}
 function attach(){
  if(!MM.visBound){MM.visBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&MM.ready&&!raf){last=performance.now();raf=requestAnimationFrame(frame)}})}

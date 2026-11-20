@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const map=fs.readFileSync('./military_map.js','utf8');
+assert.match(map,/while\\(simAcc>=1\\/30&&ticks<5\\)\\{step\\(1\\/30\\)/);
+assert.match(map,/MM\\._combatAcc>=\\.10/);
+assert.match(map,/MM\\._captureAcc>=1/);
+assert.match(map,/const leaders=\\[\\],buckets=new Map\\(\\),cell=thr/);
+assert.match(map,/u\\._terrainT<=0/);
+assert.match(map,/const frameMs=sd>0\\?\\(IS_MOBILE\\?125:83\\):500/);
+console.log('OK: 30 Hz simulation, throttled combat/capture, cached terrain and spatial clustering');
