@@ -822,7 +822,7 @@ function attach(){
  if(!MM.ready){
   const home=toSim(env.homeAnchor&&env.homeAnchor());
   MM.bases=[];if(home){const w=snap('sea',home.x,home.y,260,true),p=w>=0?cellPt(w):[home.x,home.y];MM.bases.push({id:'home',name:home.name,x:home.x,y:home.y,px:p[0],py:p[1],own:ME})}
-  try{MM.pvoMarkers=(env.countryPvoMarkers?env.countryPvoMarkers():[]).map(p=>toSim(p));MM.pvoSig=MM.pvoMarkers.map(x=>x.name).join('|')}catch(e){MM.pvoMarkers=[];MM.pvoSig=''}
+  MM.pvoMarkers=[];MM.pvoSig='';
   if(st.milmap&&st.milmap.units&&st.milmap.units.length)restore(st.milmap);
   else{seedPlayer();MM.dirty=true}
   MM.units=MM.units.filter(u=>{if(SPEC[u.sub].kind!=='sea'||okCell('sea',cellOf(u.x,u.y)))return true;const q=snap('sea',u.x,u.y,80,true);if(q<0)return false;const c=cellPt(q);u.x=c[0];u.y=c[1];u.path=[];return true});   /* корабль, оказавшийся на суше, возвращается в воду */
