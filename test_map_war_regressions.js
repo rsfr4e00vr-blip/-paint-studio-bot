@@ -17,7 +17,10 @@ check(map.includes("side=u.own===ME?'m':'e:'+String(u.own)"),'enemy nations are 
 check(map.includes('mm-enemy-card')&&map.includes('Силы противника на карте'),'enemy force composition and read-only unit inspection are displayed');
 
 check(map.includes('function seedWorldGarrisons()'),'2D garrisons are seeded for countries outside active wars');
-check(["add('inf'","add('tank'","add('aabat'","add('fighter'","add('bomber'","add('destroyer'","add('frigate'","add('submarine'"].every(x=>map.includes(x)),'world garrisons cover land, armour, anti-air, aviation and coastal navy');
+check(["add('inf'","add('tank'","add('destroyer'"].every(x=>map.includes(x)),'peacetime map uses compact land and coastal garrisons');
+check(!map.slice(map.indexOf('function seedWorldGarrisons()'),map.indexOf('function ensureFleet()')).includes("add('aabat'"),'peace map no longer floods the world with shield-shaped anti-air icons');
+check(map.includes("sub='aabat';nm='Батарея ПВО противника'"),'wartime AI can still field anti-air batteries');
+check(map.includes("if(!MM.open){fab.textContent='🪖 Войска · '+mine.length;p.hidden=true;return}"),'closed military panel skips expensive enemy-force aggregation');
 check(map.includes('stationed.forEach(g=>{const extra='),'peacetime garrisons become active AI units when war begins');
 check(map.includes('function ownerColor(own)'),'each country receives a distinct 2D force colour');
 check(game.includes('playerCountry:()=>myName()'),"map garrison layer can exclude the player's own country");
