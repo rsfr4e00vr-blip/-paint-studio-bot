@@ -13,5 +13,5 @@ check(map.includes('warCount>=10?(IS_MOBILE?220:150):warCount>=5?(IS_MOBILE?170:
 check(map.includes("const warCount=env&&typeof env.wars==='function'?env.wars().filter"),'war count is defined in the render frame scope');
 check(map.includes("support:Math.max(1,Math.round((1+Math.floor(pw/90))*aiScale))"),'enemy AI has an anti-air support force target');
 check(map.includes("sub='aabat';nm='Батарея ПВО противника'"),'enemy AI can deploy visible anti-air batteries');
-check(map.includes("const side=u.own===ME?'m':'e:'+String(u.own)"),'enemy nations are clustered separately on the map');
+check(map.includes("side=u.own===ME?'m':'e:'+String(u.own)"),'enemy nations are clustered separately on the map');
 check(map.includes('mm-enemy-card')&&map.includes('Силы противника на карте'),'enemy force composition and read-only unit inspection are displayed');
