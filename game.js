@@ -3072,7 +3072,9 @@ function warResultModal(kind,w,o){
 }
 window.__warAiNote=(w,doc)=>{try{const D=WARAI.DOC[doc];if(D)log(`🧠 ${w.n}: штаб врага выбрал доктрину — ${D.icon} ${D.label}.`)}catch(e){}};
 function warTick(){
+ let terminalResult=false;
  S.wars.forEach(w=>{
+  if(terminalResult)return;
   const c=rel(w.n);if(!c){w.dead=1;return}
    if(w.enPow0==null)w.enPow0=c.power;
   w.m++;
@@ -3126,6 +3128,7 @@ function warTick(){
    log(`🏳 ${w.n}: все регионы страны заняты противником. Кампания потерпела поражение.`);
    try{pause()}catch(e){}
    try{warResultModal('loss',w,{})}catch(e){}
+   terminalResult=true;
    return;
   }
   warEnemyCiv(w,d);enemyEcoTick(w,c,d);darkTickEnemy(w);enemyStrikes(w,c);branchTick(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(window.PVO){PVO.monthly(c,true);PVO.myMonthly(S);const nn1=aiNationOf(w.n);if(nn1)nn1.aa=c.aa}else if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
@@ -3148,7 +3151,7 @@ function warTick(){
  });
  // Полная оккупация всех регионов противника завершает войну и открывает итоги.
  S.wars.forEach(w=>{
-  if(w.won||w.dead)return;
+  if(terminalResult||w.won||w.dead)return;
   const all=regsOf(w.n)||[],occ=new Set((w.occ||[]).map(String));
   if(all.length&&all.every(r=>occ.has(String(r.id))||!!taken()[r.id])){
    w.p=100;w.won=1;w.wonBy='total-occupation';
@@ -3157,6 +3160,7 @@ function warTick(){
    try{toast(`🏆 Полная победа над ${w.n}!`)}catch(e){}
    try{pause()}catch(e){}
    try{warResultModal('win',w,{why:'полная оккупация всех регионов'})}catch(e){}
+   terminalResult=true;
   }
  });
  S.wars=S.wars.filter(w=>!w.dead);try{baRefresh()}catch(e){}

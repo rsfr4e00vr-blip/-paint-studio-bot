@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const map=fs.readFileSync('./military_map.js','utf8');
+const game=fs.readFileSync('./game.js','utf8');
+assert.match(map,/if\(u\.path\.length&&!u\.autoRoute&&!u\.autoTgt\)/,'auto-plan paths must not draw yellow route markers');
+assert.match(map,/fill="#607d9b"/,'group count badges must not look like yellow attack markers');
+assert.match(map,/mPow>ePow\*1\.25&&mL\.length/,'AI must counterattack when its local force balance is favorable');
+assert.match(game,/let terminalResult=false;[\s\S]*?if\(terminalResult\)return;/,'war loop must stop after terminal defeat');
+assert.match(game,/if\(terminalResult\|\|w\.won\|\|w\.dead\)return/,'victory scan must stop after a terminal result');
+console.log('OK: auto-plan route markers hidden, neutral army counters, AI counterattack trigger, terminal war loop guard');

@@ -486,7 +486,7 @@ function commander(w,mine){
   let tgt=null;
   if(invaders.some(i=>kindOf(i)==='land'))tgt=invaders.filter(i=>kindOf(i)==='land').sort((p,q)=>dist([p.x,p.y],[home.x,home.y])-dist([q.x,q.y],[home.x,home.y]))[0];
   else if(lostTargets.length){const t=lostTargets.slice().sort((a,b)=>dist([a.x,a.y],[home.x,home.y])-dist([b.x,b.y],[home.x,home.y]))[0];tgt={x:t.x,y:t.y,occ:true};}
-  else if(st.tact==='attack'){tgt=nearest({x:c[0],y:c[1]},mL);tgt=tgt?tgt.m:null;
+  else if(st.tact==='attack'||st.tact==='raid'||(mPow>ePow*1.25&&mL.length)){tgt=nearest({x:c[0],y:c[1]},mL);tgt=tgt?tgt.m:null;
    if(!tgt){const mb=MM.bases.filter(b=>b.own===ME).sort((p,q)=>dist(c,[p.x,p.y])-dist(c,[q.x,q.y]))[0];if(mb)tgt={x:mb.x,y:mb.y}}}
   const order=L.slice().sort((p,q)=>tgt?dist([p.x,p.y],[tgt.x,tgt.y])-dist([q.x,q.y],[tgt.x,tgt.y]):0);
   const send=defending?Math.max(2,Math.ceil(order.length*.75)):(order.length>=3?Math.ceil(order.length*.75):order.length);   /* при наступлении четверть армии остаётся в резерве */
@@ -668,7 +668,7 @@ function paint(){
   if(g){lead[u.id]=g.id;cl[g.id].push(u)}else{leaders.push(u);lead[u.id]=u.id;cl[u.id]=[u]}});
  MM.clusters=cl;MM.leadOf=lead;
  all.forEach(u=>{seen[u.id]=1;const S=SPEC[u.sub];let e=L.els[u.id];
-  if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#f5d889" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
+  if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#607d9b" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
   const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
   const showAtZoom=u.own===ME?(zoomAlpha>.035||MM.sel===u.id):true; // вражеские части видны и на общем масштабе
   e.g.setAttribute('display',isLead&&showAtZoom?'':'none');u.hid=!(isLead&&showAtZoom);
@@ -689,7 +689,7 @@ function paint(){
  /* маршрут и радиус выбранного */
  const u=byId(MM.sel);let pd='',rg='';
  if(u&&u.own===ME){
-  if(u.path.length){const route=`<path d="M${u.x} ${u.y}${u.path.map(p=>'L'+p[0]+' '+p[1]).join('')}" fill="none" stroke="#ffd76a" stroke-width="1.6" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity=".9"/>`;pd=route+(!u.autoRoute&&!u.autoTgt?`<circle cx="${u.path[u.path.length-1][0]}" cy="${u.path[u.path.length-1][1]}" r="${(up*5).toFixed(2)}" fill="#ffd76a" opacity=".85"/>`:'')}
+  if(u.path.length&&!u.autoRoute&&!u.autoTgt){const route=`<path d="M${u.x} ${u.y}${u.path.map(p=>'L'+p[0]+' '+p[1]).join('')}" fill="none" stroke="#ffd76a" stroke-width="1.6" stroke-dasharray="4 3" vector-effect="non-scaling-stroke" opacity=".9"/>`;pd=route+(!u.autoRoute&&!u.autoTgt?`<circle cx="${u.path[u.path.length-1][0]}" cy="${u.path[u.path.length-1][1]}" r="${(up*5).toFixed(2)}" fill="#ffd76a" opacity=".85"/>`:'')}
   if(kindOf(u)==='air'){const b=u.base||nearestBase(u);if(b)rg=`<circle cx="${b.x}" cy="${b.y}" r="${SPEC[u.sub].range/2}" fill="#ffd76a10" stroke="#ffd76a" stroke-width="1" stroke-dasharray="2 4" vector-effect="non-scaling-stroke"/>`}}
  if(pd!==L.pds){L.pds=pd;L.paths.innerHTML=pd}if(rg!==L.rgs){L.rgs=rg;L.rng.innerHTML=rg}
  /* эффекты */
