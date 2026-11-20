@@ -44,7 +44,7 @@ const MAPR=[
 function capHtml(){const c=S.captured||[];if(!c.length)return'';const many=c.length>12,W=many?58:72,H=many?40:54,cols=many?8:3,max=many?32:12;let o=`<text x="14" y="290" class="maptxt2" style="opacity:.85">ЗАХВАЧЕННЫЕ ЗЕМЛИ · ${c.length}</text>`;c.slice(0,max).forEach((z,i)=>{const x=14+(i%cols)*(W+4),y=298+Math.floor(i/cols)*(H+4),nm=String(z.name).replace(/^Земли /,'');o+=`<polygon points="${x},${y+6} ${x+W-8},${y} ${x+W},${y+H-8} ${x+8},${y+H}" fill="${z.full?'#8a4f2a':'#a07a2c'}" stroke="#f0bd58" stroke-width="2" stroke-dasharray="5 3" stroke-linejoin="round"><title>${z.name} (${z.full?'аннексия':'область'}, отобрано у: ${z.from}), население ${fmt(z.pop||0)}</title></polygon><text x="${x+W/2}" y="${y+H/2}" text-anchor="middle" style="font-size:${many?7:9}px;fill:#fff;font-weight:700">${nm.replace(/^[^:]*: /,'').slice(0,many?9:12)}</text><text x="${x+W/2}" y="${y+H/2+(many?9:11)}" text-anchor="middle" style="font-size:${many?6:8}px;fill:#ffe9b0">${String(z.from).slice(0,many?10:12)}</text>`});if(c.length>max)o+=`<text x="14" y="${298+Math.ceil(max/cols)*(H+4)+12}" class="maptxt2" style="opacity:.85">…и ещё ${c.length-max} (список ниже)</text>`;return o}
 
 /* ------------------------ КАРТА МИРА: настоящие границы стран, регионы внутри них, свой выбор региона ------------------------ */
-const WMAP={st:'idle'},GEO={st:'idle',c:{},W:1000,H:575};
+const MAP_WIDTH=14940,MAP_HEIGHT=10050;const WMAP={st:'idle'},GEO={st:'idle',c:{},W:MAP_WIDTH,H:MAP_HEIGHT};
 const COORDS=`Россия=Москва и область:37.6:55.8;Санкт-Петербург и область:30.3:59.9;Тюменская область (ХМАО, ЯНАО):70:62;Краснодарский край:39:45;Татарстан:50.5:55.5;Свердловская область:60.6:57;Кемеровская область:86:55;Ростовская область:40:47.5;Башкортостан:56:54;Якутия:130:64;Красноярский край:93:64;Калининградская область:21:54.7
 США=Калифорния:-119.5:37;Техас:-99:31.5;Флорида:-82:28;Нью-Йорк:-75.5:43;Пенсильвания:-77.8:41;Иллинойс:-89:40;Огайо:-82.7:40.3;Аляска:-150:64;Северная Дакота:-100.5:47.5;Западная Вирджиния:-80.6:38.6
 Китай=Гуандун:113.5:23.3;Шаньдун:118:36;Цзянсу:119.5:33;Шаньси:112.3:37.5;Внутренняя Монголия:112:43;Синьцзян:85:41;Сычуань:103:30.5;Хэбэй:115.5:38.5;Хэнань:113.5:34;Тибет:88:31.5
@@ -110,7 +110,7 @@ function wmLoad(cb){if(WMAP.st==='ready')return cb(true);if(WMAP.st==='fail')ret
  if(window.Datamap)done(true);else next(0)}
 /* --- геометрия --- */
 const mer=l=>Math.log(Math.tan(Math.PI/4+Math.max(-58,Math.min(80,l))*Math.PI/360));
-const PRJ=(lo,la)=>[(lo+180)/360*GEO.W,(mer(80)-mer(la))/(2*Math.PI)*GEO.W];
+const PRJ=(lo,la)=>[(lo+180)/360*GEO.W,(GEO.H-(mer(80)-mer(-58))/(2*Math.PI)*GEO.W)/2+(mer(80)-mer(la))/(2*Math.PI)*GEO.W];
 const f1=p=>p[0].toFixed(1)+' '+p[1].toFixed(1);
 const ringD=r=>'M'+r.map(f1).join('L')+'Z';
 function topoRings(T,geom){const tf=T.transform,sc=tf?tf.scale:[1,1],tr=tf?tf.translate:[0,0];
@@ -128,7 +128,7 @@ function kmeans(pts,K){let mx=0,my=0;pts.forEach(p=>{mx+=p[0];my+=p[1]});mx/=pts
  let groups;for(let it=0;it<7;it++){groups=cs.map(()=>[]);pts.forEach(p=>{let bi=0,bd=1e18;cs.forEach((c,i)=>{const d=(p[0]-c[0])**2+(p[1]-c[1])**2;if(d<bd){bd=d;bi=i}});groups[bi].push(p)});
   cs=cs.map((c,i)=>{const g=groups[i];return g.length?[g.reduce((a,p)=>a+p[0],0)/g.length,g.reduce((a,p)=>a+p[1],0)/g.length]:c})}
  return {cs,groups}}
-function geoBuild(){const T=Datamap.prototype.worldTopo,geoms=T.objects.world.geometries;GEO.H=Math.round((mer(80)-mer(-58))/(2*Math.PI)*GEO.W);
+function geoBuild(){const T=Datamap.prototype.worldTopo,geoms=T.objects.world.geometries;GEO.W=MAP_WIDTH;GEO.H=MAP_HEIGHT;
  geoms.forEach(gm=>{const iso=gm.id;if(iso==='ATA')return;const unw=r=>{let pv=r[0][0];const L=r.map(q=>{let lo=q[0];while(lo-pv>180)lo-=360;while(pv-lo>180)lo+=360;pv=lo;return lo});let best=0,bn=-1;[-360,0,360].forEach(sh=>{const n=L.filter(l=>l+sh>=-180&&l+sh<=180).length;if(n>bn){bn=n;best=sh}});return r.map((q,i)=>PRJ(L[i]+best,q[1]))},polys=topoRings(T,gm).map(p=>p.map(unw));if(!polys.length)return;
   let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9,area=0;polys.forEach(p=>{p[0].forEach(q=>{x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1])});let s=0;const r=p[0];for(let i=0,j=r.length-1;i<r.length;j=i++)s+=(r[j][0]+r[i][0])*(r[j][1]-r[i][1]);area+=Math.abs(s/2)});
   const pinfo=polys.map(p=>{let a=0,u0=1e9,v0=1e9,u1=-1e9,v1=-1e9;p[0].forEach(q=>{u0=Math.min(u0,q[0]);u1=Math.max(u1,q[0]);v0=Math.min(v0,q[1]);v1=Math.max(v1,q[1])});const r=p[0];for(let i=0,j=r.length-1;i<r.length;j=i++)a+=(r[j][0]+r[i][0])*(r[j][1]-r[i][1]);return {a:Math.abs(a/2),b:[u0,v0,u1,v1]}}),amax=Math.max(...pinfo.map(q=>q.a)),vb=pinfo.filter(q=>q.a>=amax*.02).reduce((m,q)=>[Math.min(m[0],q.b[0]),Math.min(m[1],q.b[1]),Math.max(m[2],q.b[2]),Math.max(m[3],q.b[3])],[1e9,1e9,-1e9,-1e9]);
@@ -346,7 +346,7 @@ function drawOcc(svg){
 function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
  const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/><path class="terrain-overlay" d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
  body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
- if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="none" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
+ if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="xMidYMid meet" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
  <linearGradient id="oceanGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071521"/><stop offset=".48" stop-color="#102b3b"/><stop offset="1" stop-color="#07131f"/></linearGradient>
  <radialGradient id="oceanGlow"><stop offset="0" stop-color="#2c7180" stop-opacity=".22"/><stop offset="1" stop-color="#0a1c2a" stop-opacity="0"/></radialGradient>
  <pattern id="oceanTexture" width="42" height="42" patternUnits="userSpaceOnUse"><path d="M0 12 Q10 7 21 12 T42 12 M-8 31 Q2 26 13 31 T34 31" fill="none" stroke="#6fc3d1" stroke-opacity=".09" stroke-width=".7"/></pattern>
@@ -401,7 +401,7 @@ H.wmTap=(iso,rid)=>{
  tp.innerHTML=`<button class="wm-tipx" onclick="H.wmTipClose()">✕</button><b>${esc2(nm)}</b>${C.name&&nm!==C.name?`<div class="wm-sub">${esc2(C.name)}</div>`:''}<div>🏴 Владелец: <b style="color:${col}">${esc2(ownTxt)}</b></div>${orig}${st}${C.name?`<button class="primary wm-open" onclick="H.ccr('${iso}','${rid}')">Открыть страну и провинции</button>`:''}`;
  WMAP.box.appendChild(tp);
 };
-let WZ={x:0,y:0,w:1000,h:575};
+let WZ={x:0,y:0,w:MAP_WIDTH,h:MAP_HEIGHT};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
 function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
 function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}

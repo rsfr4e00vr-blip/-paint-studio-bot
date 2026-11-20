@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./game.js','utf8');
+assert.match(s,/const MAP_WIDTH=14940,MAP_HEIGHT=10050/);
+assert.match(s,/GEO=\{st:'idle',c:\{\},W:MAP_WIDTH,H:MAP_HEIGHT\}/);
+assert.match(s,/GEO\.W=MAP_WIDTH;GEO\.H=MAP_HEIGHT/);
+assert.match(s,/w:MAP_WIDTH,h:MAP_HEIGHT/);
+assert.match(s,/preserveAspectRatio="xMidYMid meet"/);
+assert.match(s,/GEO\.H-\(mer\(80\)-mer\(-58\)\)\/\(2\*Math\.PI\)\*GEO\.W/);
+console.log('OK: 14940x10050 logical world canvas, centered Mercator projection, non-distorting SVG aspect');
