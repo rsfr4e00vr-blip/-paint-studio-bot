@@ -662,14 +662,21 @@ function paint(){
  const all=MM.units.concat(MM.remoteUnits||[]),lead={},cl={};
  const thr=26*zf;
  const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
- const leaders=[];
- order.forEach(u=>{const ux=u.x/up,uy=u.y/up;let g=null;
-  for(const l of leaders){if((l.own===ME)===(u.own===ME)&&Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}}
-  if(g){lead[u.id]=g.id;cl[g.id].push(u)}else{leaders.push(u);lead[u.id]=u.id;cl[u.id]=[u]}});
+ const buckets=new Map();
+ order.forEach(u=>{const ux=u.x/up,uy=u.y/up,bx=Math.floor(ux/thr),by=Math.floor(uy/thr),side=u.own===ME?'m':'e';let g=null;
+  for(let dy=-1;dy<=1&&!g;dy++)for(let dx=-1;dx<=1&&!g;dx++){
+   const a=buckets.get(side+':'+(bx+dx)+':'+(by+dy));if(!a)continue;
+   for(const l of a)if(Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}
+  }
+  if(g){lead[u.id]=g.id;cl[g.id].push(u)}
+  else{lead[u.id]=u.id;cl[u.id]=[u];const key=side+':'+bx+':'+by,a=buckets.get(key)||[];a.push(u);buckets.set(key,a)}
+ });
  MM.clusters=cl;MM.leadOf=lead;
- all.forEach(u=>{seen[u.id]=1;const S=SPEC[u.sub];let e=L.els[u.id];
+ all.forEach(u=>{seen[u.id]=1;const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
+  const margin=24*up,visible=u.x>=vb.x-margin&&u.x<=vb.x+vb.width+margin&&u.y>=vb.y-margin&&u.y<=vb.y+vb.height+margin;
+  if(!visible){const old=L.els[u.id];if(old)old.g.setAttribute('display','none');u.hid=true;return}
+  const S=SPEC[u.sub];let e=L.els[u.id];
   if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#f5d889" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
-  const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
   const showAtZoom=u.own===ME?(zoomAlpha>.035||MM.sel===u.id):true; // вражеские части видны и на общем масштабе
   e.g.setAttribute('display',isLead&&showAtZoom?'':'none');u.hid=!(isLead&&showAtZoom);
   if(isLead&&grp.length>1){e.cnt.setAttribute('display','');e.cn.textContent=grp.length}else e.cnt.setAttribute('display','none');
