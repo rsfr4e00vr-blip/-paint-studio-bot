@@ -590,10 +590,9 @@ function seedWorldGarrisons(){
   const p1=snap('land',base.x,base.y,14),p2=snap('land',base.x+5,base.y+3,20),p3=snap('land',base.x-5,base.y-3,20);
   if(p1>=0){const q=cellPt(p1);add('inf',q[0],q[1],'Гарнизон '+C.name)}
   if(p2>=0){const q=cellPt(p2);add('tank',q[0],q[1],'Бронетехника '+C.name)}
-  if(p3>=0){const q=cellPt(p3);add('aabat',q[0],q[1],'ПВО '+C.name)}
-  const air=base;add('fighter',air.x,air.y,'Истребители '+C.name);add('bomber',air.x+1.2,air.y+1.2,'Бомбардировщики '+C.name);
+  /* В мирное время показываем компактный гарнизон. ПВО и авиация разворачиваются военным ИИ после начала войны. */
   let sea=-1;for(const rr of pts.slice(0,Math.min(pts.length,8))){const rp=toSim({x:rr.cx,y:rr.cy});sea=snap('sea',rp.x,rp.y,18,true);if(sea>=0)break}
-  if(sea>=0){const q=cellPt(sea);add('destroyer',q[0],q[1],'Флот '+C.name);add('frigate',q[0]+1,q[1]+1,'Фрегаты '+C.name);add('submarine',q[0]+2,q[1]+2,'Подводные силы '+C.name)}
+  if(sea>=0){const q=cellPt(sea);add('destroyer',q[0],q[1],'Флот '+C.name)}
  });
 }
 function ensureFleet(){
@@ -800,7 +799,9 @@ function paintClock(){try{const st=env&&env.S&&env.S();if(!st)return;document.qu
 if(typeof document!=='undefined')setInterval(()=>{if(!document.hidden)paintClock()},700);
 function paintHud(force){if(force)paintClock();
  const h=hud();if(!h)return;const p=h.p,fab=h.fab;
- const mine=MM.units.filter(u=>u.own===ME),foeUnits=MM.units.filter(u=>u.own!==ME).concat(MM.garrisons||[],MM.remoteUnits||[]),foes=foeUnits.length;
+ const mine=MM.units.filter(u=>u.own===ME);
+ if(!MM.open){fab.textContent='🪖 Войска · '+mine.length;p.hidden=true;return}
+ const foeUnits=MM.units.filter(u=>u.own!==ME).concat(MM.garrisons||[],MM.remoteUnits||[]),foes=foeUnits.length;
  const u=byId(MM.sel),inspected=byId(MM.inspect);
  const forceKey=foeUnits.map(x=>x.own+':'+x.sub+':'+Math.round(x.hp/10)).join(',');
  const sig=[MM.open,MM.sel,MM.inspect,MM.mode,MM.speed,mine.map(x=>x.id+Math.round(x.hp/5)+x.mission+(x.fuel?Math.round(x.fuel/8):0)).join(),foes,forceKey,MM.log.join('|'),MM.depOpen?Math.floor(env.S().money/50):env.S().money].join('~');
