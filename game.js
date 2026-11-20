@@ -22,7 +22,41 @@ function aiCfgSelects(){const A=window.AIARS;if(!A)return '';const sel=selectedA
 function aiCfgCard(){const A=window.AIARS;if(!A)return '';const c=A.cfg(S);
  return card('🤖 ИИ-противники',`<p>Выберите перед стартом: насколько агрессивны страны, учится ли их нейросеть и есть ли у них оружие в начале. По умолчанию арсенала нет — страны сами <b>вырабатывают</b> оружие на заводах и <b>покупают</b> его за деньги (дороже, но быстрее). Работает для <b>новой кампании</b>.</p>${aiCfgSelects()}<div class="mini"><b>Сейчас в игре:</b> агрессия — ${A.AGGR[c.aggr].n}; нейросеть — ${A.NNM[c.nn]}; стартовый арсенал — ${A.ARSM[c.ars]}.</div><button class="primary" onclick="resetGame()">Начать новую кампанию с этими настройками</button>`)}
 window.setDifficulty=v=>{selectedDifficulty=DIFFICULTIES[v]?v:'normal';toast('Для применения сложности начни новую кампанию')};
-function save(){if(window.__salv)return;let snapshot;try{snapshot=JSON.stringify(S);localStorage.setItem('novariaSave',snapshot)}catch(e){try{const compact=JSON.parse(JSON.stringify(S));const trim=(a,n)=>{if(Array.isArray(a)&&a.length>n)a.splice(0,a.length-n)};trim(compact.history,24);trim(compact.log,35);trim(compact.events,30);trim(compact.documents,30);if(compact.aiWorld){trim(compact.aiWorld.events,35);trim(compact.aiWorld.wars,80);(compact.aiWorld.nations||[]).forEach(n=>trim(n.gh,6))}if(compact.wars&&Array.isArray(compact.wars))Object.values(compact.wars).forEach(w=>{trim(w.log,24);trim(w.events,20)});if(compact.milmap){trim(compact.milmap.units,180);trim(compact.milmap.bases,80)}snapshot=JSON.stringify(compact);localStorage.setItem('novariaSave',snapshot);toast('Сохранение оптимизировано: удалены только старые записи журнала')}catch(e2){console.warn('Novaria save quota exceeded',e2);toast('Не хватает места для сохранения. Освободите память браузера; текущая игра пока остаётся открытой.')}}if(window.__NG_MP&&window.NGMP){try{if(typeof window.NGMP.saveLocal==='function')window.NGMP.saveLocal();if(typeof window.NGMP.reportState==='function')window.NGMP.reportState()}catch(e){console.warn('NGMP sync failed',e)}}}
+function save(){
+ if(window.__salv)return;
+ let saved=false,snapshot='';
+ try{
+  snapshot=JSON.stringify(S);
+  localStorage.setItem('novariaSave',snapshot);
+  saved=true;
+ }catch(e){
+  try{
+   const compact=JSON.parse(JSON.stringify(S));
+   const trim=(a,n)=>{if(Array.isArray(a)&&a.length>n)a.splice(0,a.length-n)};
+   /* Уменьшаем только историю и журналы. Армии, базы, провинции и действующие войны не трогаем. */
+   trim(compact.history,12);trim(compact.log,18);trim(compact.events,12);trim(compact.documents,12);
+   if(compact.aiWorld){
+    trim(compact.aiWorld.events,16);
+    (compact.aiWorld.nations||[]).forEach(n=>{trim(n.gh,3);trim(n.events,8);trim(n.log,8)});
+   }
+   if(compact.wars&&Array.isArray(compact.wars))Object.values(compact.wars).forEach(w=>{trim(w.log,10);trim(w.events,8)});
+   snapshot=JSON.stringify(compact);
+   localStorage.setItem('novariaSave',snapshot);
+   saved=true;
+   toast('Сохранение оптимизировано: игровые армии и территории сохранены, сокращена только история');
+  }catch(e2){
+   console.warn('Novaria save quota exceeded',e2);
+   toast('Не удалось сохранить игру: память браузера заполнена. Текущая партия остаётся открытой; освободите место и сохраните снова.');
+  }
+ }
+ if(window.__NG_MP&&window.NGMP){
+  try{
+   if(typeof window.NGMP.saveLocal==='function')window.NGMP.saveLocal();
+   if(typeof window.NGMP.reportState==='function')window.NGMP.reportState();
+  }catch(e){console.warn('NGMP sync failed',e)}
+ }
+ return saved;
+}
 function toast(t){if(window.__salv)return;let n=$('#notice');n.textContent=t;n.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>n.style.display='none',2400)}
 function log(t){if(window.__salv&&window.__salv.mute)return;S.log.unshift(`Год ${S.year}, ${months[S.month]}: ${t}`);S.log=S.log.slice(0,100)}
 const IC={
