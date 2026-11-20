@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./game.js','utf8');
+const m=fs.readFileSync('./military_map.js','utf8');
+assert.match(s,/function terrainTypeFor\(C,r\)/);
+assert.match(s,/data-terrain="\$\{type\}"/);
+assert.match(s,/Местность: <b>\$\{tm\.name\}<\/b>/);
+assert.match(s,/const terrain=terrainTypeFor\(C,r\)/);
+assert.match(m,/tt==='mountain'\?1\.42:tt==='forest'\?1\.24/,'terrain reduces incoming damage');
+console.log('OK: visible terrain layer, region terrain info and defensive modifiers');

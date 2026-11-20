@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./game.js','utf8');
+assert.match(s,/S\.campaignOver=true/,'total player occupation is terminal');
+assert.match(s,/window\.resetGame&&window\.resetGame\(\)/,'defeat dialog offers restart');
+assert.match(s,/H\.exitGame=\(\)=>/,'defeat dialog offers safe exit');
+assert.doesNotMatch(s,/try\{pause\}catch\(e\)\{\}\s*try\{warResultModal\('win'/,'enemy annexation does not pause the global game loop');
+assert.match(s,/c\.annexed=true;c\.power=0/,'annexed country is excluded from active AI');
+assert.match(s,/S\.wars=\(S\.wars\|\|\[\]\)\.filter\(x=>x\.n!==name\)/,'annexation removes stale war reference');
+console.log('OK: defeat terminal state, restart/exit, non-blocking victory and annex cleanup');

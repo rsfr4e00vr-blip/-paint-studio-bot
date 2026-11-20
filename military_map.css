@@ -39,3 +39,8 @@
 .wm-tip.wm-tip b{font-size:13px}
 .wm-tip.wm-tip .wm-open{padding:5px 8px;font-size:12px;min-height:30px;margin-top:4px}
 .wm-tip.wm-tip .wm-sub,.wm-tip.wm-tip .wm-st{font-size:11px}
+
+/* Enemy force composition and read-only 2D unit inspection */
+.mm-enemy-card{border-color:#a94b5a;background:rgba(65,24,35,.28)}
+.mm-enemy-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:5px 2px;border-bottom:1px solid rgba(190,205,220,.12);font-size:12px}
+.mm-enemy-row:last-child{border-bottom:0}
