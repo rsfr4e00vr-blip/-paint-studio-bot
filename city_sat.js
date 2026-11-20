@@ -136,7 +136,8 @@ function towns(key,regionName,pop,country,cont,mainName){
 function townCond(regionCond,fate,hit){return Math.max(0,Math.min(100,100-(100-regionCond)*(.55+.9*fate)-(hit||0)))}
 
 /* ---------- рисование ---------- */
-let ITEMS=[],VER=0,LASTKEY='',LAYER=null;
+let ITEMS=[],VER=0,LASTKEY='',LAYER=null;const CITY_CELL=24;let CITY_GRID=new Map();
+function indexCities(items){const grid=new Map();for(const c of items){const k=Math.floor(c.x/CITY_CELL)+','+Math.floor(c.y/CITY_CELL);let b=grid.get(k);if(!b)grid.set(k,b=[]);b.push(c)}CITY_GRID=grid}
 /* радиус города в единицах карты: 10 тыс. → 0.5, 100 тыс. → 1.25, 1 млн → 2, 10 млн → 2.75 (но не больше доли области) */
 function radius(pop,cap){const r=.5+.75*Math.log10(Math.max(1e4,pop||1e4)/1e4);return Math.max(.35,Math.min(r,cap?Math.max(.4,cap*.6):9))}
 const MAXVIS=typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(max-width: 700px)').matches?90:160;
@@ -170,12 +171,10 @@ function draw(layer,svg,wz){
   if(!layer.querySelector('#csi')){layer.innerHTML='<defs id="csd"></defs><g id="csi"></g>';DEFSEL=null;DONE.clear();LASTKEY=''}
   const host=layer.querySelector('#csi'),rect=svg.getBoundingClientRect(),sw=rect.width>20?rect.width:400,ppu=sw/wz.w,
    x0=wz.x-wz.w*.05,y0=wz.y-wz.h*.05,x1=wz.x+wz.w*1.05,y1=wz.y+wz.h*1.05,candidates=[];
-  for(const c of ITEMS){
-    const sr=c.rw*ppu;
-    if(sr<1.6)break;
-    if(sr<(c.own!=null&&c.main?1.6:3.2))continue;
-    if(c.x<x0||c.x>x1||c.y<y0||c.y>y1)continue;
-    candidates.push(c);
+  const cx0=Math.floor(x0/CITY_CELL),cx1=Math.floor(x1/CITY_CELL),cy0=Math.floor(y0/CITY_CELL),cy1=Math.floor(y1/CITY_CELL);
+  for(let cy=cy0;cy<=cy1;cy++)for(let cx=cx0;cx<=cx1;cx++){
+    const bucket=CITY_GRID.get(cx+','+cy);if(!bucket)continue;
+    for(const c of bucket){const sr=c.rw*ppu;if(sr<1.6)continue;if(sr<(c.own!=null&&c.main?1.6:3.2))continue;if(c.x<x0||c.x>x1||c.y<y0||c.y>y1)continue;candidates.push(c)}
   }
   const vis=declutter(candidates,ppu,MAXVIS);
   const lg=Math.round(Math.log2(ppu)*3);
@@ -203,7 +202,7 @@ function draw(layer,svg,wz){
     return `<g class="csat ${cl}" transform="translate(${f(c.x)} ${f(c.y)})" ${c.own!=null?`data-own="1" data-city="${c.own}" data-town="${esc([c.name,c.pop||0,Math.round(c.cond),c.others||''].join('|'))}"`:`data-fc="${esc(c.name)}|${esc(c.sub||'')}|${Math.round(c.cond)}"`}><circle r="${f(hit)}" fill="#000" fill-opacity="0"/><use href="#${sym}" transform="scale(${f(s)})"/>${o.showLab?`<text text-anchor="middle" class="csat-label" y="${f(o.r*.95/ppu+fs*1.05)}" style="font-size:${f(fs)}px;stroke-width:${f(sk)}px">${esc(c.name.length>16?c.name.slice(0,15)+'…':c.name)}</text>`:''}${c.bad&&c.main&&sr>=10?`<text class="csat-bad" x="${f(o.r*.7/ppu)}" y="${f(-o.r*.6/ppu)}" style="font-size:${f(fs)}px;stroke-width:${f(sk*.7)}px">!${c.bad}</text>`:''}<title>${esc(tt)}</title></g>`}).join('');
 }
 
-function setItems(items){ITEMS=items.slice().sort((a,b)=>b.rw-a.rw);VER++}
+function setItems(items){ITEMS=items.slice().sort((a,b)=>b.rw-a.rw);indexCities(ITEMS);VER++}
 function refresh(svg,wz,W){const layer=svg&&svg.querySelector('#city-markers');if(layer)draw(layer,svg,wz)}
 function render(layer,items){LAYER=layer;setItems(items);const sv=layer.ownerSVGElement;if(sv)draw(layer,sv,{x:0,y:0,w:1000,h:575})}
 function zoom(svg,z){const layer=(svg&&svg.querySelector('#city-markers'))||LAYER;if(layer&&svg)draw(layer,svg,{x:0,y:0,w:1000*z,h:575*z})}
