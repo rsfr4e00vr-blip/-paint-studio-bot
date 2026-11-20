@@ -4666,11 +4666,13 @@ window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
   enemyNation(name){const W=S.aiWorld;return W&&Array.isArray(W.nations)?(W.nations.find(x=>x.name===name)||null):null},
   countryPvoMarkers(){const out=[];try{(WORLD.list||[]).forEach(n=>{if(!n||n.name===myName())return;const C=GEO.c[n.iso];const rs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy)).sort((a,b)=>(b.s||0)-(a.s||0));if(!rs.length)return;const count=Math.max(1,Math.min(3,1+Math.floor((Number(n.power)||20)/65)));for(let i=0;i<count;i++){const r=rs[Math.min(rs.length-1,Math.floor(i*rs.length/count))];out.push({x:r.cx,y:r.cy,name:n.name})}})}catch(e){}return out},
   enemySpawn(name){
-   let C=null;try{C=GEO.c[wi(name).iso]}catch(e){}
+   /* Ищем страну устойчиво: GEO может быть индексирован ISO-кодом, а не названием. */
+   let C=null,iso='';try{iso=(wi(name)||{}).iso||'';C=GEO.c[name]||GEO.c[iso]||Object.values(GEO.c).find(x=>x&&(x.name===name||x.iso===iso))}catch(e){}
    const rs=C&&(C.regs||[]).filter(q=>Number.isFinite(q.cx)&&Number.isFinite(q.cy));if(!rs||!rs.length)return null;
-   let inv=[];try{const U=window.MilMap&&MilMap.core&&MilMap.core.MM.units||[];inv=U.filter(u=>u.own==='me'&&u.sub!=='fighter'&&u.sub!=='bomber'&&mmRegionAt(u.x,u.y)?.country===name)}catch(e){}
+   /* Развёртывание на ближайшем к игроку участке фронта, а не в случайной глубине страны. */
+   let inv=[];try{const U=window.MilMap&&MilMap.core&&MilMap.core.MM.units||[];inv=U.filter(u=>u.own==='me'&&u.sub!=='fighter'&&u.sub!=='bomber')}catch(e){}
    let r;if(inv.length){const ranked=rs.map(q=>({q,d:Math.min(...inv.map(u=>(u.x-q.cx)**2+(u.y-q.cy)**2))})).sort((a,b)=>a.d-b.d);r=ranked[Math.floor(Math.random()*Math.min(3,ranked.length))].q}
-   else r=rs[Math.floor(Math.random()*rs.length)];return{x:r.cx,y:r.cy}
+   else r=rs.slice().sort((a,b)=>(b.s||0)-(a.s||0))[0];return{x:r.cx,y:r.cy}
   },
   lostUnit(u){if(u.pid&&Array.isArray(S.militaryUnits))S.militaryUnits=S.militaryUnits.filter(x=>x.id!==u.pid);if(u.sub==='aabat'){if(u.own==='me'){S.milmap=S.milmap||{};S.milmap.destroyedBatteries=(S.milmap.destroyedBatteries||0)+1;log('📡 Уничтожена наша батарея ПВО на карте. Для восстановления разместите новую за 500 млн.')}else{const c=S.aiWorld&&Array.isArray(S.aiWorld.nations)?S.aiWorld.nations.find(x=>x.name===u.own):null;if(c){c.aa=Math.max(0,(Number(c.aa)||0)-1.5);c.aaLost=(c.aaLost||0)+1;c.aaDown=Math.max(Number(c.aaDown)||0,2)}log('📡 '+u.own+' потерял батарею ПВО; защита страны ослаблена.')}}}}}};
 
