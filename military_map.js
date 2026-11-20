@@ -758,7 +758,7 @@ function paint(){
  const margin=48*up,V0=MM.vis;
  const order=all.filter(u=>u.x>=V0.x-margin&&u.x<=V0.x+V0.w+margin&&u.y>=V0.y-margin&&u.y<=V0.y+V0.h+margin)
   .slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
- all.forEach(u=>{seen[u.id]=1});
+ all.forEach(u=>{seen[u.id]=1;if(u.x<V0.x-margin||u.x>V0.x+V0.w+margin||u.y<V0.y-margin||u.y>V0.y+V0.h+margin){u.hid=true;const old=L.els[u.id];if(old)old.g.setAttribute('display','none')}});
  const buckets=new Map();
  order.forEach(u=>{const ux=u.x/up,uy=u.y/up,bx=Math.floor(ux/thr),by=Math.floor(uy/thr),side=u.own===ME?'m':'e:'+String(u.own);let g=null;
   for(let dy=-1;dy<=1&&!g;dy++)for(let dx=-1;dx<=1&&!g;dx++){
