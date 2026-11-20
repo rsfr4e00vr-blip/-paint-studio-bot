@@ -657,7 +657,7 @@ function paint(){
  /* юниты */
  const seen={};
  /* масштаб значков зависит от зума: на общем виде мелкие, при приближении крупнее */
- const zf=clampN(.30+.22*Math.log2(zoom),.30,1.0);MM.zf=zf;
+ const zf=clampN(.48+.18*Math.log2(zoom),.48,1.0);MM.zf=zf;
  /* группировка: части, слипающиеся на экране, сворачиваются в один значок со счётчиком */
  const all=MM.units.concat(MM.remoteUnits||[]),lead={},cl={};
  const thr=26*zf;
@@ -677,7 +677,7 @@ function paint(){
   if(!visible){const old=L.els[u.id];if(old)old.g.setAttribute('display','none');u.hid=true;return}
   const S=SPEC[u.sub];let e=L.els[u.id];
   if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#f5d889" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
-  const showAtZoom=u.own===ME?(zoomAlpha>.035||MM.sel===u.id):true; // вражеские части видны и на общем масштабе
+  const showAtZoom=true; // Свои и вражеские подразделения всегда видны; масштаб влияет только на размер и группировку.
   e.g.setAttribute('display',isLead&&showAtZoom?'':'none');u.hid=!(isLead&&showAtZoom);
   if(isLead&&grp.length>1){e.cnt.setAttribute('display','');e.cn.textContent=grp.length}else e.cnt.setAttribute('display','none');
   if(!isLead)return;

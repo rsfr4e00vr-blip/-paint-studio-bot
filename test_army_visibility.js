@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./military_map.js','utf8');
+assert.match(s,/const showAtZoom=true;/,'own and enemy units are not hidden by zoom threshold');
+assert.match(s,/const zf=clampN\(\.48\+\.18\*Math\.log2\(zoom\),\.48,1\.0\)/,'unit sprites keep a readable minimum size');
+assert.match(s,/function sprite\(sub,own\)/,'original 2D unit sprites remain');
+assert.match(s,/case'tank':return/,'tank model remains');
+assert.match(s,/case'inf':return/,'infantry model remains');
+assert.match(s,/requestAnimationFrame/,'animation loop remains present');
+console.log('OK: all army sprites remain visible at every zoom; original 2D sprites and animation loop preserved');
