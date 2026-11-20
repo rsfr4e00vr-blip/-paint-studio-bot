@@ -369,7 +369,7 @@ function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Objec
  <pattern id="terrainHill" width="26" height="20" patternUnits="userSpaceOnUse"><path d="M-3 16Q5 4 13 16T29 16M-3 21Q5 9 13 21T29 21" fill="none" stroke="#f4e5c6" stroke-opacity=".32" stroke-width="1"/></pattern>
  <pattern id="terrainWinter" width="26" height="22" patternUnits="userSpaceOnUse"><path d="M2 18L9 5 16 18M13 18L20 7 26 18" fill="none" stroke="#eaf6ff" stroke-opacity=".48" stroke-width="1.2"/><path d="M7 9l2-4 2 4M18 11l2-4 2 4" stroke="#fff" stroke-opacity=".55" fill="none"/></pattern>
  <pattern id="terrainPlantation" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M4 5v14m0-10l-3-3m3 6l3-3M16 4v15m0-11l-3-3m3 6l3-3" fill="none" stroke="#d6e3b4" stroke-opacity=".34" stroke-width=".9"/></pattern>
- <style>.far [data-r]{stroke:none}.far .terrain-overlay,.far .terrain-grain{display:none}.terrain-overlay{display:block}</style>${cl.join('')}</defs>
+ <style>.far [data-r]{stroke:none}.far .terrain-overlay{opacity:.14}.far .terrain-grain{display:none}.terrain-overlay{display:block}</style>${cl.join('')}</defs>
  <rect class="ocean-base" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanGradient)"/>
  <rect class="ocean-lines" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanTexture)"/>
  <ellipse cx="${GEO.W*.51}" cy="${GEO.H*.48}" rx="${GEO.W*.44}" ry="${GEO.H*.52}" fill="url(#oceanGlow)"/>
