@@ -343,8 +343,21 @@ function drawOcc(svg){
  if(!g){const d=document.createElementNS(NS,'defs');d.innerHTML=`<pattern id="occhatch" width="2.4" height="2.4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.4" height="2.4" fill="${MYC}" opacity=".22"/><line x1="0" y1="0" x2="0" y2="2.4" stroke="${MYC}" stroke-width="1"/></pattern>`;svg.appendChild(d);g=document.createElementNS(NS,'g');g.id='occl';g.setAttribute('pointer-events','none');svg.appendChild(g)}
  g.replaceChildren();
  ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');const gg=geoOf(e);p.setAttribute('d',gg?gg.d:(e.getAttribute('d')||''));p.setAttribute('fill-rule','evenodd');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
+const TERRAIN_META={mountain:{name:'Горы',icon:'🏔',speed:.58,def:1.42,desc:'скорость 0,58× · оборона +42%'},forest:{name:'Лес',icon:'🌲',speed:.78,def:1.24,desc:'скорость 0,78× · оборона +24%'},hill:{name:'Холмы',icon:'⛰',speed:.86,def:1.13,desc:'скорость 0,86× · оборона +13%'},winter:{name:'Снег / зима',icon:'❄️',speed:.76,def:1.18,desc:'скорость 0,76× · оборона +18%'},plantation:{name:'Равнина / посадки',icon:'🌾',speed:.94,def:1.05,desc:'скорость 0,94× · оборона +5%'}};
+function terrainTypeFor(C,r){
+ const x=Number(r&&r.cx),y=Number(r&&r.cy),lat=Number.isFinite(y)?90-y/Math.max(1,GEO.H)*180:0,lon=Number.isFinite(x)?x/Math.max(1,GEO.W)*360-180:0,iso=String(C&&C.iso||'');
+ const box=(a,b,c,d)=>lat>=a&&lat<=b&&lon>=c&&lon<=d;
+ if(Math.abs(lat)>=60)return'winter';
+ if(box(26,36,70,100)||box(27,38,-120,-105)||box(30,50,-115,-100)||box(-56,12,-82,-66)||box(42,48,5,16)||box(40,45,40,51)||box(30,37,8,12))return'mountain';
+ if(box(-15,5,-75,-48)||box(-8,8,10,32)||box(-5,8,95,150)||box(8,25,90,110)||box(5,15,-90,-75))return'forest';
+ if(box(-25,25,25,55)||box(-25,25,95,145)||box(-25,25,-20,55))return'plantation';
+ if(box(35,55,-10,35)||box(20,45,35,65)||box(10,35,65,90)||box(-35,-10,110,155))return'hill';
+ const mountain=['NP','BT','CH','AT','KG','TJ','AM','GE','BO','PE'],forest=['BR','CD','CG','ID','MY','PG','SR','GY'],crop=['TH','VN','KH','LA','LK','BD','GH','CI','NG'];
+ if(mountain.includes(iso))return'mountain';if(forest.includes(iso))return'forest';if(crop.includes(iso))return'plantation';
+ return'hill';
+}
 function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
- const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/><path class="terrain-overlay" d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
+ const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const type=terrainTypeFor(C,r),pat={mountain:'terrainMountain',forest:'terrainForest',hill:'terrainHill',winter:'terrainWinter',plantation:'terrainPlantation'}[type];return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/><path class="terrain-overlay" data-terrain="${type}" d="${r.d}" fill="url(#${pat})" opacity=".48" pointer-events="none"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
  body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
  if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="xMidYMid meet" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
  <linearGradient id="oceanGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071521"/><stop offset=".48" stop-color="#102b3b"/><stop offset="1" stop-color="#07131f"/></linearGradient>
@@ -360,7 +373,7 @@ function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Objec
  <rect class="ocean-base" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanGradient)"/>
  <rect class="ocean-lines" width="${GEO.W}" height="${GEO.H}" fill="url(#oceanTexture)"/>
  <ellipse cx="${GEO.W*.51}" cy="${GEO.H*.48}" rx="${GEO.W*.44}" ry="${GEO.H*.52}" fill="url(#oceanGlow)"/>
- ${body.join('')}</svg><div class="wzoom"><button onclick="H.wz('in')">＋</button><button onclick="H.wz('out')">−</button><button onclick="H.wz('reset')">⟲</button><button onclick="H.wz('full')" id="wfull">⛶</button></div>`;
+ ${body.join('')}</svg><div class="terrain-legend" style="position:absolute;right:8px;top:8px;z-index:5;pointer-events:none;background:#071521dd;border:1px solid #66808a;border-radius:9px;padding:6px 8px;color:#eef6f5;font:11px/1.45 system-ui;max-width:164px"><b>Местность</b><div>🏔 Горы · 🌲 Леса</div><div>⛰ Холмы · ❄️ Снег</div><div>🌾 Равнины / посадки</div></div><div class="wzoom"><button onclick="H.wz('in')">＋</button><button onclick="H.wz('out')">−</button><button onclick="H.wz('reset')">⟲</button><button onclick="H.wz('full')" id="wfull">⛶</button></div>`;
  const svg=n.querySelector('svg');svg.classList.add('far');WMAP.node=svg;WMAP.box=n;WZ={x:0,y:0,w:GEO.W,h:GEO.H};
  const ptr=new Map();let gs=null;const rc=()=>svg.getBoundingClientRect();
  const startG=()=>({V0:{...WZ},pts:[...ptr.values()].map(p=>({...p})),moved:0,V1:null,multi:ptr.size>1});
@@ -386,6 +399,7 @@ H.wmTap=(iso,rid)=>{
  let g=svg.querySelector('#wm-hl');if(!g){g=document.createElementNS(NS,'g');g.id='wm-hl';g.setAttribute('pointer-events','none')}svg.appendChild(g);g.replaceChildren();
  const hl=document.createElementNS(NS,'path');hl.setAttribute('d',x.d||C.d);hl.setAttribute('fill-rule','evenodd');hl.setAttribute('fill','rgba(255,211,77,.30)');hl.setAttribute('stroke','#ffd34d');hl.setAttribute('stroke-width','2.4');hl.setAttribute('vector-effect','non-scaling-stroke');g.appendChild(hl);
  const nm=String(x.n||C.name||'Территория').replace(/ \(.*\)/,'');
+ const terrain=terrainTypeFor(C,x),tm=TERRAIN_META[terrain]||TERRAIN_META.hill;
  let ownTxt='Ничья земля',col='#ccc',orig='',st='';
  if(C.name){
   const ow=regionOwner(C,x.n?x:{id:rid,n:C.name});col=ownerColor(ow,C,0);
@@ -398,7 +412,7 @@ H.wmTap=(iso,rid)=>{
  if(C.name&&(S.wars||[]).some(w=>w.n===C.name))st+='<div class="wm-st bad">⚔️ Идёт война с этой страной</div>';
  let tp=document.getElementById('wm-tip');if(tp)tp.remove();
  tp=document.createElement('div');tp.id='wm-tip';tp.className='wm-tip';
- tp.innerHTML=`<button class="wm-tipx" onclick="H.wmTipClose()">✕</button><b>${esc2(nm)}</b>${C.name&&nm!==C.name?`<div class="wm-sub">${esc2(C.name)}</div>`:''}<div>🏴 Владелец: <b style="color:${col}">${esc2(ownTxt)}</b></div>${orig}${st}${C.name?`<button class="primary wm-open" onclick="H.ccr('${iso}','${rid}')">Открыть страну и провинции</button>`:''}`;
+ tp.innerHTML=`<button class="wm-tipx" onclick="H.wmTipClose()">✕</button><b>${esc2(nm)}</b>${C.name&&nm!==C.name?`<div class="wm-sub">${esc2(C.name)}</div>`:''}<div>🏴 Владелец: <b style="color:${col}">${esc2(ownTxt)}</b></div><div>${tm.icon} Местность: <b>${tm.name}</b></div><small class="wm-sub">${tm.desc}</small>${orig}${st}${C.name?`<button class="primary wm-open" onclick="H.ccr('${iso}','${rid}')">Открыть страну и провинции</button>`:''}`;
  WMAP.box.appendChild(tp);
 };
 let WZ={x:0,y:0,w:MAP_WIDTH,h:MAP_HEIGHT};
@@ -1170,6 +1184,17 @@ function myEcoStrike(w,t,f,reg){
  if(t==='infra')storageHit(f);
  return{pct:loss*100,cut,money};
 }
+const ARSENAL_RANGE_KM={cannon:45,howitzer:80,tank:55,mlrs:240,drone:500,rocket:750,bomb:260,heli:220,cruise:2500,bomber:3500};
+function geoKm(a,b){if(!a||!b||!Number.isFinite(+a.lat)||!Number.isFinite(+a.lon)||!Number.isFinite(+b.lat)||!Number.isFinite(+b.lon))return Infinity;const rad=Math.PI/180,la1=+a.lat*rad,la2=+b.lat*rad,dl=(+b.lon-+a.lon)*rad,dp=(+b.lat-+a.lat)*rad,h=Math.sin(dp/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dl/2)**2;return 6371*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)))}
+function countryGeoPoint(name){const W=(window.WORLD&&WORLD.map&&WORLD.map[name])||{},D=((window.WORLD_DATA&&WORLD_DATA.countries)||[]).find(x=>x.ru===name||x.i===W.iso||x.a===W.iso);return D&&Number.isFinite(+D.lat)&&Number.isFinite(+D.lon)?{lat:+D.lat,lon:+D.lon}:null}
+function arsenalDistanceKm(w,reg){
+ const targetList=regsOf(myName())||[],enemyList=regsOf(w.n)||[],clean=n=>String(n||'').replace(/ \(.*\)$/,'').trim();
+ let target=targetList.find(x=>String(x.id)===String(reg.geo))||targetList.find(x=>clean(x.n)===clean(reg.name));
+ const targetPoint=target&&Number.isFinite(+target.cx)&&Number.isFinite(+target.cy)?{lat:90-(+target.cy/Math.max(1,GEO.H))*180,lon:(+target.cx/Math.max(1,GEO.W))*360-180}:countryGeoPoint(myName());
+ if(targetPoint&&enemyList.length){let best=Infinity;enemyList.forEach(x=>{if(!Number.isFinite(+x.cx)||!Number.isFinite(+x.cy))return;const q={lat:90-(+x.cy/Math.max(1,GEO.H))*180,lon:(+x.cx/Math.max(1,GEO.W))*360-180};best=Math.min(best,geoKm(q,targetPoint))});if(Number.isFinite(best))return best}
+ const enemyPoint=countryGeoPoint(w.n);if(enemyPoint&&targetPoint)return geoKm(enemyPoint,targetPoint);
+ return clean(w.frontLine)===clean(reg.name)?40:260;
+}
 function enemyStrikes(w,c){
  if(!window.AIARS)return;
  AIARS.stock(c,true,S);if(c.aa==null)c.aa=window.PVO?PVO.ensure(c):Math.round(c.power/25);
@@ -1181,14 +1206,17 @@ function enemyStrikes(w,c){
  acts.forEach(act=>{
   const f=WP[act.w].f,air=WP[act.w].air,t=act.t;
   const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60*((S.dark&&S.dark[r.name])?.55:1):r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
+  const rangeKm=ARSENAL_RANGE_KM[act.w]||300,distances=regs.map(r=>({r,d:arsenalDistanceKm(w,r)})).filter(x=>x.d<=rangeKm);
+  if(!distances.length){AIARS.learn(S,act,-.18);log(`📡 ${w.n}: ${AIARS.WN[act.w]} не достаёт до доступных целей (дальность ${rangeKm} км).`);return}
   const planned=(w.enemyPlan&&w.enemyPlan.region)||'';
-  const reg=regs.find(x=>x.name===planned)||regs[0]||{name:'страна',pop:0,industry:0,infra:0,unrest:0};
+  const reg=(distances.find(x=>x.r.name===planned)||distances[0]).r;
+  const strikeDistance=arsenalDistanceKm(w,reg);
   const shf=window.PopAI?PopAI.shelter(S,reg.name):1;   // доля мирных, которые успели укрыться
   const pI=air?(window.PVO?PVO.p(myAA):Math.min(.92,(S.aa||0)*.09+bcount('aabat')*.12+(w.airDefense||0)*.006)):Math.min(.6,bcount('bunker')*.06+bcount('base')*.04);
   let caught=false;
   if(air){if(pool>0){pool-=act.decoy?1.2:1;caught=Math.random()<pI}}else caught=Math.random()<pI;
-  if(caught){stopped++;if(window.PopAI)PopAI.hit(S,reg.name,t,.3*f);log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
-  hits++;try{townStrike(reg,t,f)}catch(e){}shows.push({w:act.w,reg,down:false,f});if(window.PopAI)PopAI.hit(S,reg.name,t,f);
+  if(caught){stopped++;if(window.PopAI)PopAI.hit(S,reg.name,t,.3*f);log(`🛡 ${air?'ПВО':'Оборона'} отразила удар врага (${AIARS.WN[act.w]} → ${AIARS.TN[t]}).`);AIARS.learn(S,act,act.decoy?.05:-.2*f);shows.push({w:act.w,reg,down:true,f,rangeKm,distKm:strikeDistance});warNews(w,'🛡',`${cityOf(reg.name)}: ${AIARS.WN[act.w]} врага (цель — ${AIARS.TN[t]}) сбит${air?'а ПВО':'а обороной'}, попаданий нет`);return}
+  hits++;try{townStrike(reg,t,f)}catch(e){}shows.push({w:act.w,reg,down:false,f,rangeKm,distKm:strikeDistance});if(window.PopAI)PopAI.hit(S,reg.name,t,f);
   let shift=0,r=0;const ES=myEcoStrike(w,t,f,reg);shows[shows.length-1].eco=ES.pct;
   if(t==='mil'){
    shift=2.5*f*.5;const kills=Math.round(rnd(300,900)*f*myLS());S.army=Math.max(5000,S.army-kills);const d=popLoss(kills);S.warSold=(S.warSold||0)+d;w.soldDead=(w.soldDead||0)+d;
@@ -1219,7 +1247,7 @@ function enemyStrikes(w,c){
  });
  if(acts.length>1)log(`📡 ${w.n}: массированный удар — ${acts.length} ед. оружия, перехвачено ${stopped}, прошло ${hits}.`);
  /* анимация: каждый удар врага летит с ЕГО территории в ту область, куда попал (или где был сбит) */
- shows.forEach(x=>{recordWarAttack(w,'enemy',x.w,x.reg,x.down);fxPush({kind:'strike',rev:1,down:x.down,k:x.w,enemy:w.n,regId:x.reg&&x.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[x.w]} → ${S.name}`,sub:x.down?`Сбито нашей ПВО · ${x.reg.name}`:`Попадание: область «${x.reg.name}»${x.eco!=null?` · ВВП −${x.eco.toFixed(2)}%`:''}`})});
+ shows.forEach(x=>{recordWarAttack(w,'enemy',x.w,x.reg,x.down);fxPush({kind:'strike',rev:1,down:x.down,k:x.w,enemy:w.n,regId:x.reg&&x.reg.geo,title:`⚠️ ${w.n}: ${AIARS.WN[x.w]} → ${S.name}`,sub:x.down?`Сбито нашей ПВО · ${x.reg.name}`:`Попадание: область «${x.reg.name}» · ${Math.round(x.distKm||0)}/${x.rangeKm||0} км${x.eco!=null?` · ВВП −${x.eco.toFixed(2)}%`:''}`})});
 }
 const WP0={cannon:{air:false},drone:{air:true},tank:{air:false},rocket:{air:true},bomb:{air:true},howitzer:{air:false},heli:{air:true},mlrs:{air:false},cruise:{air:true},bomber:{air:true}};
 const TG0={cannon:1,drone:1,tank:1,rocket:1,bomb:1,howitzer:1,heli:1,mlrs:1,cruise:1,bomber:1};
@@ -3039,6 +3067,7 @@ function groundClash(w,d){
 /* ---------- окно итога войны: победа / поражение ---------- */
 function wrmClose(){const m=document.getElementById('wrm');if(m)m.remove()}
 H.wrmClose=wrmClose;
+H.exitGame=()=>{try{if(window.Telegram&&Telegram.WebApp&&Telegram.WebApp.close){Telegram.WebApp.close();return}}catch(e){}try{location.href='/'}catch(e){}};
 H.wrmDo=(n,m)=>{wrmClose();H.dictate(n,m)};
 function warResultModal(kind,w,o){
  if(window.__salv||!w)return;o=o||{};wrmClose();const nm=qn(w.n),n=escA(w.n);let h;
@@ -3066,7 +3095,7 @@ function warResultModal(kind,w,o){
    else if(w.goal==='regime')L.push('🏛 Противник требует смены власти — в стране возможен переворот');
    else L.push('💰 Противник получил контрибуцию');
   }
-  h=`<h3>🏳 Поражение в войне с ${n}</h3><p>Фронт рухнул — пришлось заключить мир на условиях противника.</p><ul style="margin:8px 0 8px 18px;line-height:1.55">${L.map(x=>`<li>${x}</li>`).join('')}</ul><div class="actions"><button class="primary" onclick="H.wrmClose()">Понятно</button></div><small class="muted">Подробности — в журнале событий.</small>`;
+  h=`<h3>🏳 Поражение в войне с ${n}</h3><p>Все регионы страны потеряны. Кампания завершена.</p><ul style="margin:8px 0 8px 18px;line-height:1.55">${L.map(x=>`<li>${x}</li>`).join('')}</ul><div class="actions"><button class="primary" onclick="H.wrmClose();window.resetGame&&window.resetGame()">🔄 Новая игра</button><button onclick="H.exitGame()">🚪 Выйти</button></div><small class="muted">Прогресс поражённой кампании сохранён до начала новой игры.</small>`;
  }
  const m=document.createElement('div');m.id='wrm';m.className='ccm';m.style.zIndex=60;m.innerHTML=`<div class="ccbox">${h}</div>`;document.body.appendChild(m);
 }
@@ -3158,7 +3187,7 @@ function warTick(){
   // Симметричное условие поражения: полный захват всех регионов игрока.
   const homeRegions=S.regions||[];
   if(homeRegions.length&&homeRegions.every(r=>r.enemyOccupied||S.enemyOccupied[r.name]===w.n)){
-   w.lost=1;w.lostBy='total-occupation';
+   w.lost=1;w.lostBy='total-occupation';S.campaignOver=true;
    log(`🏳 ${w.n}: все регионы страны заняты противником. Кампания потерпела поражение.`);
    try{pause()}catch(e){}
    try{warResultModal('loss',w,{})}catch(e){}
@@ -3191,7 +3220,6 @@ function warTick(){
    log(`🏆 ${w.n}: все регионы заняты. Война завершена полной победой — выберите условия итогов.`);
    try{updateWorld()}catch(e){}
    try{toast(`🏆 Полная победа над ${w.n}!`)}catch(e){}
-   try{pause()}catch(e){}
    try{warResultModal('win',w,{why:'полная оккупация всех регионов'})}catch(e){}
   }
  });
@@ -3388,7 +3416,7 @@ function spoils(name,mode,rid,keep){
   log(`🗺 Вы захватили регион: ${R.n} (${name}). Население +${fmt(p)}, ВВП +${fmt(g)}.`);if(!keep)intlReact(name,'region');
   if(rg&&rg.every(x=>taken()[x.id])){c.annexed=true;S.puppets=S.puppets.filter(x=>x!==name);log(`🏴 Вы захватили все регионы — ${name} исчезла с карты мира.`)}}
  if(mode==='annex'){const p=Math.round(Math.min(c.popLeft,S.pop*.5)),g=Math.round(Math.min(p*gpc*1.1,S.gdp*.35));
-  grab(`Земли ${name}`,p,g,true);{const rg=regsOf(name)||[];S.captured[S.captured.length-1].regs=rg.filter(x=>!taken()[x.id]).map(x=>x.n);rg.forEach(x=>taken()[x.id]=1)}shock=1;c.annexed=true;c.popLeft=0;S.puppets=S.puppets.filter(x=>x!==name);ch({stability:-5,legitimacy:-2,threat:8,rel:-6,reg:4},false);log(`🏴 Полностью захвачено государство ${name}: население +${fmt(p)}, ВВП +${fmt(g)}. Страна исчезла с карты мира, её земли показаны на вашей карте.`);intlReact(name,'annex')}
+  grab(`Земли ${name}`,p,g,true);{const rg=regsOf(name)||[];S.captured[S.captured.length-1].regs=rg.filter(x=>!taken()[x.id]).map(x=>x.n);rg.forEach(x=>taken()[x.id]=1)}shock=1;c.annexed=true;c.power=0;c.popLeft=0;S.puppets=(S.puppets||[]).filter(x=>x!==name);if(S.puppetData)delete S.puppetData[name];if(S.regimes)delete S.regimes[name];if(S.spyNetworks)delete S.spyNetworks[name];if(S.spyReports)delete S.spyReports[name];if(S.allies)S.allies=S.allies.filter(x=>x!==name);if(S.pacts)delete S.pacts[name];if(S.embassies)delete S.embassies[name];S.wars=(S.wars||[]).filter(x=>x.n!==name);S.war=S.wars.length>0||!!S.martial;ch({stability:-5,legitimacy:-2,threat:8,rel:-6,reg:4},false);log(`🏴 Полностью захвачено государство ${name}: население +${fmt(p)}, ВВП +${fmt(g)}. Страна исчезла с карты мира, её земли показаны на вашей карте.`);intlReact(name,'annex')}
  if(mode==='regime'){shock=.1;const prev=c.ideology||GrandDiplomacy.orientation(c),me={name:S.name||S.me||'Игрок',ideology:S.ideology||'прагматизм'},an=((S.aiWorld&&S.aiWorld.nations)||[]).find(x=>x.name===name);
   S.regimes=S.regimes||{};S.regimes[name]={month:mt(),prev,loyalty:62,supported:0};
   c.ideology=me.ideology;c.value=clamp(Math.max(c.value,10)+45,-100,100);c.power=Math.max(10,Math.round(c.power*.85));c.aggr=Math.max(.05,(c.aggr||.4)*.4);
@@ -3481,7 +3509,7 @@ function aiBrain(cand,me){
  S.wars.forEach(w=>{if(w.won)return;w.allies=w.allies||[];if(w.allies.length>=3)return;const en=rel(w.n);
   al.forEach(c=>{if(w.allies.length>=3||c.name===w.n||w.allies.includes(c.name))return;
    const isAl=AL.includes(c.name),pr=isAl?.22:(c.value>60&&c.power>=30?.04:0);
-   if(pr&&Math.random()<pr){w.allies.push(c.name);if(en)en.power=Math.max(10,en.power-Math.round(c.power*.08));w.p=clamp(w.p+3);
+   if(pr&&Math.random()<pr){w.allies.push(c.name);if(en)en.power=Math.max(10,en.power-Math.round(c.power*.08));
     log(`🤝 ${isAl?'Союзник':'Друг'} ${c.name} вступил в войну на вашей стороне.`);say(`${c.name} пришёл нам на помощь!`,'🤝')}})});
  /* 4. Союзный доход */
  if(AL.length)S.money+=AL.length*50;
@@ -4544,9 +4572,8 @@ function mmGeom(x,y){const key=Math.floor(y/2)*500+Math.floor(x/2);if(mmCache.ha
  if(mmCache.size>12000){let n=0;for(const k of mmCache.keys()){mmCache.delete(k);if(++n>=2000)break}}mmCache.set(key,hit);return hit}
 function mmRegionAt(x,y){const g=mmGeom(x,y);if(!g)return null;const {C,r}=g;
  const owner=regionOwner(C,r),mine=isMe(owner),war=(S.wars||[]).find(w=>w.n===C.name&&!w.won),occupied=!!(war&&(war.occ||[]).includes(r.id))||!!taken()[r.id];
- const key=String(r.id||r.n||C.iso);let h=2166136261;for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),16777619)>>>0;
- const terrains=['mountain','forest','hill','winter','plantation'];
- return{id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),x:Number.isFinite(r.cx)?r.cx:x,y:Number.isFinite(r.cy)?r.cy:y,country:C.name,mine,occupied,enemyWar:!!war&&!mine&&!occupied,terrain:terrains[h%terrains.length]}}
+ const terrain=terrainTypeFor(C,r);
+ return{id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),x:Number.isFinite(r.cx)?r.cx:x,y:Number.isFinite(r.cy)?r.cy:y,country:C.name,mine,occupied,enemyWar:!!war&&!mine&&!occupied,terrain}}
 window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
  env(){return{GEO,WMAP,S:()=>S,save,toast,play,pause,isRunning:()=>running,difficulty:()=>S.difficulty||'normal',regionAt:mmRegionAt,
   wars:()=>(S.wars||[]).filter(w=>!w.won),
