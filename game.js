@@ -4587,7 +4587,7 @@ function mmRegionAt(x,y){const g=mmGeom(x,y);if(!g)return null;const {C,r}=g;
  const terrain=terrainTypeFor(C,r);
  return{id:r.id,name:String(r.n||C.name).replace(/ \(.*\)$/,''),x:Number.isFinite(r.cx)?r.cx:x,y:Number.isFinite(r.cy)?r.cy:y,country:C.name,mine,occupied,enemyWar:!!war&&!mine&&!occupied,terrain}}
 window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
- env(){return{GEO,WMAP,S:()=>S,save,toast,play,pause,isRunning:()=>running,difficulty:()=>S.difficulty||'normal',regionAt:mmRegionAt,
+ env(){return{GEO,WMAP,S:()=>S,playerCountry:()=>myName(),save,toast,play,pause,isRunning:()=>running,difficulty:()=>S.difficulty||'normal',regionAt:mmRegionAt,
   wars:()=>(S.wars||[]).filter(w=>!w.won),
   warTargets(w){const rg=regsOf(w.n)||[],cm=normCmd(w),occ=new Set(w.occ||[]),tk=taken(),pri={};(cm.regions||[]).forEach((n,i)=>pri[n]=i+1);
    return rg.filter(x=>Number.isFinite(x.cx)&&Number.isFinite(x.cy)&&(!tk[x.id]||occ.has(x.id))).map(x=>({id:x.id,name:String(x.n).replace(/ \(.*\)$/,''),x:x.cx,y:x.cy,occ:occ.has(x.id),pri:pri[x.n]||0}))},
