@@ -4,8 +4,10 @@ const game=fs.readFileSync('game.js','utf8');
 const map=fs.readFileSync('military_map.js','utf8');
 function check(ok,msg){if(!ok)throw new Error(msg);console.log('OK',msg)}
 check(game.includes('const compact=JSON.parse(JSON.stringify(S))'),'save quota fallback builds a compact state');
-check(game.includes('trim(compact.history,24)')&&game.includes('trim(compact.log,35)'),'save fallback trims only old history/log records');
-check(game.includes('tab=previousTab;setTimeout(()=>{tab=previousTab;render()},120)'),'loss of power preserves the active tab');
+check(game.includes('trim(compact.history,6)')&&game.includes('trim(compact.log,12)'),'save fallback trims only old history/log records');
+check(game.includes("toast('🚨 ВЫ ПОТЕРЯЛИ ВЛАСТЬ. Вы остались на текущей вкладке.", 'loss of power gives a visible notice without switching tabs');
+check(!game.includes('tab=previousTab;setTimeout(()=>{tab=previousTab;render()},120)'), 'loss of power no longer schedules a tab redirect');
+check(game.includes("if(S.out&&tab!=='comeback')t=null"), 'opposition panel does not override the current map tab');
 check(map.includes("MM.pvoMarkers=[];MM.pvoSig=''"),'world shield markers are disabled');
 check(map.includes('const aiInterval=warCount>=10?4.5:warCount>=5?3:1.5'),'AI planning cadence adapts to war count');
 check(map.includes('warCount>=10?(IS_MOBILE?220:150):warCount>=5?(IS_MOBILE?170:110)'),'map paint cadence adapts to heavy war load');
@@ -21,9 +23,13 @@ check(["add('inf'","add('tank'","add('destroyer'"].every(x=>map.includes(x)),'pe
 check(!map.slice(map.indexOf('function seedWorldGarrisons()'),map.indexOf('function ensureFleet()')).includes("add('aabat'"),'peace map no longer floods the world with shield-shaped anti-air icons');
 check(map.includes("sub='aabat';nm='Батарея ПВО противника'"),'wartime AI can still field anti-air batteries');
 check(map.includes("if(!MM.open){fab.textContent='🪖 Войска · '+mine.length;p.hidden=true;return}"),'closed military panel skips expensive enemy-force aggregation');
-check(map.includes('stationed.forEach(g=>{const extra='),'peacetime garrisons become active AI units when war begins');
+check(map.includes('stationed.forEach(g=>{if(!MM.units.some(u=>u.own===w.n&&u.sub===g.sub))mk('), 'peacetime garrisons become active AI units when war begins');
+check(map.includes('function activateWarForces(name)'), 'enemy forces can be deployed immediately on war declaration');
+check(map.includes('activateWar:activateWarForces'), 'game can call the immediate enemy deployment API');
+check(game.includes('MilMap.core.activateWar(name)'), 'war declaration calls immediate 2D enemy deployment');
+check(map.includes('const activeOwners=new Set((env.wars?env.wars():[])'), 'old saves discard stale foreign units but retain active war forces');
 check(map.includes('function ownerColor(own)'),'each country receives a distinct 2D force colour');
 check(game.includes('playerCountry:()=>myName()'),"map garrison layer can exclude the player's own country");
 
-check(game.includes('Игровые армии и территории сохранены')&&!game.includes('trim(compact.milmap.units,180)'),'quota fallback preserves saved military units and territories');
+check(game.includes('compact.milmap.units=compact.milmap.units.map(u=>({id:u.id,own:u.own,sub:u.sub,x:u.x,y:u.y,ang:u.ang,hp:u.hp'), 'quota fallback compacts routes but preserves each army identity, type and position');
 check(game.includes('Текущая партия остаётся открытой')&&game.includes('return saved;'),'failed local save reports the problem without resetting the live campaign');
