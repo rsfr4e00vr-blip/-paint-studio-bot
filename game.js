@@ -25,11 +25,22 @@ window.setDifficulty=v=>{selectedDifficulty=DIFFICULTIES[v]?v:'normal';toast('Д
 function save(){
  if(window.__salv)return false;
  let saved=false,error=null;
- // Не блокируем локальное сохранение, если сетевая оболочка не подключила свой адаптер.
- try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.saveLocal==='function'){const result=window.NGMP.saveLocal();if(result===true)saved=true}}catch(e){error=e}
- try{localStorage.setItem('novariaSave',JSON.stringify(S));saved=true}catch(e){error=e}
+ // Keep the strategic state intact while limiting the historical chart to the newest 180 points.
+ try{
+  const payload={...S,history:Array.isArray(S.history)?S.history.slice(-180):[]};
+  const serialized=JSON.stringify(payload);
+  localStorage.setItem('novariaSave',serialized);
+  saved=true;
+ }catch(e){error=e}
+ try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.saveLocal==='function')window.NGMP.saveLocal()}catch(e){if(!error)error=e}
  try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.reportState==='function')window.NGMP.reportState()}catch(e){if(!error)error=e}
- if(!saved){toast('Не удалось сохранить игру: '+(error&&error.name==='QuotaExceededError'?'память устройства заполнена':'ошибка хранилища'));return false}
+ if(!saved){
+  const detail=error?String(error.name||'Error')+': '+String(error.message||error).slice(0,110):'неизвестная ошибка';
+  window.__SAVE_LAST_ERROR=detail;
+  toast('Ошибка сохранения: '+detail);
+  return false
+ }
+ window.__SAVE_LAST_ERROR='';
  return true
 }
 function toast(t){if(window.__salv)return;let n=$('#notice');n.textContent=t;n.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>n.style.display='none',2400)}
