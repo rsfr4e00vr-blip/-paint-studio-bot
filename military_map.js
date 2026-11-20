@@ -645,8 +645,8 @@ function activateWarForces(name){
   sea=snap('sea',rp.x,rp.y,40,true);if(sea>=0)break;
  }
  if(sea>=0){const q=cellPt(sea);ensure('destroyer',q[0],q[1],'Эсминец '+name);ensure('submarine',q[0]+.8,q[1]+.8,'Подлодка '+name)}
+ /* SVG перерисуется следующим кадром, не блокируем обработчик объявления войны. */
  MM.dirty=true;MM.hsig=null;
- try{paint();paintHud(true)}catch(e){}
  return MM.units.filter(u=>u.own===name).length;
 }
 function ensureFleet(){
