@@ -41,5 +41,5 @@ function show(c){t.querySelectorAll('.cats button').forEach(function(b){b.classL
 var HUB={autobuy:'eco',finance:'eco',market:'eco',industry:'eco',resources:'eco',staff:'army',arms:'army',power:'state',bills:'state',advisors:'state',people:'state'};
 function catOf(tab){if(HUB[tab])return HUB[tab];var b=t.querySelector('[data-tab="'+tab+'"]');if(!b)return null;var s=b.closest('.sub');return s?s.dataset.cat:b.dataset.cat}
 t.addEventListener('click',function(e){var b=e.target.closest('[data-tab]');if(b){var c=b.closest('.sub')?b.closest('.sub').dataset.cat:b.dataset.cat;show(c)}});
-setInterval(function(){try{var cur=window.NG&&NG.getTab&&NG.getTab();var c=cur&&catOf(cur);if(c){show(c)}}catch(_){}},500);
+setInterval(function(){if(document.hidden)return;try{var cur=window.NG&&NG.getTab&&NG.getTab();var c=cur&&catOf(cur);if(c){show(c)}}catch(_){}},500);
 })();</script></body></html>
