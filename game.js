@@ -3097,12 +3097,12 @@ function warTick(){
   const opSupply=clamp(supply+(cmd.navy==='escort'?navyReady*.12:0)+(cmd.logi==='convoys'&&S.money>=50?9:0),12,100);
   let my=(warPower(w)+aid+assigned*.0015)*(opSupply/100)*(order==='attack'?1.14:order==='defend'?.91:1)*(1+airBonus+navyBonus+assignedBonus),en=c.power*1.45*(1+(c.aggr-.4)*.15)*(order==='defend'?.88:1)*(1+(w.enemyPlan&&w.enemyPlan.air==='support'?.035:0)+(w.enemyPlan&&w.enemyPlan.navy==='escort'?.025:0));
   if(window.WARAI){const G=WARAI.general(S,w,c,my,en);my*=G.my;en*=G.en}
-  let d=clamp((my-en)/(my+en)*18+rnd(-3.5,3.5),-10,10);
+  let d=clamp((my-en)/(my+en)*18,-10,10);
   if(cmd.air==='support'&&airReady>0)d+=Math.min(1.8,airReady*.12);
   if(cmd.air==='patrol'&&airReady>0){w.airDefense=clamp((w.airDefense||0)+Math.min(3,airReady*.18),0,30)}
   if(cmd.navy==='blockade'&&navyReady>0){w.blockade=clamp((w.blockade||0)+Math.min(2.2,navyReady*.14),0,25);enemyEcoStrike(w,'raid',Math.min(.9,navyReady*.03),1,null)}
   if(cmd.navy==='escort'&&navyReady>0)w.supply=clamp(opSupply+Math.min(8,navyReady*.35),12,100);
-  w.p=clamp(w.p+d,0,100);if(window.WARAI)WARAI.after(S,w,c,d,log);w.lastD=d;w.aid=aid;w.mine=Math.round(my);w.theirs=Math.round(en);const a0=S.army;w.frontLine=w.frontLine||'Центральный фронт';if(w.m%4===0)w.frontLine=pick(FRONTS);w.encirclement=w.encirclement||0;
+  w.p=clamp(w.p+d,0,100);if(window.WARAI)WARAI.after(S,w,c,d,log);w.lastD=d;w.aid=aid;w.mine=Math.round(my);w.theirs=Math.round(en);const a0=S.army;w.frontLine=w.frontLine||'Центральный фронт';w.encirclement=w.encirclement||0;
   if(w.p>68&&supply>55&&Math.random()<.12){w.encirclement=clamp(w.encirclement+1,0,5);if(w.encirclement===1||w.encirclement===5)log(`⭕ Окружение войск ${w.n}: ${w.encirclement}/5.`)}else if(w.p<45)w.encirclement=Math.max(0,w.encirclement-1);
   const dc=DOCS[S.doc],lossK=(1+Math.max(0,-d)/10)*(dc?dc.loss:1)*(1-advSum('loss'));
   S.army=Math.max(5000,S.army-Math.round((rnd(250,800)*lossK*(en/(my+en))*2+(supply<35?260:0)+w.encirclement*90)*myLS()));
@@ -3473,10 +3473,10 @@ function vassalEvents(){
   if(atk&&dialog(`⚔️ Агрессия против вашего вассала ${n}: ${atk.name} начинает против него войну. Защитить вассала? Если бросить его на произвол, он потеряет доверие к вам.`,'Защитить','Бросить',()=>{startWar(atk.name,false,'territorial');d.loyalty=clamp(d.loyalty+12);log(`🛡 Вы вступились за вассала ${n} и вступили в войну с ${atk.name}.`)},()=>{d.loyalty=clamp(d.loyalty-15);d.unrest=clamp(d.unrest+8);log(`💔 Вы бросили вассала ${n} без защиты. Его лояльность упала.`)}))A.vev=nowM()}
 }
 const BEV=[
- [d=>d>2,w=>{w.p=clamp(w.p+3);return `🚀 Танковый прорыв на участке «${w.frontLine}»: линия фронта продвинулась`}],
+ [d=>d>2,w=>`🚀 Танковый прорыв на участке «${w.frontLine}»: давление на позиции противника усилилось`],
  [d=>d>0,(w,c)=>{if(c)c.power=Math.max(10,c.power-2);return `🛩 Авиаудар по тылам противника: потери врага растут`}],
  [d=>d>1,w=>`🪖 Наши части взяли укреплённую высоту у «${w.frontLine}»`],
- [d=>d<-2,w=>{w.p=clamp(w.p-3);return `💥 Контрудар противника: мы отступили на участке «${w.frontLine}»`}],
+ [d=>d<-2,w=>`💥 Контрудар противника: давление на наши позиции усилилось на участке «${w.frontLine}»`],
  [d=>d<0,w=>`🌧 Распутица и перебои со снабжением замедлили операции у «${w.frontLine}»`],
  [()=>true,w=>`⚔️ Затяжные бои на участке «${w.frontLine}»`]];
 function battleEvent(w,d,c){if(Math.random()>.4)return;const e=pick(BEV.filter(x=>x[0](d)).slice(0,3)),t=e[1](w,c);w.blog=w.blog||[];w.blog.unshift(`${months[S.month].slice(0,3)}, год ${S.year}: ${t}`);w.blog.length=Math.min(w.blog.length,5)}
