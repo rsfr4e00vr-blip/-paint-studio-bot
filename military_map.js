@@ -577,6 +577,15 @@ function seedPlayer(){
  pl('inf',0,'1-я армия');pl('inf',1,'2-я армия');pl('tank',2,'1-я танковая армия');
  pl('destroyer',0,'Эсминец Флота');pl('frigate',1,'Фрегат Флота');
  pl('fighter',0,'Истребители 1');pl('fighter',1,'Истребители 2');pl('bomber',2,'Бомбардировщики 1')}
+/* На глобальной карте показываем только армию игрока и страны, с которыми идёт активная война.
+   Мирные гарнизоны остаются в памяти движка и автоматически разворачиваются при объявлении войны,
+   но не засоряют карту маркерами всех государств. Сетевые игроки сохраняют отдельный режим отображения. */
+function visibleArmyUnits(){
+ const active=new Set((env&&env.wars?env.wars():[])
+  .filter(w=>w&&!w.won&&!w.dead&&!w.lost).map(w=>w.n));
+ return MM.units.filter(u=>u&&(u.own===ME||active.has(u.own)))
+  .concat((MM.remoteUnits||[]).filter(u=>u&&u.remote));
+}
 function seedWorldGarrisons(){
  MM.garrisons=MM.garrisons||[];
  const active=new Set((env&&env.wars?env.wars():[]).filter(w=>!w.won&&!w.dead&&!w.lost).map(w=>w.n));
@@ -746,7 +755,7 @@ function paint(){
  /* масштаб значков зависит от зума: на общем виде мелкие, при приближении крупнее */
  const zf=clampN(.48+.18*Math.log2(zoom),.48,1.0);MM.zf=zf;
  /* группировка: части, слипающиеся на экране, сворачиваются в один значок со счётчиком */
- const all=MM.units.concat(MM.garrisons||[],MM.remoteUnits||[]),lead={},cl={};
+ const all=visibleArmyUnits(),lead={},cl={};
  const thr=26*zf;
  const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
  const buckets=new Map();
@@ -846,7 +855,7 @@ function paintHud(force){if(force)paintClock();
  const h=hud();if(!h)return;const p=h.p,fab=h.fab;
  const mine=MM.units.filter(u=>u.own===ME);
  if(!MM.open){fab.textContent='🪖 Войска · '+mine.length;p.hidden=true;return}
- const foeUnits=MM.units.filter(u=>u.own!==ME).concat(MM.garrisons||[],MM.remoteUnits||[]),foes=foeUnits.length;
+ const foeUnits=visibleArmyUnits().filter(u=>u.own!==ME),foes=foeUnits.length;
  const u=byId(MM.sel),inspected=byId(MM.inspect);
  const forceKey=foeUnits.map(x=>x.own+':'+x.sub+':'+Math.round(x.hp/10)).join(',');
  const sig=[MM.open,MM.sel,MM.inspect,MM.mode,MM.speed,mine.map(x=>x.id+Math.round(x.hp/5)+x.mission+(x.fuel?Math.round(x.fuel/8):0)).join(),foes,forceKey,MM.log.join('|'),MM.depOpen?Math.floor(env.S().money/50):env.S().money].join('~');
