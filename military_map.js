@@ -909,6 +909,9 @@ function attach(){
   try{seedWorldGarrisons()}catch(e){console.warn('MM world garrisons',e)}
   if(st.milmap&&st.milmap.units&&st.milmap.units.length)restore(st.milmap);
   else{seedPlayer();MM.dirty=true}
+  /* Удаляем только устаревшие иностранные части из старых сохранений; игрока и текущих участников войн сохраняем. */
+  const activeOwners=new Set((env.wars?env.wars():[]).filter(w=>!w.won&&!w.dead&&!w.lost).map(w=>w.n));
+  MM.units=MM.units.filter(u=>u.own===ME||activeOwners.has(u.own));
   MM.units=MM.units.filter(u=>{if(SPEC[u.sub].kind!=='sea'||okCell('sea',cellOf(u.x,u.y)))return true;const q=snap('sea',u.x,u.y,80,true);if(q<0)return false;const c=cellPt(q);u.x=c[0];u.y=c[1];u.path=[];return true});   /* корабль, оказавшийся на суше, возвращается в воду */
   try{ensureFleet()}catch(e){console.warn('MM fleet',e)}
   MM.ready=true;
