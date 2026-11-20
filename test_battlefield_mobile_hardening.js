@@ -1,0 +1,14 @@
+const assert=require('node:assert/strict');
+const H=require('./battlefield_mobile_hardening.js');
+const core={MM:{fx:[]}};
+assert.equal(H.install(core),true);
+core.MM.fx.push({kind:'dot',x:1,y:2,t0:1,life:99});
+assert.equal(core.MM.fx.length,0,'unknown decorative dots are discarded');
+core.MM.fx.push({kind:'ping',x:1,y:2,t0:1,life:99});
+assert.equal(core.MM.fx[0].life,.45,'capture pings are short-lived');
+assert.equal(core.MM.fx.length,1);
+for(let i=0;i<120;i++)core.MM.fx.push({kind:'shot',x:i,y:i,t0:i,life:10});
+assert.ok(core.MM.fx.length<=H.LIMIT,'effect count stays bounded');
+assert.ok(core.MM.fx.every(f=>['shot','trail','wake','dust','splash','fire','ghost','flash','smoke','boom','ping','flag','hit'].includes(f.kind)));
+assert.ok(core.MM.fx.every(f=>f.life<=1.2),'projectile lifetime is capped');
+console.log('OK: unknown dots removed, capture markers short-lived, FX bounded, projectile lifetime capped');
