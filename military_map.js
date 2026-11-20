@@ -664,7 +664,7 @@ function paint(){
  const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
  const leaders=[];
  order.forEach(u=>{const ux=u.x/up,uy=u.y/up;let g=null;
-  for(const l of leaders){if((l.own===ME)===(u.own===ME)&&Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}}
+  for(const l of leaders){if(l.own===u.own&&Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}}
   if(g){lead[u.id]=g.id;cl[g.id].push(u)}else{leaders.push(u);lead[u.id]=u.id;cl[u.id]=[u]}});
  MM.clusters=cl;MM.leadOf=lead;
  all.forEach(u=>{seen[u.id]=1;const S=SPEC[u.sub];let e=L.els[u.id];
