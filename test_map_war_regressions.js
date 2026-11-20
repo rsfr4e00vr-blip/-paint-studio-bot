@@ -20,4 +20,4 @@ check(map.includes('function seedWorldGarrisons()'),'2D garrisons are seeded for
 check(["add('inf'","add('tank'","add('aabat'","add('fighter'","add('frigate'","add('submarine'"].every(x=>map.includes(x)),'world garrisons cover land, armour, anti-air, aviation and coastal navy');
 check(map.includes('stationed.forEach(g=>{const extra='),'peacetime garrisons become active AI units when war begins');
 check(map.includes('function ownerColor(own)'),'each country receives a distinct 2D force colour');
-check(game.includes('playerCountry:()=>myName()'),'map garrison layer can exclude the player's own country');
+check(game.includes('playerCountry:()=>myName()'),"map garrison layer can exclude the player's own country");
