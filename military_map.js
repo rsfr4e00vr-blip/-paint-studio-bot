@@ -591,9 +591,9 @@ function seedWorldGarrisons(){
   if(p1>=0){const q=cellPt(p1);add('inf',q[0],q[1],'Гарнизон '+C.name)}
   if(p2>=0){const q=cellPt(p2);add('tank',q[0],q[1],'Бронетехника '+C.name)}
   if(p3>=0){const q=cellPt(p3);add('aabat',q[0],q[1],'ПВО '+C.name)}
-  const air=base;add('fighter',air.x,air.y,'Авиация '+C.name);
+  const air=base;add('fighter',air.x,air.y,'Истребители '+C.name);add('bomber',air.x+1.2,air.y+1.2,'Бомбардировщики '+C.name);
   let sea=-1;for(const rr of pts.slice(0,Math.min(pts.length,8))){const rp=toSim({x:rr.cx,y:rr.cy});sea=snap('sea',rp.x,rp.y,18,true);if(sea>=0)break}
-  if(sea>=0){const q=cellPt(sea);add('frigate',q[0],q[1],'Флот '+C.name);add('submarine',q[0]+1,q[1]+1,'Подводные силы '+C.name)}
+  if(sea>=0){const q=cellPt(sea);add('destroyer',q[0],q[1],'Флот '+C.name);add('frigate',q[0]+1,q[1]+1,'Фрегаты '+C.name);add('submarine',q[0]+2,q[1]+2,'Подводные силы '+C.name)}
  });
 }
 function ensureFleet(){
