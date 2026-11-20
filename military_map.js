@@ -421,6 +421,7 @@ function aiThink(){
  });
  const mine=MM.units.filter(u=>u.own===ME);
  wars.forEach(w=>{try{commander(w,mine)}catch(err){console.warn('MM commander',err)}});
+ try{seedWorldGarrisons()}catch(e){console.warn('MM restore garrisons',e)}
 }
 
 /* ---------- ИИ-командир: оборона, концентрация сил, засады, отступление и самообучение тактики ---------- */
@@ -574,11 +575,12 @@ function seedPlayer(){
  pl('destroyer',0,'Эсминец Флота');pl('frigate',1,'Фрегат Флота');
  pl('fighter',0,'Истребители 1');pl('fighter',1,'Истребители 2');pl('bomber',2,'Бомбардировщики 1')}
 function seedWorldGarrisons(){
- if(MM.garrisons&&MM.garrisons.length)return;
- MM.garrisons=[];
+ MM.garrisons=MM.garrisons||[];
+ const active=new Set((env&&env.wars?env.wars():[]).filter(w=>!w.won&&!w.dead&&!w.lost).map(w=>w.n));
  const countries=Object.values(env&&env.GEO&&env.GEO.c||{});
  countries.forEach(C=>{
-  if(!C||!C.name||C.name===ME)return;
+  if(!C||!C.name||C.name===ME||active.has(C.name))return;
+  if(MM.garrisons.some(u=>u.own===C.name)||MM.units.some(u=>u.own===C.name))return;
   const regs=(C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
   if(!regs.length)return;
   const pts=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0));
