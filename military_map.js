@@ -603,7 +603,7 @@ function handleTap(e){
  const p=toMap(e);if(!p)return false;
  if(MM.mode==='placeAA'){const q=snap('land',p.x,p.y,8);if(q<0){say('🛡️ ПВО можно размещать только на суше',true);return true}const st=env.S();if((st.money||0)<500){say('Не хватает 500 млн для батареи ПВО',true);return true}const c=cellPt(q);st.money-=500;const aa=mk(ME,'aabat',c[0],c[1],{name:'Батарея ПВО'});MM.sel=aa.id;MM.mode='move';MM.dirty=true;env.save();say('🛡️ Батарея ПВО размещена. Выберите её и задайте новую позицию при необходимости.',true);paintHud(true);return true}
  const own=hit(p,ME);
- if(own){const grp=(MM.clusters&&MM.clusters[own.id])||[own];
+ if(own){MM.inspect=null;const grp=(MM.clusters&&MM.clusters[own.id])||[own];
   if(grp.length>1){const mine=grp.filter(x=>x.own===ME),i=mine.findIndex(x=>x.id===MM.sel),nx=mine[(i+1)%mine.length];MM.sel=nx.id;say('Группа: '+grp.length+' частей рядом — выбрано: '+nx.name+'. Приблизьте карту или нажмите ещё раз для следующей.');MM.mode='move';MM.dirty=true;paintHud(true);return true}
   MM.sel=MM.sel===own.id?null:own.id;MM.mode='move';MM.dirty=true;paintHud(true);return true}
  const enemy=hit(p,'enemy');
