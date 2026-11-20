@@ -61,7 +61,7 @@ const DM={
  fort:{land:6.5,sea:5.5,air:1.2}, aabat:{land:0,sea:0,air:11}
 };
 const NAMES={inf:'пехотная армия',tank:'танковая армия',destroyer:'эскадра эсминцев',frigate:'отряд фрегатов',carrier:'авианосная группа',submarine:'подводная лодка',fort:'укрепрайон',aabat:'батарея ПВО',fighter:'истребительная эскадрилья',bomber:'бомбардировочная группа'};
-const MM={units:[],remoteUnits:[],seq:1,sel:null,mode:'move',speed:1,fx:[],log:[],bases:[],dirty:false,svg:null,ready:false,open:false,t:0,aiT:0};
+const MM={units:[],garrisons:[],remoteUnits:[],seq:1,sel:null,mode:'move',speed:1,fx:[],log:[],bases:[],dirty:false,svg:null,ready:false,open:false,t:0,aiT:0};
 let mask=null;                       /* 1 — суша */
 let env=null;                        /* связь с игрой */
 const rnd=(a,b)=>a+Math.random()*(b-a);
@@ -376,6 +376,13 @@ function aiThink(){
  const aiScale=difficulty==='hard'?1.22:difficulty==='easy'?.78:1;
  const wars=env.wars().filter(w=>!w.won&&!w.dead&&!w.lost);
  const alive=new Set(wars.map(w=>w.n));
+ wars.forEach(w=>{
+  const stationed=(MM.garrisons||[]).filter(u=>u.own===w.n);
+  if(!stationed.length)return;
+  const first=stationed[0],base=addEnemyBase(w.n,{x:first.x,y:first.y});
+  stationed.forEach(g=>{const extra={name:g.name,base:SPEC[g.sub].kind==='air'?base:null};mk(w.n,g.sub,g.x,g.y,extra)});
+  MM.garrisons=MM.garrisons.filter(u=>u.own!==w.n);
+ });
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
  wars.forEach(w=>{
@@ -566,6 +573,27 @@ function seedPlayer(){
  pl('inf',0,'1-я армия');pl('inf',1,'2-я армия');pl('tank',2,'1-я танковая армия');
  pl('destroyer',0,'Эсминец Флота');pl('frigate',1,'Фрегат Флота');
  pl('fighter',0,'Истребители 1');pl('fighter',1,'Истребители 2');pl('bomber',2,'Бомбардировщики 1')}
+function seedWorldGarrisons(){
+ if(MM.garrisons&&MM.garrisons.length)return;
+ MM.garrisons=[];
+ const countries=Object.values(env&&env.GEO&&env.GEO.c||{});
+ countries.forEach(C=>{
+  if(!C||!C.name||C.name===ME)return;
+  const regs=(C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
+  if(!regs.length)return;
+  const pts=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0));
+  const base=toSim({x:pts[0].cx,y:pts[0].cy});
+  if(!base)return;
+  const add=(sub,x,y,label)=>{MM.garrisons.push({id:'g:'+String(C.name)+':'+sub,own:C.name,sub,x,y,ang:0,hp:100,path:[],mission:'idle',fuel:SPEC[sub].range||0,name:label,garrison:true})};
+  const p1=snap('land',base.x,base.y,14),p2=snap('land',base.x+5,base.y+3,20),p3=snap('land',base.x-5,base.y-3,20);
+  if(p1>=0){const q=cellPt(p1);add('inf',q[0],q[1],'Гарнизон '+C.name)}
+  if(p2>=0){const q=cellPt(p2);add('tank',q[0],q[1],'Бронетехника '+C.name)}
+  if(p3>=0){const q=cellPt(p3);add('aabat',q[0],q[1],'ПВО '+C.name)}
+  const air=base;add('fighter',air.x,air.y,'Авиация '+C.name);
+  const sea=snap('sea',base.x,base.y,34,true);
+  if(sea>=0){const q=cellPt(sea);add('frigate',q[0],q[1],'Флот '+C.name);add('submarine',q[0]+1,q[1]+1,'Подводные силы '+C.name)}
+ });
+}
 function ensureFleet(){
  const st=env.S();if(!st.milmap)st.milmap={};
  if(st.milmap.fleetGiven)return;
@@ -597,7 +625,7 @@ function deployProduced(uid){
 function toMap(e){const svg=MM.svg;if(!svg||!svg.getScreenCTM)return null;const m=svg.getScreenCTM();if(!m)return null;const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform(m.inverse());return{x:q.x/scaleX,y:q.y/scaleY}}
 function unitsPerPx(){const svg=MM.svg,r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return vb&&r.width?vb.width/r.width/scaleX:1}
 function hit(p,own){const up=unitsPerPx();let best=null,bd=1e9;
- MM.units.forEach(u=>{if((own===ME)!==(u.own===ME)||u.hid)return;const d=dist([p.x,p.y],[u.x,u.y]),r=(SPEC[u.sub].px*.62)*(MM.zf||1)*up*1.25;if(d<r&&d<bd){bd=d;best=u}});return best}
+ MM.units.concat(MM.garrisons||[]).forEach(u=>{if((own===ME)!==(u.own===ME)||u.hid)return;const d=dist([p.x,p.y],[u.x,u.y]),r=(SPEC[u.sub].px*.62)*(MM.zf||1)*up*1.25;if(d<r&&d<bd){bd=d;best=u}});return best}
 function handleTap(e){
  if(!MM.ready||!MM.svg)return false;
  const p=toMap(e);if(!p)return false;
@@ -616,13 +644,14 @@ function handleTap(e){
  else ok=orderMove(u,tx,ty,{own:true,bomb:MM.mode==='bomb'&&u.sub==='bomber'});
  if(ok){addFx(tx,ty,'ping',1);if(['bomb','support','blockade'].includes(MM.mode))MM.mode='move'}
  MM.dirty=true;paintHud(true);return true}
-const byId=id=>MM.units.find(u=>u.id===id);
+const byId=id=>MM.units.find(u=>u.id===id)||(MM.garrisons||[]).find(u=>u.id===id);
 
 /* ---------- 2D-модели ---------- */
 const COL={me:'#2f6fd0',en:'#d33a45'};
+function ownerColor(own){if(own===ME)return COL.me;if(String(own).startsWith('mp:'))return COL.en;let h=0;for(const ch of String(own||''))h=(h*31+ch.charCodeAt(0))%360;return `hsl(${h} 58% 47%)`}
 const sym=pts=>pts.concat(pts.slice(0,-1).reverse().map(p=>[p[0],-p[1]])).map((p,i)=>(i?'L':'M')+p[0]+' '+p[1]).join('')+'Z';
 function sprite(sub,own){
- const c=own===ME?COL.me:COL.en,st='stroke="#fff" stroke-width="1.1" stroke-linejoin="round"';
+ const c=ownerColor(own),st='stroke="#fff" stroke-width="1.1" stroke-linejoin="round"';
  switch(sub){
   case'inf':return `<rect x="-12" y="-8.5" width="24" height="17" rx="2.5" fill="${c}" ${st}/><circle cx="-1" cy="-3.6" r="2" fill="#fff"/><path d="M-3.6 -1.4h5.2l1 6.4h-2.1l-.7-3.4-.7 3.4h-2.1z" fill="#fff"/><path d="M2 -1l6-4.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/><path d="M-9 6.2h4M5 6.2h4" stroke="#fff" stroke-width="1" opacity=".6"/>`;
   case'tank':return `<rect x="-12" y="-8.5" width="24" height="17" rx="2.5" fill="${c}" ${st}/><rect x="-8" y="0" width="16" height="5" rx="2.5" fill="#fff"/><circle cx="-5" cy="2.5" r="1.1" fill="${c}"/><circle cx="0" cy="2.5" r="1.1" fill="${c}"/><circle cx="5" cy="2.5" r="1.1" fill="${c}"/><rect x="-4" y="-3.6" width="8.5" height="4.2" rx="1.6" fill="#fff"/><rect x="4" y="-2.6" width="8" height="1.5" fill="#fff"/>`;
@@ -671,7 +700,7 @@ function paint(){
  /* масштаб значков зависит от зума: на общем виде мелкие, при приближении крупнее */
  const zf=clampN(.48+.18*Math.log2(zoom),.48,1.0);MM.zf=zf;
  /* группировка: части, слипающиеся на экране, сворачиваются в один значок со счётчиком */
- const all=MM.units.concat(MM.remoteUnits||[]),lead={},cl={};
+ const all=MM.units.concat(MM.garrisons||[],MM.remoteUnits||[]),lead={},cl={};
  const thr=26*zf;
  const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
  const buckets=new Map();
@@ -769,7 +798,7 @@ function paintClock(){try{const st=env&&env.S&&env.S();if(!st)return;document.qu
 if(typeof document!=='undefined')setInterval(()=>{if(!document.hidden)paintClock()},700);
 function paintHud(force){if(force)paintClock();
  const h=hud();if(!h)return;const p=h.p,fab=h.fab;
- const mine=MM.units.filter(u=>u.own===ME),foeUnits=MM.units.filter(u=>u.own!==ME).concat(MM.remoteUnits||[]),foes=foeUnits.length;
+ const mine=MM.units.filter(u=>u.own===ME),foeUnits=MM.units.filter(u=>u.own!==ME).concat(MM.garrisons||[],MM.remoteUnits||[]),foes=foeUnits.length;
  const u=byId(MM.sel),inspected=byId(MM.inspect);
  const forceKey=foeUnits.map(x=>x.own+':'+x.sub+':'+Math.round(x.hp/10)).join(',');
  const sig=[MM.open,MM.sel,MM.inspect,MM.mode,MM.speed,mine.map(x=>x.id+Math.round(x.hp/5)+x.mission+(x.fuel?Math.round(x.fuel/8):0)).join(),foes,forceKey,MM.log.join('|'),MM.depOpen?Math.floor(env.S().money/50):env.S().money].join('~');
@@ -829,6 +858,7 @@ function attach(){
   const home=toSim(env.homeAnchor&&env.homeAnchor());
   MM.bases=[];if(home){const w=snap('sea',home.x,home.y,260,true),p=w>=0?cellPt(w):[home.x,home.y];MM.bases.push({id:'home',name:home.name,x:home.x,y:home.y,px:p[0],py:p[1],own:ME})}
   MM.pvoMarkers=[];MM.pvoSig='';
+  try{seedWorldGarrisons()}catch(e){console.warn('MM world garrisons',e)}
   if(st.milmap&&st.milmap.units&&st.milmap.units.length)restore(st.milmap);
   else{seedPlayer();MM.dirty=true}
   MM.units=MM.units.filter(u=>{if(SPEC[u.sub].kind!=='sea'||okCell('sea',cellOf(u.x,u.y)))return true;const q=snap('sea',u.x,u.y,80,true);if(q<0)return false;const c=cellPt(q);u.x=c[0];u.y=c[1];u.path=[];return true});   /* корабль, оказавшийся на суше, возвращается в воду */
