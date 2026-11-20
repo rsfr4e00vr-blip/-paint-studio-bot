@@ -801,8 +801,9 @@ function frame(ts){
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  if(running){
   const tick=IS_MOBILE?1/30:1/45;simAcc=Math.min(.24,simAcc+dt);let loops=0;
-  while(simAcc>=tick&&loops++<4){const sd=tick*MM.speed;step(sd);acc+=sd;simAcc-=tick;
-   if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
+  while(simAcc>=tick&&loops++<4){let remain=tick*MM.speed;simAcc-=tick;while(remain>0){const sd=Math.min(.08,remain);step(sd);acc+=sd;remain-=sd;
+    if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
+   }
   }
  }else simAcc=0;
  const frameMs=running?(IS_MOBILE?125:83):500;
