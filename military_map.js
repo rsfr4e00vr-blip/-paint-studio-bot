@@ -624,7 +624,6 @@ function activateWarForces(name){
  if(!sp&&regs.length){const r=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0))[0];sp=toSim({x:r.cx,y:r.cy})}
  if(!sp&&already.length)sp={x:already[0].x,y:already[0].y};
  if(!sp)return MM.units.filter(u=>u.own===name).length;
- const base=addEnemyBase(name,sp);
  const ensure=(sub,x,y,label)=>{
   if(MM.units.some(u=>u.own===name&&u.sub===sub))return;
   const q=mk(name,sub,x,y,{name:label,base:SPEC[sub].kind==='air'?base:null});
@@ -638,6 +637,7 @@ function activateWarForces(name){
  let anchor=sp,p1=land(0,0);
  if(!p1&&regs.length){const ranked=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0));for(const r of ranked.slice(0,24)){const q0=toSim({x:r.cx,y:r.cy});const q=snap('land',q0.x,q0.y,28);if(q>=0){anchor=q0;p1=cellPt(q);break}}}
  if(anchor!==sp){sp=anchor;}
+ const base=addEnemyBase(name,sp);
  const p2=land(5,4),p3=land(-5,-4);
  if(p1&&!MM.units.some(u=>u.own===name&&SPEC[u.sub].kind==='land'&&!SPEC[u.sub].static))ensure('inf',p1[0],p1[1],'Пехота '+name);
  if(p2&&!MM.units.some(u=>u.own===name&&u.sub==='tank'))ensure('tank',p2[0],p2[1],'Танки '+name);
