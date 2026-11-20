@@ -599,12 +599,9 @@ function seedWorldGarrisons(){
   const base=toSim({x:pts[0].cx,y:pts[0].cy});
   if(!base)return;
   const add=(sub,x,y,label)=>{MM.garrisons.push({id:'g:'+String(C.name)+':'+sub,own:C.name,sub,x,y,ang:0,hp:100,path:[],mission:'idle',fuel:SPEC[sub].range||0,name:label,garrison:true})};
-  const p1=snap('land',base.x,base.y,14),p2=snap('land',base.x+5,base.y+3,20),p3=snap('land',base.x-5,base.y-3,20);
+  /* Один резервный гарнизон на страну; полный состав появляется при объявлении войны. */
+  const p1=snap('land',base.x,base.y,14);
   if(p1>=0){const q=cellPt(p1);add('inf',q[0],q[1],'Гарнизон '+C.name)}
-  if(p2>=0){const q=cellPt(p2);add('tank',q[0],q[1],'Бронетехника '+C.name)}
-  /* В мирное время показываем компактный гарнизон. ПВО и авиация разворачиваются военным ИИ после начала войны. */
-  let sea=-1;for(const rr of pts.slice(0,Math.min(pts.length,8))){const rp=toSim({x:rr.cx,y:rr.cy});sea=snap('sea',rp.x,rp.y,18,true);if(sea>=0)break}
-  if(sea>=0){const q=cellPt(sea);add('destroyer',q[0],q[1],'Флот '+C.name)}
  });
 }
 function activateWarForces(name){
@@ -757,7 +754,11 @@ function paint(){
  /* группировка: части, слипающиеся на экране, сворачиваются в один значок со счётчиком */
  const all=visibleArmyUnits(),lead={},cl={};
  const thr=26*zf;
- const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
+ /* Не кластеризуем и не сортируем войска за пределами видимой части карты. */
+ const margin=48*up,V0=MM.vis;
+ const order=all.filter(u=>u.x>=V0.x-margin&&u.x<=V0.x+V0.w+margin&&u.y>=V0.y-margin&&u.y<=V0.y+V0.h+margin)
+  .slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
+ all.forEach(u=>{seen[u.id]=1});
  const buckets=new Map();
  order.forEach(u=>{const ux=u.x/up,uy=u.y/up,bx=Math.floor(ux/thr),by=Math.floor(uy/thr),side=u.own===ME?'m':'e:'+String(u.own);let g=null;
   for(let dy=-1;dy<=1&&!g;dy++)for(let dx=-1;dx<=1&&!g;dx++){
@@ -768,7 +769,7 @@ function paint(){
   else{lead[u.id]=u.id;cl[u.id]=[u];const key=side+':'+bx+':'+by,a=buckets.get(key)||[];a.push(u);buckets.set(key,a)}
  });
  MM.clusters=cl;MM.leadOf=lead;
- all.forEach(u=>{seen[u.id]=1;const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
+ order.forEach(u=>{const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
   const V=MM.vis,margin=24*up,visible=u.x>=V.x-margin&&u.x<=V.x+V.w+margin&&u.y>=V.y-margin&&u.y<=V.y+V.h+margin;
   if(!visible){const old=L.els[u.id];if(old)old.g.setAttribute('display','none');u.hid=true;return}
   const S=SPEC[u.sub];let e=L.els[u.id];
@@ -893,20 +894,22 @@ function frame(ts){
  const warCount=env&&typeof env.wars==='function'?env.wars().filter(w=>!w.won&&!w.dead&&!w.lost).length:0;
  const forceLoad=MM.units.length+(MM.garrisons||[]).length+(MM.remoteUnits||[]).length;
  if(running){
-  const tick=IS_MOBILE?1/30:1/45;simAcc=Math.min(.24,simAcc+dt);let loops=0;
-  while(simAcc>=tick&&loops++<4){let remain=tick*MM.speed;simAcc-=tick;while(remain>0){const sd=Math.min(.08,remain);step(sd);acc+=sd;remain-=sd;
+  /* На телефонах симуляция обновляется 15 раз/с вместо 30 при больших армиях. */
+  const tick=IS_MOBILE?1/15:1/45;simAcc=Math.min(.16,simAcc+dt);let loops=0;
+  while(simAcc>=tick&&loops++<(IS_MOBILE?2:4)){let remain=tick*MM.speed;simAcc-=tick;while(remain>0){const sd=Math.min(.08,remain);step(sd);acc+=sd;remain-=sd;
     /* При больших армиях ИИ планирует реже, чтобы оставить процессор для движения и отрисовки карты. */
     const aiInterval=forceLoad>=240?7:forceLoad>=150?5.5:forceLoad>=90?4:(warCount>=10?4.5:warCount>=5?3:1.5);
     if(acc>=aiInterval){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
    }
   }
  }else simAcc=0;
- const baseFrame=warCount>=10?(IS_MOBILE?220:150):warCount>=5?(IS_MOBILE?170:110):(IS_MOBILE?125:83);
- const loadFrame=forceLoad>=240?(IS_MOBILE?190:145):forceLoad>=150?(IS_MOBILE?165:125):forceLoad>=90?(IS_MOBILE?145:105):baseFrame;
+ /* Частота SVG-отрисовки снижается на телефонах; симуляция продолжает работать отдельно. */
+ const baseFrame=IS_MOBILE?(warCount>=5?350:250):(warCount>=10?150:warCount>=5?110:83);
+ const loadFrame=IS_MOBILE?(forceLoad>=240?650:forceLoad>=150?520:forceLoad>=90?400:baseFrame):(forceLoad>=240?145:forceLoad>=150?125:forceLoad>=90?105:baseFrame);
  const frameMs=running?Math.max(baseFrame,loadFrame):500;
  if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}}
  saveT+=dt;if(saveT>4){saveT=0;persist()}
- if(MM.fx.length>(IS_MOBILE?90:150))MM.fx.splice(0,MM.fx.length-(IS_MOBILE?90:150));
+ if(MM.fx.length>(IS_MOBILE?36:150))MM.fx.splice(0,MM.fx.length-(IS_MOBILE?36:150));
 }
 function attach(){
  if(!MM.visBound){MM.visBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&MM.ready&&!raf){last=performance.now();raf=requestAnimationFrame(frame)}})}
