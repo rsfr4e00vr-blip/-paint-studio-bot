@@ -318,11 +318,18 @@ function combat(dt){
 }
 function capture(dt){
  if(!env||!env.regionAt)return;
+ // Build once per capture pass; local 12-unit buckets replace a full army scan for every soldier.
+ const landGrid=new Map();
+ MM.units.forEach(t=>{if(t.hp<=0||kindOf(t)!=='land')return;const key=Math.floor(t.x/12)+','+Math.floor(t.y/12);let b=landGrid.get(key);if(!b)landGrid.set(key,b=[]);b.push(t)});
  MM.units.forEach(u=>{
   if(kindOf(u)!=='land')return;
   u.capT=(u.capT||0)+dt;if(u.capT<.5){return}const dd=u.capT;u.capT=0;
   const ra=env.regionAt(u.x,u.y);if(!ra){u.cap=0;u.capId=null;return}
-  const contested=MM.units.some(t=>t.hp>0&&isEnemy(u,t)&&kindOf(t)==='land'&&dist([u.x,u.y],[t.x,t.y])<10);
+  const ux=Math.floor(u.x/12),uy=Math.floor(u.y/12);let contested=false;
+  for(let gy=uy-1;gy<=uy+1&&!contested;gy++)for(let gx=ux-1;gx<=ux+1&&!contested;gx++){
+   const bucket=landGrid.get(gx+','+gy);if(!bucket)continue;
+   for(let j=0;j<bucket.length;j++){const t=bucket[j];if(t!==u&&t.hp>0&&isEnemy(u,t)&&dist([u.x,u.y],[t.x,t.y])<10){contested=true;break}}
+  }
   if(u.own===ME){
    if(!ra.enemyWar||ra.mine||ra.occupied||contested||u.hp<20){if(!contested){u.cap=0;u.capId=null}return}
    if(u.capId!==ra.id){u.capId=ra.id;u.cap=0}
