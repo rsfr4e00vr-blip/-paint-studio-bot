@@ -26,7 +26,7 @@ function save(){
  if(window.__salv)return false;
  let saved=false,error=null;
  // Не блокируем локальное сохранение, если сетевая оболочка не подключила свой адаптер.
- try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.saveLocal==='function'){window.NGMP.saveLocal();saved=true}}catch(e){error=e}
+ try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.saveLocal==='function'){const result=window.NGMP.saveLocal();if(result===true)saved=true}}catch(e){error=e}
  try{localStorage.setItem('novariaSave',JSON.stringify(S));saved=true}catch(e){error=e}
  try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.reportState==='function')window.NGMP.reportState()}catch(e){if(!error)error=e}
  if(!saved){toast('Не удалось сохранить игру: '+(error&&error.name==='QuotaExceededError'?'память устройства заполнена':'ошибка хранилища'));return false}
