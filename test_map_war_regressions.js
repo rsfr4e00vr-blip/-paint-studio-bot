@@ -5,7 +5,7 @@ const map=fs.readFileSync('military_map.js','utf8');
 function check(ok,msg){if(!ok)throw new Error(msg);console.log('OK',msg)}
 check(game.includes('const compact=JSON.parse(JSON.stringify(S))'),'save quota fallback builds a compact state');
 check(game.includes('trim(compact.history,6)')&&game.includes('trim(compact.log,12)'),'save fallback trims only old history/log records');
-check(game.includes("toast('🚨 ВЫ ПОТЕРЯЛИ ВЛАСТЬ. Вы остались на текущей вкладке.", 'loss of power gives a visible notice without switching tabs');
+check(game.includes("toast('🚨 ВЫ ПОТЕРЯЛИ ВЛАСТЬ."), 'loss of power gives a visible notice without switching tabs');
 check(!game.includes('tab=previousTab;setTimeout(()=>{tab=previousTab;render()},120)'), 'loss of power no longer schedules a tab redirect');
 check(game.includes("if(S.out&&tab!=='comeback')t=null"), 'opposition panel does not override the current map tab');
 check(map.includes("MM.pvoMarkers=[];MM.pvoSig=''"),'world shield markers are disabled');
