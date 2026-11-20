@@ -894,10 +894,11 @@ function frame(ts){
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(!MM.ready)return;
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  const warCount=env&&typeof env.wars==='function'?env.wars().filter(w=>!w.won&&!w.dead&&!w.lost).length:0;
- const forceLoad=MM.units.length+(MM.garrisons||[]).length+(MM.remoteUnits||[]).length;
+ /* Мирные гарнизоны скрыты и не участвуют в симуляции — считаем только активные части. */
+ const forceLoad=MM.units.length+(MM.remoteUnits||[]).length;
  if(running){
-  /* На телефонах симуляция обновляется 15 раз/с вместо 30 при больших армиях. */
-  const tick=IS_MOBILE?1/15:1/45;simAcc=Math.min(.16,simAcc+dt);let loops=0;
+  /* Адаптивная частота: обычная скорость в мирное время, снижение только при большом числе активных частей. */
+  const tick=IS_MOBILE?(forceLoad>=240?1/12:forceLoad>=150?1/15:forceLoad>=90?1/20:1/30):1/45;simAcc=Math.min(.16,simAcc+dt);let loops=0;
   while(simAcc>=tick&&loops++<(IS_MOBILE?2:4)){let remain=tick*MM.speed;simAcc-=tick;while(remain>0){const sd=Math.min(.08,remain);step(sd);acc+=sd;remain-=sd;
     /* При больших армиях ИИ планирует реже, чтобы оставить процессор для движения и отрисовки карты. */
     const aiInterval=forceLoad>=240?7:forceLoad>=150?5.5:forceLoad>=90?4:(warCount>=10?4.5:warCount>=5?3:1.5);
@@ -905,9 +906,9 @@ function frame(ts){
    }
   }
  }else simAcc=0;
- /* Частота SVG-отрисовки снижается на телефонах; симуляция продолжает работать отдельно. */
- const baseFrame=IS_MOBILE?(warCount>=5?350:250):(warCount>=10?150:warCount>=5?110:83);
- const loadFrame=IS_MOBILE?(forceLoad>=240?650:forceLoad>=150?520:forceLoad>=90?400:baseFrame):(forceLoad>=240?145:forceLoad>=150?125:forceLoad>=90?105:baseFrame);
+ /* Частота SVG-отрисовки зависит от реальной нагрузки активных частей, не скрытых гарнизонов. */
+ const baseFrame=IS_MOBILE?(warCount>=5?125:90):(warCount>=10?150:warCount>=5?110:83);
+ const loadFrame=IS_MOBILE?(forceLoad>=240?220:forceLoad>=150?180:forceLoad>=90?140:baseFrame):(forceLoad>=240?145:forceLoad>=150?125:forceLoad>=90?105:baseFrame);
  const frameMs=running?Math.max(baseFrame,loadFrame):500;
  if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}}
  saveT+=dt;if(saveT>4){saveT=0;persist()}
