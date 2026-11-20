@@ -4670,7 +4670,7 @@ window.NG.__mm={get WMAP(){return WMAP},get GEO(){return GEO},
    let C=null,iso='';try{iso=(wi(name)||{}).iso||'';C=GEO.c[name]||GEO.c[iso]||Object.values(GEO.c).find(x=>x&&(x.name===name||x.iso===iso))}catch(e){}
    const rs=C&&(C.regs||[]).filter(q=>Number.isFinite(q.cx)&&Number.isFinite(q.cy));if(!rs||!rs.length)return null;
    /* Развёртывание на ближайшем к игроку участке фронта, а не в случайной глубине страны. */
-   let inv=[];try{const U=window.MilMap&&MilMap.core&&MilMap.core.MM.units||[];inv=U.filter(u=>u.own==='me'&&u.sub!=='fighter'&&u.sub!=='bomber')}catch(e){}
+   let inv=[];try{const U=window.MilMap&&MilMap.core&&MilMap.core.MM.units||[],sx=(Number(GEO.W)||1000)/1000,sy=(Number(GEO.H)||575)/575;inv=U.filter(u=>u.own==='me'&&u.sub!=='fighter'&&u.sub!=='bomber').map(u=>({x:u.x*sx,y:u.y*sy}))}catch(e){}
    let r;if(inv.length){const ranked=rs.map(q=>({q,d:Math.min(...inv.map(u=>(u.x-q.cx)**2+(u.y-q.cy)**2))})).sort((a,b)=>a.d-b.d);r=ranked[Math.floor(Math.random()*Math.min(3,ranked.length))].q}
    else r=rs.slice().sort((a,b)=>(b.s||0)-(a.s||0))[0];return{x:r.cx,y:r.cy}
   },
