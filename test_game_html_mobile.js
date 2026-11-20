@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./game.html','utf8');
+assert.match(s,/viewport-fit=cover/);
+assert.match(s,/Telegram\.WebApp/);
+assert.match(s,/viewportChanged/);
+assert.match(s,/env\(safe-area-inset-top/);
+assert.match(s,/game\.js\?v=87/);
+assert.match(s,/military_map\.js\?v=9/);
+console.log('OK: Telegram viewport, safe areas and script cache busting');
