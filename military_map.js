@@ -675,7 +675,7 @@ function paint(){
  const thr=26*zf;
  const order=all.slice().sort((a,b)=>(b.id===MM.sel)-(a.id===MM.sel)||(a.own===ME?0:1)-(b.own===ME?0:1));
  const buckets=new Map();
- order.forEach(u=>{const ux=u.x/up,uy=u.y/up,bx=Math.floor(ux/thr),by=Math.floor(uy/thr),side=u.own===ME?'m':'e';let g=null;
+ order.forEach(u=>{const ux=u.x/up,uy=u.y/up,bx=Math.floor(ux/thr),by=Math.floor(uy/thr),side=u.own===ME?'m':'e:'+String(u.own);let g=null;
   for(let dy=-1;dy<=1&&!g;dy++)for(let dx=-1;dx<=1&&!g;dx++){
    const a=buckets.get(side+':'+(bx+dx)+':'+(by+dy));if(!a)continue;
    for(const l of a)if(Math.hypot(l.x/up-ux,l.y/up-uy)<thr){g=l;break}
