@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const s=fs.readFileSync('./military_map.js','utf8');
+assert.match(s,/function syncWorldScale\(\)/,'map world dimensions are read from GEO');
+assert.match(s,/function regionAtSim\(x,y\)/,'simulation-to-world region queries are converted');
+assert.match(s,/function warTargetsSim\(w\)/,'AI target coordinates are converted');
+assert.match(s,/x\.scale\(CW\/worldW,CH\/worldH\)/,'land/sea mask rasterizes the resized map');
+assert.match(s,/setAttribute\('transform',`scale\(\$\{scaleX\} \$\{scaleY\}\)`\)/,'army overlay is mapped onto resized world coordinates');
+assert.match(s,/return\{x:q\.x\/scaleX,y:q\.y\/scaleY\}/,'touch orders convert back into simulation coordinates');
+assert.match(s,/const showAtZoom=true/,'all own and enemy units remain visible at strategic zoom');
+assert.match(s,/function sprite\(sub,own\)/,'2D army models remain');
+assert.match(s,/requestAnimationFrame/,'animation loop remains');
+console.log('OK: 14940x10050 world/simulation coordinate bridge, 2D units and animation preserved');

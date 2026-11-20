@@ -3,6 +3,13 @@
 (function(root){
 'use strict';
 const GW=1000,GH=575,CELL=2,CW=500,CH=288;
+/* Военный движок хранит координаты в стабильной сетке 1000x575; географическая карта может иметь другой размер. */
+let worldW=GW,worldH=GH,scaleX=1,scaleY=1;
+function syncWorldScale(){const g=env&&env.GEO;worldW=Math.max(1,Number(g&&g.W)||GW);worldH=Math.max(1,Number(g&&g.H)||GH);scaleX=worldW/GW;scaleY=worldH/GH}
+const toSim=(p)=>p?{...p,x:Number(p.x)/scaleX,y:Number(p.y)/scaleY}:p;
+const fromSim=(x,y)=>({x:x*scaleX,y:y*scaleY});
+function regionAtSim(x,y){const r=env&&env.regionAt&&env.regionAt(x*scaleX,y*scaleY);return r?{...r,x:Number(r.x)/scaleX,y:Number(r.y)/scaleY}:null}
+function warTargetsSim(w){return (env&&env.warTargets?env.warTargets(w)||[]:[]).map(t=>({...t,x:Number(t.x)/scaleX,y:Number(t.y)/scaleY}))}
 const ME='me';
 const SPEC={
  inf:{kind:'land',name:'Пехотная армия',icon:'🪖',spd:3.4,rg:4.5,px:28,cost:{money:200,army:3000}},
@@ -105,7 +112,7 @@ function fixSea(m){
 function buildMask(){
  if(mask)return mask;
  const cv=document.createElement('canvas');cv.width=CW;cv.height=CH;
- const x=cv.getContext('2d',{willReadFrequently:true});x.scale(CW/GW,CH/GH);x.fillStyle='#000';
+ const x=cv.getContext('2d',{willReadFrequently:true});x.scale(CW/worldW,CH/worldH);x.fillStyle='#000';
  Object.values(env.GEO.c).forEach(C=>{if(!C||!C.d)return;try{x.fill(new Path2D(C.d),'evenodd')}catch(e){}});
  const d=x.getImageData(0,0,CW,CH).data,m=new Uint8Array(CW*CH);
  for(let i=0;i<m.length;i++)m[i]=d[i*4+3]>110?1:0;
@@ -200,13 +207,13 @@ function step(dt){
     if(b&&u.mission!=='rtb'&&u.fuel<dist([u.x,u.y],[b.x,b.y])*1.12+7){u.path=[[b.x,b.y]];u.mission='rtb';if(u.own===ME)say('✈️ '+u.name+': мало топлива, возвращаемся на базу')}
     if(u.mission==='patrol'||u.mission==='support'||u.mission==='bomb'&&!u.path.length)u.fuel-=S.spd*.28*dt;
     if(u.fuel<=0){u.hp=0;u.dead='fuel'}}}
-  else if(k==='sea'){const b=nearestBase(u);if(b&&dist([u.x,u.y],[b.px,b.py])<8)u.hp=Math.min(100,u.hp+3*dt);if(u.mission==='blockade'&&!u.path.length){u.blockadeT=(u.blockadeT||0)+dt;if(u.blockadeT>=2){u.blockadeT=0;const ra=env&&env.blockadeTarget&&env.blockadeTarget(u.x,u.y);if(ra&&ra.enemyWar&&env.blockadeRegion)env.blockadeRegion(ra,u)}}}
+  else if(k==='sea'){const b=nearestBase(u);if(b&&dist([u.x,u.y],[b.px,b.py])<8)u.hp=Math.min(100,u.hp+3*dt);if(u.mission==='blockade'&&!u.path.length){u.blockadeT=(u.blockadeT||0)+dt;if(u.blockadeT>=2){u.blockadeT=0;const bp=fromSim(u.x,u.y),ra=env&&env.blockadeTarget&&env.blockadeTarget(bp.x,bp.y);if(ra&&ra.enemyWar&&env.blockadeRegion)env.blockadeRegion(ra,u)}}}
   else{const b=nearestBase(u);if(b&&dist([u.x,u.y],[b.x,b.y])<6)u.hp=Math.min(100,u.hp+2.5*dt)}
   /* движение по маршруту */
   if(u.path.length){
    let terrainFactor=1;
    if(k==='land'&&env&&typeof env.regionAt==='function'){
-    const tr=env.regionAt(u.x,u.y);const type=tr&&tr.terrain;
+    const tr=regionAtSim(u.x,u.y);const type=tr&&tr.terrain;
     terrainFactor=type==='mountain'?.58:type==='forest'?.78:type==='hill'?.86:type==='winter'?.76:type==='plantation'?.94:1;
    }
    let mv=S.spd*dt*(u.hp<35?.7:1)*terrainFactor;
@@ -255,7 +262,7 @@ function arrive(u){
 function bombRun(u){
  let hit=0;MM.units.forEach(t=>{if(!isEnemy(u,t)||kindOf(t)==='air')return;if(dist([u.x,u.y],[t.x,t.y])<10){t.hp-=38;hit++;addFx(t.x,t.y,'boom',1)}});
  addFx(u.x,u.y,'boom',1.6);
- const ra=env&&env.regionAt&&env.regionAt(u.x,u.y);
+ const ra=regionAtSim(u.x,u.y);
  if(u.own===ME&&ra&&env.bombRegion)env.bombRegion(ra);
  if(u.own===ME)say('💣 Бомбардировка: '+(ra?ra.name:'цель')+(hit?` · поражено целей: ${hit}`:''),true);
  u.mission='rtb';const b=nearestBase(u);if(b)u.path=[[b.x,b.y]]}
@@ -317,7 +324,7 @@ function capture(dt){
  MM.units.forEach(u=>{
   if(kindOf(u)!=='land')return;
   u.capT=(u.capT||0)+dt;if(u.capT<.5){return}const dd=u.capT;u.capT=0;
-  const ra=env.regionAt(u.x,u.y);if(!ra){u.cap=0;u.capId=null;return}
+  const ra=regionAtSim(u.x,u.y);if(!ra){u.cap=0;u.capId=null;return}
   const contested=MM.units.some(t=>t.hp>0&&isEnemy(u,t)&&kindOf(t)==='land'&&dist([u.x,u.y],[t.x,t.y])<10);
   if(u.own===ME){
    if(!ra.enemyWar||ra.mine||ra.occupied||contested||u.hp<20){if(!contested){u.cap=0;u.capId=null}return}
@@ -339,7 +346,7 @@ function autoCommand(){
  const wars=env.wars().filter(w=>w.auto);if(!wars.length)return;
  const units=MM.units.filter(u=>u.own===ME&&kindOf(u)==='land'&&!SPEC[u.sub].static);if(!units.length)return;
  const bad=MM.autoBad||(MM.autoBad={});
- let tg=[];wars.forEach(w=>{try{tg=tg.concat(env.warTargets(w)||[])}catch(e){}});
+ let tg=[];wars.forEach(w=>{try{tg=tg.concat(warTargetsSim(w))}catch(e){}});
  const free=tg.filter(t=>!t.occ&&!(bad[t.id]>MM.t));
  const byTid={};tg.forEach(t=>byTid[t.id]=t);
  const claimed={};units.forEach(u=>{if(u.autoTgt&&byTid[u.autoTgt]&&!byTid[u.autoTgt].occ)claimed[u.autoTgt]=(claimed[u.autoTgt]||0)+1});
@@ -374,7 +381,7 @@ function aiThink(){
   const cnt=k=>mine.filter(u=>kindOf(u)===k&&!SPEC[u.sub].static).length;
   MM.spawnT=MM.spawnT||{};MM.spawnT[w.n]=(MM.spawnT[w.n]||0)-1.5;
   if(MM.spawnT[w.n]<=0){
-   const sp=env.enemySpawn&&env.enemySpawn(w.n);
+   const sp=toSim(env.enemySpawn&&env.enemySpawn(w.n));
    if(sp){
     const eb=addEnemyBase(w.n,sp);
     const defi={land:(cap.land-cnt('land'))/cap.land,sea:(cap.sea-cnt('sea'))/cap.sea,air:(cap.air-cnt('air'))/cap.air};
@@ -439,11 +446,11 @@ function commander(w,mine){
  const home=bases[0]||{x:my[0].x,y:my[0].y,px:my[0].x,py:my[0].y};
  const st=MM.war[w.n]=MM.war[w.n]||{tact:'defend',t:-99,c:'',hp:null};
  if(st.t>MM.t)st.t=-99;
- const inTerr=p=>{const ra=env.regionAt&&env.regionAt(p.x,p.y);return !!ra&&ra.country===w.n};
+ const inTerr=p=>{const ra=regionAtSim(p.x,p.y);return !!ra&&ra.country===w.n};
  my.forEach(u=>{u.fort=kindOf(u)==='land'&&inTerr(u)});
  const mL=mine.filter(m=>kindOf(m)==='land'),mS=mine.filter(m=>kindOf(m)==='sea'),mA=mine.filter(m=>kindOf(m)==='air');
  const invaders=mL.filter(inTerr).concat(mS.filter(m=>bases.some(b=>dist([m.x,m.y],[b.px,b.py])<40)));
- let lostTargets=[];try{lostTargets=(env.warTargets&&env.warTargets(w)||[]).filter(t=>t.occ)}catch(e){}
+ let lostTargets=[];try{lostTargets=warTargetsSim(w).filter(t=>t.occ)}catch(e){}
  const near=invaders.length>0||lostTargets.length>0||mine.some(m=>kindOf(m)!=='air'&&dist([m.x,m.y],[home.x,home.y])<55);
  const ePow=sumP(my),mPow=sumP(mine)+.1,myFi=mA.filter(m=>m.sub==='fighter').length,eFi=my.filter(u=>u.sub==='fighter').length;
  const ctx=(ePow/mPow>1.4?'strong':ePow/mPow<.7?'weak':'even')+'|'+(near?'near':'far')+'|'+(myFi>eFi?'airDown':'airUp');
@@ -583,8 +590,8 @@ function deployProduced(uid){
  const u=mk(ME,sub,x,y,{name:pu.name,base:kind==='air'?home:null,pid:uid});pu.onMap=u.id;MM.sel=u.id;MM.dirty=true;env.save();say('🚀 На карте: '+pu.name,true)}
 
 /* ---------- тап по карте ---------- */
-function toMap(e){const svg=MM.svg;if(!svg||!svg.getScreenCTM)return null;const m=svg.getScreenCTM();if(!m)return null;const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform(m.inverse());return{x:q.x,y:q.y}}
-function unitsPerPx(){const svg=MM.svg,r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return vb&&r.width?vb.width/r.width:1}
+function toMap(e){const svg=MM.svg;if(!svg||!svg.getScreenCTM)return null;const m=svg.getScreenCTM();if(!m)return null;const pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;const q=pt.matrixTransform(m.inverse());return{x:q.x/scaleX,y:q.y/scaleY}}
+function unitsPerPx(){const svg=MM.svg,r=svg.getBoundingClientRect(),vb=svg.viewBox.baseVal;return vb&&r.width?vb.width/r.width/scaleX:1}
 function hit(p,own){const up=unitsPerPx();let best=null,bd=1e9;
  MM.units.forEach(u=>{if((own===ME)!==(u.own===ME)||u.hid)return;const d=dist([p.x,p.y],[u.x,u.y]),r=(SPEC[u.sub].px*.62)*(MM.zf||1)*up*1.25;if(d<r&&d<bd){bd=d;best=u}});return best}
 function handleTap(e){
@@ -626,7 +633,7 @@ const NS='http://www.w3.org/2000/svg';
 let L={g:null,paths:null,els:{},fx:null,rng:null,bases:null,pvo:null,pvosig:''};
 function ensureLayer(svg){
  if(L.g&&L.g.isConnected&&L.g.parentNode===svg){if(svg.lastChild!==L.g&&MM.t-(L.last||0)>2){L.last=MM.t;svg.appendChild(L.g)}return}
- const g=document.createElementNS(NS,'g');g.id='milmap';g.setAttribute('pointer-events','none');
+ const g=document.createElementNS(NS,'g');g.id='milmap';g.setAttribute('pointer-events','none');g.setAttribute('transform',`scale(${scaleX} ${scaleY})`);
  g.innerHTML='<g id="mm-pvo"></g><g id="mm-bases"></g><g id="mm-range"></g><g id="mm-paths"></g><g id="mm-units"></g><g id="mm-fx"></g>';
  svg.appendChild(g);L={g,units:g.querySelector('#mm-units'),paths:g.querySelector('#mm-paths'),fx:g.querySelector('#mm-fx'),rng:g.querySelector('#mm-range'),bases:g.querySelector('#mm-bases'),pvo:g.querySelector('#mm-pvo'),pvosig:'',els:{}}}
 function shotSvg(f,a,z){
@@ -648,7 +655,7 @@ function shotSvg(f,a,z){
  }return''}
 function paint(){
  const svg=MM.svg;if(!svg||!svg.isConnected)return;ensureLayer(svg);
- const r=svg.getBoundingClientRect();if(!r.width)return;const vb=svg.viewBox.baseVal,up=vb.width/r.width,zoom=Math.max(1,GW/vb.width),zoomAlpha=clampN((zoom-1.04)/.58,0,1);MM.vis={x:vb.x,y:vb.y,w:vb.width,h:vb.height};
+ const r=svg.getBoundingClientRect();if(!r.width)return;const vb=svg.viewBox.baseVal,up=vb.width/r.width/scaleX,zoom=Math.max(1,GW/(vb.width/scaleX)),zoomAlpha=clampN((zoom-1.04)/.58,0,1);MM.vis={x:vb.x/scaleX,y:vb.y/scaleY,w:vb.width/scaleX,h:vb.height/scaleY};
  /* Статические маркеры ПВО стран мира: один–три на страну, не участвуют в физике подразделений. */
  const pvos=MM.pvoMarkers||[];const pSig=pvos.length+'|'+(MM.pvoSig||'')+'|'+up.toFixed(2);if(L.pvosig!==pSig){L.pvosig=pSig;const k=up*9/10;L.pvo.innerHTML=pvos.map(p=>`<g transform="translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) scale(${k.toFixed(4)})" opacity="${(.92*zoomAlpha).toFixed(2)}" pointer-events="none"><path d="M0 -8L7 -5V1Q6 6 0 9Q-6 6-7 1V-5Z" fill="#172d3d" stroke="#b8e1ff" stroke-width="1.4"/><path d="M-3 0H3M0 -3V3" stroke="#b8e1ff" stroke-width="1.5"/><title>ПВО: ${String(p.name||'').replace(/[&<>"]/g,'')}</title></g>`).join('')}
  /* базы */
@@ -673,7 +680,7 @@ function paint(){
  });
  MM.clusters=cl;MM.leadOf=lead;
  all.forEach(u=>{seen[u.id]=1;const isLead=lead[u.id]===u.id,grp=cl[lead[u.id]]||[u];
-  const margin=24*up,visible=u.x>=vb.x-margin&&u.x<=vb.x+vb.width+margin&&u.y>=vb.y-margin&&u.y<=vb.y+vb.height+margin;
+  const V=MM.vis,margin=24*up,visible=u.x>=V.x-margin&&u.x<=V.x+V.w+margin&&u.y>=V.y-margin&&u.y<=V.y+V.h+margin;
   if(!visible){const old=L.els[u.id];if(old)old.g.setAttribute('display','none');u.hid=true;return}
   const S=SPEC[u.sub];let e=L.els[u.id];
   if(!e){const g=document.createElementNS(NS,'g');g.innerHTML=`<circle class="mm-ring" r="0" fill="none" stroke="#ffd76a" stroke-width="2"/><g class="mm-spr">${sprite(u.sub,u.own)}</g><g class="mm-bar"><rect x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#000a"/><rect class="mm-hp" x="-11" y="0" width="22" height="3.2" rx="1.2" fill="#4ad66d"/></g><circle class="mm-cap" r="0" fill="none" stroke="#fff" stroke-width="2.2" stroke-dasharray="0 100"/><g class="mm-cnt" display="none"><circle cx="11" cy="-10" r="6.5" fill="#f5d889" stroke="#12233a" stroke-width="1"/><text class="mm-cn" x="11" y="-7" text-anchor="middle" font-size="9" font-weight="700" fill="#12233a"></text></g>`;L.units.appendChild(g);e=L.els[u.id]={g,spr:g.querySelector('.mm-spr'),hp:g.querySelector('.mm-hp'),bar:g.querySelector('.mm-bar'),ring:g.querySelector('.mm-ring'),cap:g.querySelector('.mm-cap'),cnt:g.querySelector('.mm-cnt'),cn:g.querySelector('.mm-cn')}}
@@ -700,7 +707,7 @@ function paint(){
   if(kindOf(u)==='air'){const b=u.base||nearestBase(u);if(b)rg=`<circle cx="${b.x}" cy="${b.y}" r="${SPEC[u.sub].range/2}" fill="#ffd76a10" stroke="#ffd76a" stroke-width="1" stroke-dasharray="2 4" vector-effect="non-scaling-stroke"/>`}}
  if(pd!==L.pds){L.pds=pd;L.paths.innerHTML=pd}if(rg!==L.rgs){L.rgs=rg;L.rng.innerHTML=rg}
  /* эффекты */
- const z=up*zf,m30=30*up,inV=(x,y)=>x>vb.x-m30&&x<vb.x+vb.width+m30&&y>vb.y-m30&&y<vb.y+vb.height+m30;
+ const z=up*zf,m30=30*up,V=MM.vis,inV=(x,y)=>x>V.x-m30&&x<V.x+V.w+m30&&y>V.y-m30&&y<V.y+V.h+m30;
  let fxHtml=MM.fx.map(f=>{const a=(MM.t-f.t0)/f.life;
   if(f.kind==='shot'){if(!inV(f.x,f.y)&&!inV(f.tx,f.ty))return'';return shotSvg(f,clampN(a,0,1),z)}
   if(a<0)return'';
@@ -806,13 +813,13 @@ function attach(){
  const G=window.NG&&NG.__mm;if(!G)return;
  if(!G.WMAP.node||G.GEO.st!=='ready')return;
  if(MM.svg===G.WMAP.node&&MM.ready)return;
- env=G.env();MM.svg=G.WMAP.node;
+ env=G.env();MM.svg=G.WMAP.node;syncWorldScale();
  buildMask();
  const st=env.S();
  if(!MM.ready){
-  const home=env.homeAnchor&&env.homeAnchor();
+  const home=toSim(env.homeAnchor&&env.homeAnchor());
   MM.bases=[];if(home){const w=snap('sea',home.x,home.y,260,true),p=w>=0?cellPt(w):[home.x,home.y];MM.bases.push({id:'home',name:home.name,x:home.x,y:home.y,px:p[0],py:p[1],own:ME})}
-  try{MM.pvoMarkers=env.countryPvoMarkers?env.countryPvoMarkers():[];MM.pvoSig=MM.pvoMarkers.map(x=>x.name).join('|')}catch(e){MM.pvoMarkers=[];MM.pvoSig=''}
+  try{MM.pvoMarkers=(env.countryPvoMarkers?env.countryPvoMarkers():[]).map(p=>toSim(p));MM.pvoSig=MM.pvoMarkers.map(x=>x.name).join('|')}catch(e){MM.pvoMarkers=[];MM.pvoSig=''}
   if(st.milmap&&st.milmap.units&&st.milmap.units.length)restore(st.milmap);
   else{seedPlayer();MM.dirty=true}
   MM.units=MM.units.filter(u=>{if(SPEC[u.sub].kind!=='sea'||okCell('sea',cellOf(u.x,u.y)))return true;const q=snap('sea',u.x,u.y,80,true);if(q<0)return false;const c=cellPt(q);u.x=c[0];u.y=c[1];u.path=[];return true});   /* корабль, оказавшийся на суше, возвращается в воду */
