@@ -388,6 +388,15 @@ function aiThink(){
    const sp=env.enemySpawn&&env.enemySpawn(w.n);
    if(sp){
     const eb=addEnemyBase(w.n,sp);
+    // A declared war must produce a visible defending force even if the AI treasury
+    // cannot afford its first procurement. Paid reinforcements still use ePay below.
+    if(!mine.some(u=>kindOf(u)==='land'&&u.hp>0)){
+     const homeCell=snap('land',sp.x,sp.y,32),home=homeCell>=0?cellPt(homeCell):[sp.x,sp.y];
+     mk(w.n,'inf',home[0],home[1],{name:'Армия противника · гарнизон'});
+     const tankCell=snap('land',home[0]+3,home[1]+3,12),tank= tankCell>=0?cellPt(tankCell):home;
+     mk(w.n,'tank',tank[0],tank[1],{name:'Бронегруппа противника'});
+     MM.dirty=true;
+    }
     const defi={land:(cap.land-cnt('land'))/cap.land,sea:(cap.sea-cnt('sea'))/cap.sea,air:(cap.air-cnt('air'))/cap.air};
     /* перебираем роды войск по нехватке; если для одного нет места (нет выхода к морю), берём следующий */
     let pick='',sub=null,nm='',spot=null;
