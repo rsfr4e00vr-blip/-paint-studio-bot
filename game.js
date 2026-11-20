@@ -1207,7 +1207,7 @@ function enemyStrikes(w,c){
   const f=WP[act.w].f,air=WP[act.w].air,t=act.t;
   const regs=S.regions.slice().sort((a,b)=>{const sc=r=>(t==='mil'?r.industry:t==='infra'?r.infra*r.industry/60*((S.dark&&S.dark[r.name])?.55:1):r.pop/20000)*rnd(.8,1.2);return sc(b)-sc(a)});
   const rangeKm=ARSENAL_RANGE_KM[act.w]||300,distances=regs.map(r=>({r,d:arsenalDistanceKm(w,r)})).filter(x=>x.d<=rangeKm);
-  if(!distances.length){AIARS.learn(S,act,-.18);log(`📡 ${w.n}: ${AIARS.WN[act.w]} не достаёт до доступных целей (дальность ${rangeKm} км).`);return}
+  if(!distances.length){c.ars[act.w]=(Number(c.ars[act.w])||0)+1;AIARS.learn(S,act,-.18);log(`📡 ${w.n}: ${AIARS.WN[act.w]} не достаёт до доступных целей (дальность ${rangeKm} км). Боеприпас сохранён.`);return}
   const planned=(w.enemyPlan&&w.enemyPlan.region)||'';
   const reg=(distances.find(x=>x.r.name===planned)||distances[0]).r;
   const strikeDistance=arsenalDistanceKm(w,reg);
