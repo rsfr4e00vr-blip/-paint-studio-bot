@@ -312,7 +312,10 @@ function combat(dt){
    if(best.sub==='tank')dmg*=.85;
    if(best.sub==='fort')dmg*=.55;if(best.sub==='aabat')dmg*=.7;
    if(a.own===ME&&kindOf(a)==='land'&&combatNearby(grid,a.x,a.y,14).some(qi=>{const q=U[qi];return q.own===ME&&SPEC[q.sub].kind==='air'&&q.mission==='support'&&dist([q.x,q.y],[a.x,a.y])<14}))dmg*=1.18;
-   if(SPEC[best.sub].kind==='land'){if(best.dug)dmg*=.85;if(best.fort)dmg*=.88}
+   if(SPEC[best.sub].kind==='land'){
+    if(best.dug)dmg*=.85;if(best.fort)dmg*=.88;
+    try{const tr=regionAtSim(best.x,best.y),tt=tr&&tr.terrain,cover=tt==='mountain'?1.42:tt==='forest'?1.24:tt==='winter'?1.18:tt==='hill'?1.13:tt==='plantation'?1.05:1;dmg/=cover}catch(e){}
+   }
    best.hp-=dmg;a.fight=MM.t;best.hurt=MM.t;shoot(a,best);
    if(Math.random()<dt*3)addFx(best.x+rnd(-2,2),best.y+rnd(-2,2),'hit',1);
    /* истребители преследуют цель в воздухе */
@@ -761,7 +764,7 @@ const bar=(v,m,c)=>`<span class="mm-b"><i style="width:${clampN(v/m*100,0,100)}%
 const MISS={idle:'на месте',move:'в движении',patrol:'патрулирует',bomb:'идёт на цель',rtb:'возвращается'};
 const MM_MON=['Янв','Фев','Мар','Апр','Май','Июн','Июл','Авг','Сен','Окт','Ноя','Дек'];
 function paintClock(){try{const st=env&&env.S&&env.S();if(!st)return;document.querySelectorAll('.mm-clock').forEach(el=>{const mi=(+st.month||0)%12,tot=((+st.year||1)-1)*12+(+st.month||0);el.textContent=`${st.year||1} г · ${MM_MON[mi]} · ${tot} мес`})}catch(e){}}
-setInterval(paintClock,700);
+if(typeof document!=='undefined')setInterval(()=>{if(!document.hidden)paintClock()},700);
 function paintHud(force){if(force)paintClock();
  const h=hud();if(!h)return;const p=h.p,fab=h.fab;
  const mine=MM.units.filter(u=>u.own===ME),foes=MM.units.filter(u=>u.own!==ME).length+(MM.remoteUnits||[]).length;
@@ -791,23 +794,22 @@ function restore(o){
 function persist(){if(!env||!MM.dirty)return;MM.dirty=false;try{const st=env.S();st.milmap=snapshot();env.save()}catch(e){}}
 
 /* ---------- запуск ---------- */
-let raf=0,last=0,lastPaint=0,lastHud=0,acc=0,saveT=0;const IS_MOBILE=!!(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));
+let raf=0,last=0,lastPaint=0,lastHud=0,acc=0,simAcc=0,saveT=0;const IS_MOBILE=!!(root.navigator&&/Android|iPhone|iPad|Mobile/i.test(root.navigator.userAgent||''));
 function frame(ts){
  if(!document.hidden)raf=requestAnimationFrame(frame);else{raf=0;return}
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(!MM.ready)return;
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
- const sd=running?dt*MM.speed:0;
- if(sd>0){step(sd);acc+=sd;if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}}
- // Экономный режим карты: симуляция и бои продолжают считать каждый кадр,
- // но тяжёлый SVG обновляется реже. На телефоне — до 8 раз/с,
- // на ПК — до 12 раз/с; на паузе — только 2 раза/с.
- const frameMs=sd>0?(IS_MOBILE?125:83):500;
- if(ts-lastPaint>=frameMs){
-  lastPaint=ts;
-  paint();
-  if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}
- }
- saveT+=dt;if(saveT>4){saveT=0;persist()}}
+ if(running){
+  const tick=IS_MOBILE?1/30:1/45;simAcc=Math.min(.24,simAcc+dt);let loops=0;
+  while(simAcc>=tick&&loops++<4){const sd=tick*MM.speed;step(sd);acc+=sd;simAcc-=tick;
+   if(acc>=1.5){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
+  }
+ }else simAcc=0;
+ const frameMs=running?(IS_MOBILE?125:83):500;
+ if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}}
+ saveT+=dt;if(saveT>4){saveT=0;persist()}
+ if(MM.fx.length>(IS_MOBILE?90:150))MM.fx.splice(0,MM.fx.length-(IS_MOBILE?90:150));
+}
 function attach(){
  if(!MM.visBound){MM.visBound=true;document.addEventListener('visibilitychange',()=>{if(!document.hidden&&MM.ready&&!raf){last=performance.now();raf=requestAnimationFrame(frame)}})}
  const G=window.NG&&NG.__mm;if(!G)return;
@@ -862,5 +864,6 @@ if(typeof window!=='undefined'&&root===window){
   },150);
 };
  setInterval(()=>{try{attach()}catch(e){console.warn('MilMap',e)}},1500);
+ window.addEventListener('pagehide',()=>{try{if(raf)cancelAnimationFrame(raf);raf=0;persist()}catch(e){}});
 }
 })(typeof window!=='undefined'?window:globalThis);
