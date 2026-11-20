@@ -10,3 +10,7 @@ assert.match(game,/warResultModal\('win',w,\{why:'полная оккупаци�
 assert.match(game,/ev=>ev\.stopPropagation\(\).*document\.body\.appendChild\(box\)/);
 assert.match(city,/MAXVIS=typeof window/);
 console.log('OK: hide city clutter during auto-plan, enemy icons, capture ownership, victory modal, arsenal tap isolation, mobile city-marker cap');
+
+assert.match(game,/S\.resumeAfterOuster=!!running/);
+assert.match(game,/if\(resume\)play\(\)/);
+assert.match(game,/\(!tk\[x\.id\]\|\|occ\.has\(x\.id\)\)/);
