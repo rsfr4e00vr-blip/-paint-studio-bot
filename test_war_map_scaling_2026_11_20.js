@@ -1,0 +1,15 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const mm=fs.readFileSync('./military_map.js','utf8');
+const game=fs.readFileSync('./game.js','utf8');
+const cities=fs.readFileSync('./city_sat.js','utf8');
+assert.match(mm,/const landGrid=new Map\(\)/);
+assert.match(mm,/landGrid\.get\(gx\+','\+gy\)/);
+assert.doesNotMatch(mm,/const contested=MM\.units\.some\(/);
+assert.match(mm,/Армия противника · гарнизон/);
+assert.match(mm,/Бронегруппа противника/);
+assert.match(game,/const TERRAIN_GRID=new WeakMap\(\)/);
+assert.match(game,/TERRAIN_MAX=180/);
+assert.match(cities,/const CITY_CELL=24/);
+assert.match(cities,/CITY_GRID\.get\(cx\+','\+cy\)/);
+console.log('OK: war capture, initial enemy garrison, terrain and city rendering use bounded spatial work');

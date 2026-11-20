@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const game=fs.readFileSync('./game.js','utf8');
+const save=game.match(/function save\(\)\{[\s\S]*?\n\}/);
+assert.ok(save,'save() must exist');
+assert.match(save[0],/localStorage\.setItem\('novariaSave',serialized\)/,'local save must be attempted');
+assert.match(save[0],/history:Array\.isArray\(S\.history\)\?S\.history\.slice\(-180\):\[\]/,'save payload must bound history size');
+assert.match(save[0],/window\.__SAVE_LAST_ERROR=detail/,'actual storage error must be exposed');
+assert.match(save[0],/toast\('Ошибка сохранения: '\+detail\)/,'save failure must show the real reason');
+assert.match(game,/onclick="if\(save\(\)\)toast\('Игра сохранена'\)"/,'manual save must not show success on failure');
+console.log('OK: local save trims history and reports the actual storage error');

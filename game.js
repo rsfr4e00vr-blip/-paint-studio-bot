@@ -22,7 +22,27 @@ function aiCfgSelects(){const A=window.AIARS;if(!A)return '';const sel=selectedA
 function aiCfgCard(){const A=window.AIARS;if(!A)return '';const c=A.cfg(S);
  return card('🤖 ИИ-противники',`<p>Выберите перед стартом: насколько агрессивны страны, учится ли их нейросеть и есть ли у них оружие в начале. По умолчанию арсенала нет — страны сами <b>вырабатывают</b> оружие на заводах и <b>покупают</b> его за деньги (дороже, но быстрее). Работает для <b>новой кампании</b>.</p>${aiCfgSelects()}<div class="mini"><b>Сейчас в игре:</b> агрессия — ${A.AGGR[c.aggr].n}; нейросеть — ${A.NNM[c.nn]}; стартовый арсенал — ${A.ARSM[c.ars]}.</div><button class="primary" onclick="resetGame()">Начать новую кампанию с этими настройками</button>`)}
 window.setDifficulty=v=>{selectedDifficulty=DIFFICULTIES[v]?v:'normal';toast('Для применения сложности начни новую кампанию')};
-function save(){if(window.__NG_MP){if(window.NGMP&&window.NGMP.saveLocal)window.NGMP.saveLocal();if(window.NGMP&&window.NGMP.reportState)window.NGMP.reportState();return}if(window.__salv)return;try{localStorage.setItem('novariaSave',JSON.stringify(S))}catch(e){toast('Не удалось сохранить: память устройства заполнена')}}
+function save(){
+ if(window.__salv)return false;
+ let saved=false,error=null;
+ // Keep the strategic state intact while limiting the historical chart to the newest 180 points.
+ try{
+  const payload={...S,history:Array.isArray(S.history)?S.history.slice(-180):[]};
+  const serialized=JSON.stringify(payload);
+  localStorage.setItem('novariaSave',serialized);
+  saved=true;
+ }catch(e){error=e}
+ try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.saveLocal==='function')window.NGMP.saveLocal()}catch(e){if(!error)error=e}
+ try{if(window.__NG_MP&&window.NGMP&&typeof window.NGMP.reportState==='function')window.NGMP.reportState()}catch(e){if(!error)error=e}
+ if(!saved){
+  const detail=error?String(error.name||'Error')+': '+String(error.message||error).slice(0,110):'неизвестная ошибка';
+  window.__SAVE_LAST_ERROR=detail;
+  toast('Ошибка сохранения: '+detail);
+  return false
+ }
+ window.__SAVE_LAST_ERROR='';
+ return true
+}
 function toast(t){if(window.__salv)return;let n=$('#notice');n.textContent=t;n.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>n.style.display='none',2400)}
 function log(t){if(window.__salv&&window.__salv.mute)return;S.log.unshift(`Год ${S.year}, ${months[S.month]}: ${t}`);S.log=S.log.slice(0,100)}
 const IC={
@@ -344,8 +364,8 @@ function drawOcc(svg){
  g.replaceChildren();
  ids.forEach(id=>{const e=WMAP.el&&WMAP.el.r[id];if(!e)return;const p=document.createElementNS(NS,'path');const gg=geoOf(e);p.setAttribute('d',gg?gg.d:(e.getAttribute('d')||''));p.setAttribute('fill-rule','evenodd');p.setAttribute('fill','url(#occhatch)');p.setAttribute('stroke',MYC);p.setAttribute('stroke-width','.5');g.appendChild(p)})}
 function buildWorldNode(){try{ensureEthnic()}catch(e){}const cl=[],body=[];Object.values(GEO.c).forEach(C=>{cl.push(`<clipPath id="c-${C.iso}"><path d="${C.d}"/></clipPath>`);
- const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/><path class="terrain-overlay" d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
- body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
+ const inner=C.regs.some(r=>r.d)?C.regs.map((r,i)=>{if(!r.d)return'';const key=String(r.id||r.n||C.iso);let h=2166136261;for(let j=0;j<key.length;j++)h=Math.imul(h^key.charCodeAt(j),16777619)>>>0;const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5],clip='tc-'+String(r.id||i).replace(/[^a-zA-Z0-9_-]/g,'-');return `<path data-r="${r.id}" data-c="${C.iso}" d="${r.d}" fill="${regFill(C,r,i)}" stroke="rgba(0,0,0,.38)" stroke-width=".35"/>`}).join(''):`<path data-r="${C.iso}:0" data-c="${C.iso}" d="${C.d}" fill="#26323f"/>`;
+ body.push(`<g ${C.regs.some(r=>r.d)?`clip-path="url(#c-${C.iso})"`:''}>${inner}</g><g class="terrain-detail" id="terrain-detail-${C.iso}" clip-path="url(#c-${C.iso})"></g><path class="terrain-grain" d="${C.d}" fill="url(#terrainTexture)" opacity=".24" pointer-events="none"/><path data-o="${C.iso}" d="${C.d}" fill="none" stroke="#0b1218" stroke-width=".7" stroke-linejoin="round" style="pointer-events:none"/>`)});
  if(!WMAP.rs){WMAP.rs=1;window.addEventListener('resize',()=>{if(WMAP.node)wzApply()})}const n=document.createElement('div');n.className='wmnode';n.innerHTML=`<svg viewBox="0 0 ${GEO.W} ${GEO.H}" preserveAspectRatio="none" shape-rendering="auto" style="touch-action:pan-y;will-change:transform"><defs>
  <linearGradient id="oceanGradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071521"/><stop offset=".48" stop-color="#102b3b"/><stop offset="1" stop-color="#07131f"/></linearGradient>
  <radialGradient id="oceanGlow"><stop offset="0" stop-color="#2c7180" stop-opacity=".22"/><stop offset="1" stop-color="#0a1c2a" stop-opacity="0"/></radialGradient>
@@ -404,7 +424,43 @@ H.wmTap=(iso,rid)=>{
 let WZ={x:0,y:0,w:1000,h:575};
 const asp=()=>{const r=WMAP.node&&WMAP.node.getBoundingClientRect();return r&&r.width>0?r.height/r.width:GEO.H/GEO.W};
 function wzFit(v){v.w=Math.max(12,Math.min(GEO.W,v.w));v.h=v.w*asp();v.x=v.w>=GEO.W?(GEO.W-v.w)/2:Math.max(0,Math.min(GEO.W-v.w,v.x));v.y=v.h>=GEO.H?(GEO.H-v.h)/2:Math.max(0,Math.min(GEO.H-v.h,v.y));return v}
-function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
+function wzApply(){WZ=wzFit(WZ);WMAP.node.classList.toggle('far',WZ.w>GEO.W*.4);WMAP.node.setAttribute('viewBox',`${WZ.x} ${WZ.y} ${WZ.w} ${WZ.h}`);try{renderTerrainOverlays()}catch(e){}try{if(window.CitySat)CitySat.refresh(WMAP.node,WZ,GEO.W)}catch(e){}WMAP.node.style.touchAction=(WMAP.full||WZ.w<GEO.W-1)?'none':'pan-y'}
+/* Не держим десятки тысяч дублирующих SVG-путей рельефа в DOM. Текстуры прежние,
+   но создаются только для провинций в текущем окне просмотра. */
+const TERRAIN_GRID=new WeakMap(),TERRAIN_CELL=24,TERRAIN_MAX=180;
+function terrainIndex(C){
+ let idx=TERRAIN_GRID.get(C);if(idx)return idx;
+ idx=new Map();
+ for(const r of C.regs||[]){
+  if(!r.d||!Number.isFinite(r.cx)||!Number.isFinite(r.cy))continue;
+  const key=Math.floor(r.cx/TERRAIN_CELL)+','+Math.floor(r.cy/TERRAIN_CELL);
+  let bucket=idx.get(key);if(!bucket)idx.set(key,bucket=[]);bucket.push(r);
+ }
+ TERRAIN_GRID.set(C,idx);return idx;
+}
+function renderTerrainOverlays(){
+ const svg=WMAP.node;if(!svg)return;
+ const far=WZ.w>GEO.W*.4,pad=WZ.w*.08,x0=WZ.x-pad,x1=WZ.x+WZ.w+pad,y0=WZ.y-WZ.h*.08,y1=WZ.y+WZ.h*1.08;
+ for(const C of Object.values(GEO.c)){
+  const g=document.getElementById('terrain-detail-'+C.iso);if(!g)continue;
+  if(far){if(g.childNodes.length)g.replaceChildren();g.dataset.sig='';continue}
+  if(C.bb&&(C.bb[2]<x0||C.bb[0]>x1||C.bb[3]<y0||C.bb[1]>y1)){if(g.childNodes.length)g.replaceChildren();g.dataset.sig='';continue}
+  const idx=terrainIndex(C),found=[],seen=new Set(),cx0=Math.floor(x0/TERRAIN_CELL),cx1=Math.floor(x1/TERRAIN_CELL),cy0=Math.floor(y0/TERRAIN_CELL),cy1=Math.floor(y1/TERRAIN_CELL);
+  for(let cy=cy0;cy<=cy1;cy++)for(let cx=cx0;cx<=cx1;cx++){
+   const bucket=idx.get(cx+','+cy);if(!bucket)continue;
+   for(const r of bucket)if(r.cx>=x0&&r.cx<=x1&&r.cy>=y0&&r.cy<=y1&&!seen.has(r.id)){seen.add(r.id);found.push(r)}
+  }
+  const mx=(x0+x1)/2,my=(y0+y1)/2;
+  if(found.length>TERRAIN_MAX){found.sort((a,b)=>(a.cx-mx)**2+(a.cy-my)**2-((b.cx-mx)**2+(b.cy-my)**2));found.length=TERRAIN_MAX}
+  const sig=found.map(r=>r.id).join('|');if(g.dataset.sig===sig)continue;g.dataset.sig=sig;
+  const parts=found.map(r=>{
+   const key=String(r.id||r.n||C.iso);let h=2166136261;for(let i=0;i<key.length;i++)h=Math.imul(h^key.charCodeAt(i),16777619)>>>0;
+   const pat=['terrainMountain','terrainForest','terrainHill','terrainWinter','terrainPlantation'][h%5];
+   return `<path d="${r.d}" fill="url(#${pat})" opacity=".42" pointer-events="none"/>`;
+  });
+  g.innerHTML=parts.join('');
+ }
+}
 const hwz=m=>{if(!WMAP.node)return;if(m==='full'){WMAP.full=!WMAP.full;const sl=document.getElementById('wm-slot');if(sl)sl.classList.toggle('full',!!WMAP.full);document.body.style.overflow=WMAP.full?'hidden':'';const b=document.getElementById('wfull');if(b)b.textContent=WMAP.full?'✕':'⛶';return wzApply()}if(m==='reset'){WZ={x:0,y:0,w:GEO.W,h:GEO.H}}else{const f=m==='in'?.6:1/.6,cx=WZ.x+WZ.w/2,cy=WZ.y+WZ.h/2;WZ.w*=f;WZ.h*=f;WZ.x=cx-WZ.w/2;WZ.y=cy-WZ.h/2}wzApply()};
 function worldMapCard(){return card('🌍 Карта мира',`<div id="wm-slot" class="wmslot"><p class="muted" style="padding:12px">Строится карта мира…</p></div><p class="muted"><b id="province-total">Провинции: подсчёт…</b><br>Нажмите на страну, чтобы открыть её провинции. Внутри страны можно выбирать провинции на карте или через поиск. Перетаскивайте карту и приближайте кнопками ＋ −. Красный контур — страна, с которой вы воюете.</p>`)}
 function mountWorldMap(){if(!document.getElementById('wm-slot'))return;wmLoad(ok=>{const sl=document.getElementById('wm-slot');if(!sl)return;if(!ok){sl.innerHTML='<p class="muted" style="padding:12px">Не удалось загрузить карту мира (нет интернета или библиотека заблокирована).</p>';return}
@@ -614,7 +670,7 @@ if(tab==='regions')c=`<div class="cards">${S.regions.map((r,i)=>`<div class="min
 if(tab==='diplomacy')c=`<div class="grid">${vassalPanel()}${regimePanel()}${aiPanel()}${aiResPanel()}${card('🌐 Дипломатия и отношения',wlPanel('dip'))}</div>`;
 if(tab==='documents')c=`<div class="grid">${card('Государственные документы',`<div class="row"><input id="docname" placeholder="Название документа"><select id="doctype"><option>Указ</option><option>Закон</option><option>Бюджет</option><option>Военный приказ</option><option>Дипломатическая нота</option></select></div><textarea id="doctext" rows="5" style="width:100%" placeholder="Текст документа..."></textarea><button class="primary" onclick="createDoc()">Подписать и сохранить</button>`)}${card('Архив документов',S.documents.length?S.documents.map((d,i)=>`<div class="choice"><b>${d.type}: ${d.name}</b><small class="muted"> · ${d.date}</small><p>${d.text}</p><button onclick="deleteDoc(${i})">Удалить</button></div>`).join(''):'Пока документов нет.')}</div>`;
 if(tab==='events')c=`<div class="grid">${card('События государства',S.event?`<h3>${S.event.title}</h3><p>${S.event.text}</p><div class="actions"><button class="primary" onclick="resolveEvent(0)">${S.event.a}</button><button onclick="resolveEvent(1)">${S.event.b}</button></div>`:'<p>Сейчас нет неразрешённых событий.</p>')}${card('Хроника',`<div class="log">${S.log.map(x=>`<div>${x}</div>`).join('')}</div>`)}</div>`;
-if(tab==='settings')c=`<div class="grid">${card('Сложность кампании',`<p>Выбери, насколько трудно удерживать власть и развивать государство. Сложность применяется только к <b>новой кампании</b>, текущую игру она не меняет.</p><div class="row"><label for="difficultySelect">Уровень сложности</label><select id="difficultySelect" onchange="setDifficulty(this.value)"><option value="easy" ${selectedDifficulty==='easy'?'selected':''}>Лёгкая</option><option value="normal" ${selectedDifficulty==='normal'?'selected':''}>Нормальная</option><option value="hard" ${selectedDifficulty==='hard'?'selected':''}>Сложная</option></select></div><div class="mini"><b>Текущая сложность: ${difficulty().label}</b><br>Доходы ×${difficulty().income.toFixed(2)} · расходы ×${difficulty().expenses.toFixed(2)}<br>Давление оппозиции ×${difficulty().rivalPressure.toFixed(2)}<br>Риск беспорядков ×${difficulty().unrest.toFixed(2)}</div><button class="primary" onclick="resetGame()">Начать новую кампанию на выбранной сложности</button>`)}${aiCfgCard()}${card('Сохранение',`<p>Прогресс автоматически сохраняется на этом устройстве.</p><button class="good" onclick="save();toast('Игра сохранена')">Сохранить сейчас</button> <button onclick="exportSave()">Экспортировать сохранение</button><div class="row"><input type="file" id="importfile" accept=".json"><button onclick="importSave()">Загрузить файл</button></div><p class="hint">Если файл не скачивается или не выбирается (бывает в Telegram) — используйте текст:</p><div class="actions"><button onclick="copySave()">Скопировать сохранение</button></div><textarea id="importtext" rows="3" placeholder="Вставьте сюда текст сохранения" style="width:100%;margin-top:8px"></textarea><div class="actions" style="margin-top:8px"><button onclick="importSave(true)">Загрузить из текста</button></div>`)}${card('Параметры страны',`<div class="row"><label>Название</label><input id="countryname" value="${S.name}"><button onclick="S.name=$('#countryname').value;save();render()">Изменить</button></div>`)}</div>`;
+if(tab==='settings')c=`<div class="grid">${card('Сложность кампании',`<p>Выбери, насколько трудно удерживать власть и развивать государство. Сложность применяется только к <b>новой кампании</b>, текущую игру она не меняет.</p><div class="row"><label for="difficultySelect">Уровень сложности</label><select id="difficultySelect" onchange="setDifficulty(this.value)"><option value="easy" ${selectedDifficulty==='easy'?'selected':''}>Лёгкая</option><option value="normal" ${selectedDifficulty==='normal'?'selected':''}>Нормальная</option><option value="hard" ${selectedDifficulty==='hard'?'selected':''}>Сложная</option></select></div><div class="mini"><b>Текущая сложность: ${difficulty().label}</b><br>Доходы ×${difficulty().income.toFixed(2)} · расходы ×${difficulty().expenses.toFixed(2)}<br>Давление оппозиции ×${difficulty().rivalPressure.toFixed(2)}<br>Риск беспорядков ×${difficulty().unrest.toFixed(2)}</div><button class="primary" onclick="resetGame()">Начать новую кампанию на выбранной сложности</button>`)}${aiCfgCard()}${card('Сохранение',`<p>Прогресс автоматически сохраняется на этом устройстве.</p><button class="good" onclick="if(save())toast('Игра сохранена')">Сохранить сейчас</button> <button onclick="exportSave()">Экспортировать сохранение</button><div class="row"><input type="file" id="importfile" accept=".json"><button onclick="importSave()">Загрузить файл</button></div><p class="hint">Если файл не скачивается или не выбирается (бывает в Telegram) — используйте текст:</p><div class="actions"><button onclick="copySave()">Скопировать сохранение</button></div><textarea id="importtext" rows="3" placeholder="Вставьте сюда текст сохранения" style="width:100%;margin-top:8px"></textarea><div class="actions" style="margin-top:8px"><button onclick="importSave(true)">Загрузить из текста</button></div>`)}${card('Параметры страны',`<div class="row"><label>Название</label><input id="countryname" value="${S.name}"><button onclick="S.name=$('#countryname').value;save();render()">Изменить</button></div>`)}</div>`;
 {let t=addonTab();if(t)c=t;else if(S.out)c=outBanner()+c}if(tab==='overview')c+=missionCard()+spiritsCard()+ovExtra()+card('👥 Что говорят люди',feedHtml());$('#content').innerHTML=(tab==='mp'&&window.NGMP?window.NGMP.tab():evBanner()+c);if(window.refreshMapArsenalPanel)window.refreshMapArsenalPanel();if(tab==='mp'&&window.NGMP&&window.NGMP.after)window.NGMP.after();document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));drawCharts();if(tab==='map')mountWorldMap();if(tab==='overview'||tab==='map')mountEmpire();if(S.campaignOver)showGameOver()}
 
 function render(auto){
@@ -3072,7 +3128,9 @@ function warResultModal(kind,w,o){
 }
 window.__warAiNote=(w,doc)=>{try{const D=WARAI.DOC[doc];if(D)log(`🧠 ${w.n}: штаб врага выбрал доктрину — ${D.icon} ${D.label}.`)}catch(e){}};
 function warTick(){
+ let terminalResult=false;
  S.wars.forEach(w=>{
+  if(terminalResult)return;
   const c=rel(w.n);if(!c){w.dead=1;return}
    if(w.enPow0==null)w.enPow0=c.power;
   w.m++;
@@ -3126,6 +3184,7 @@ function warTick(){
    log(`🏳 ${w.n}: все регионы страны заняты противником. Кампания потерпела поражение.`);
    try{pause()}catch(e){}
    try{warResultModal('loss',w,{})}catch(e){}
+   terminalResult=true;
    return;
   }
   warEnemyCiv(w,d);enemyEcoTick(w,c,d);darkTickEnemy(w);enemyStrikes(w,c);branchTick(w,c);if(w.dmg)Object.keys(w.dmg).forEach(k=>{const d=w.dmg[k];d.mil*=.96;d.infra*=.96;d.civ*=.96});if(window.PVO){PVO.monthly(c,true);PVO.myMonthly(S);const nn1=aiNationOf(w.n);if(nn1)nn1.aa=c.aa}else if(c.aa!=null)c.aa=Math.max(Math.round(c.power/25),c.aa-.04);
@@ -3148,7 +3207,7 @@ function warTick(){
  });
  // Полная оккупация всех регионов противника завершает войну и открывает итоги.
  S.wars.forEach(w=>{
-  if(w.won||w.dead)return;
+  if(terminalResult||w.won||w.dead)return;
   const all=regsOf(w.n)||[],occ=new Set((w.occ||[]).map(String));
   if(all.length&&all.every(r=>occ.has(String(r.id))||!!taken()[r.id])){
    w.p=100;w.won=1;w.wonBy='total-occupation';
@@ -3157,6 +3216,7 @@ function warTick(){
    try{toast(`🏆 Полная победа над ${w.n}!`)}catch(e){}
    try{pause()}catch(e){}
    try{warResultModal('win',w,{why:'полная оккупация всех регионов'})}catch(e){}
+   terminalResult=true;
   }
  });
  S.wars=S.wars.filter(w=>!w.dead);try{baRefresh()}catch(e){}
