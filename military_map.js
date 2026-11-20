@@ -882,14 +882,19 @@ function frame(ts){
  const dt=Math.min(.12,(ts-last)/1000||0);last=ts;if(!MM.ready)return;
  const running=!(env&&typeof env.isRunning==='function')||env.isRunning();
  const warCount=env&&typeof env.wars==='function'?env.wars().filter(w=>!w.won&&!w.dead&&!w.lost).length:0;
+ const forceLoad=MM.units.length+(MM.garrisons||[]).length+(MM.remoteUnits||[]).length;
  if(running){
   const tick=IS_MOBILE?1/30:1/45;simAcc=Math.min(.24,simAcc+dt);let loops=0;
   while(simAcc>=tick&&loops++<4){let remain=tick*MM.speed;simAcc-=tick;while(remain>0){const sd=Math.min(.08,remain);step(sd);acc+=sd;remain-=sd;
-    const aiInterval=warCount>=10?4.5:warCount>=5?3:1.5;if(acc>=aiInterval){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
+    /* При больших армиях ИИ планирует реже, чтобы оставить процессор для движения и отрисовки карты. */
+    const aiInterval=forceLoad>=240?7:forceLoad>=150?5.5:forceLoad>=90?4:(warCount>=10?4.5:warCount>=5?3:1.5);
+    if(acc>=aiInterval){acc=0;try{autoCommand()}catch(e){console.warn('MM auto',e)}try{aiThink()}catch(e){console.warn('MM ai',e)}}
    }
   }
  }else simAcc=0;
- const frameMs=running?(warCount>=10?(IS_MOBILE?220:150):warCount>=5?(IS_MOBILE?170:110):(IS_MOBILE?125:83)):500;
+ const baseFrame=warCount>=10?(IS_MOBILE?220:150):warCount>=5?(IS_MOBILE?170:110):(IS_MOBILE?125:83);
+ const loadFrame=forceLoad>=240?(IS_MOBILE?190:145):forceLoad>=150?(IS_MOBILE?165:125):forceLoad>=90?(IS_MOBILE?145:105):baseFrame;
+ const frameMs=running?Math.max(baseFrame,loadFrame):500;
  if(ts-lastPaint>=frameMs){lastPaint=ts;paint();if(ts-lastHud>500||MM.hsig===null){lastHud=ts;paintHud(false)}}
  saveT+=dt;if(saveT>4){saveT=0;persist()}
  if(MM.fx.length>(IS_MOBILE?90:150))MM.fx.splice(0,MM.fx.length-(IS_MOBILE?90:150));
