@@ -184,7 +184,7 @@ function orderMove(u,x,y,opt){
   const need=dist([u.x,u.y],[x,y])+dist([x,y],[base.x,base.y])+6;
   if(need>u.fuel&&opt.own){say('✈️ Вне радиуса: дальность — '+Math.round(SPEC[u.sub].range/2)+' ед. от базы',true);return false}
   u.path=[[x,y]];u.mission=opt.bomb?'bomb':'move';u.tgt=[x,y];return true}
- const p=findPath(k,u.x,u.y,x,y,k==='sea'?14:5);
+ const p=findPath(k,u.x,u.y,x,y,opt.ai?(k==='sea'?24:18):(k==='sea'?14:5));
  if(!p||!p.length){if(opt.own)say(k==='sea'?'⚓ Корабли не могут туда плыть: нет морского пути':'🪖 Армия не может туда пройти: нет сухопутного пути',true);return false}
  u.path=p;u.mission='move';u.tgt=p[p.length-1];return true}
 function orderStop(u){u.path=[];u.tgt=null;if(u.mission!=='rtb'||kindOf(u)!=='air')u.mission=kindOf(u)==='air'?'patrol':'idle'}
@@ -384,7 +384,7 @@ function aiThink(){
    MM.garrisons=MM.garrisons.filter(u=>u.own!==w.n);
   }
   /* Если у страны не было мирных маркеров, разворачиваем начальные силы прямо при первом тике войны. */
-  if(!MM.units.some(u=>u.own===w.n))activateWarForces(w.n);
+  if(!MM.units.some(u=>u.own===w.n&&kindOf(u)==='land'&&!SPEC[u.sub].static))activateWarForces(w.n);
  });
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
@@ -453,8 +453,11 @@ function tPick(c){if(Math.random()<.12)return TACT[Math.floor(Math.random()*TACT
 function tLearn(c,a,rew){const b=tBrain(),k=c+'|'+a;b.n[k]=(b.n[k]||0)+1;const q=b.q[k]==null?tPrior(c,a):b.q[k];b.q[k]=q+.25*(rew-q);b.steps++;MM.dirty=true}
 MM.war=MM.war||{};
 function go(u,x,y){
- if(u.aiTgt&&u.path.length&&dist(u.aiTgt,[x,y])<12)return;
- u.aiTgt=[x,y];u.aiT=MM.t;orderMove(u,x,y)}
+ if(u.aiTgt&&u.path.length&&dist(u.aiTgt,[x,y])<12)return true;
+ u.aiTgt=[x,y];u.aiT=MM.t;
+ let ok=orderMove(u,x,y,{ai:true});
+ if(!ok&&kindOf(u)==='land'){const q=snap('land',x,y,36);if(q>=0){const p=cellPt(q);ok=orderMove(u,p[0],p[1],{ai:true})}}
+ return ok}
 function commander(w,mine){
  const my=MM.units.filter(u=>u.own===w.n);if(!my.length)return;
  const bases=MM.bases.filter(b=>b.own===w.n);
@@ -475,7 +478,9 @@ function commander(w,mine){
   if(st.hp){const dE=st.hp[0]-eHP,dM=st.hp[1]-mHP;tLearn(st.c,st.tact,clampN(.5+.5*(dM-dE)/(100*Math.max(2,my.length)),0,1))}
   st.c=ctx;st.tact=tPick(ctx);st.hp=[eHP,mHP];st.t=MM.t}
  /* Даже если доктрина выбрала оборону, ИИ регулярно переходит в контратаку. */
- if(MM.t-(st.lastOffensive||-99)>30){st.tact='attack';st.lastOffensive=MM.t}
+ if(!Number.isFinite(st.lastOffensive)||MM.t-st.lastOffensive>42)st.lastOffensive=MM.t;
+ const offensiveWindow=MM.t-st.lastOffensive<30;
+ if(offensiveWindow)st.tact='attack';
  const nearest=(u,arr)=>{let b=null;arr.forEach(m=>{const d=dist([u.x,u.y],[m.x,m.y]);if(!b||d<b.d)b={m,d}});return b};
  /* отступление раненых на базу (лечатся у базы) */
  my.forEach(u=>{if(SPEC[u.sub].static)return;if(u.hp<30)u.heal=true;else if(u.hp>=75)u.heal=false;
@@ -583,9 +588,9 @@ function seedPlayer(){
    Мирные гарнизоны остаются в памяти движка и автоматически разворачиваются при объявлении войны,
    но не засоряют карту маркерами всех государств. Сетевые игроки сохраняют отдельный режим отображения. */
 function visibleArmyUnits(){
- const active=new Set((env&&env.wars?env.wars():[])
-  .filter(w=>w&&!w.won&&!w.dead&&!w.lost).map(w=>w.n));
- return MM.units.filter(u=>u&&(u.own===ME||active.has(u.own)))
+ /* MM.units содержит только развёрнутые части игрока и участников активных войн;
+    не скрываем уже созданные части из-за несовпадения имени страны в метаданных войны. */
+ return MM.units.filter(u=>!!u)
   .concat((MM.remoteUnits||[]).filter(u=>u&&u.remote));
 }
 function seedWorldGarrisons(){
