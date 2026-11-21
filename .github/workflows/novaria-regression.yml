@@ -17,8 +17,13 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           for f in *.js; do
+            case "$f" in test_*.js) continue ;; esac
             node --check "$f"
           done
+          node --check test_ai_commander.js
+          node --check test_army_visibility.js
+          node --check test_no_fake_battle_dots.js
+          node --check test_frontpct.js
       - name: Enemy military AI regression
         run: node test_ai_commander.js
       - name: Army sprite visibility regression
