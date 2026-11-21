@@ -1,0 +1,29 @@
+name: Novaria regression checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  military-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check JavaScript syntax
+        run: |
+          for f in *.js; do
+            node --check "$f"
+          done
+      - name: Enemy military AI regression
+        run: node test_ai_commander.js
+      - name: Army sprite visibility regression
+        run: node test_army_visibility.js
+      - name: No fake battle dots regression
+        run: node test_no_fake_battle_dots.js
+      - name: Front percentage regression
+        run: node test_frontpct.js
