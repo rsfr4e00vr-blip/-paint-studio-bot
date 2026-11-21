@@ -12,7 +12,7 @@ setEnv({S:()=>S,save(){},toast(){},wars:()=>[{n:'Враг',enPow0:90}],enemyNati
 MM.units.length=0;MM.bases.length=0;
 MM.bases.push({id:'home',name:'Дом',x:700,y:300,px:760,py:300,own:'me'});
 // мой отряд вторгается на территорию врага
-const inv=mk('me','inf',300,200,{name:'Вторжение'});
+const inv=mk('me','inf',240,200,{name:'Вторжение'});
 let shots=0,maxFx=0,err=0;
 const origWarn=console.warn;console.warn=(...a)=>{err++;origWarn(...a)};
 for(let i=0;i<900;i++){step(.1);if(i%15===0)aiThink();shots+=MM.fx.filter(f=>f.kind==='shot').length;maxFx=Math.max(maxFx,MM.fx.length)}
@@ -27,7 +27,8 @@ assert.ok(S.mmBrain&&typeof S.mmBrain.steps==='number','нейросеть та�
 console.log('brain',JSON.stringify(S.mmBrain).slice(0,200),'tact',MM.war['Враг'].tact);
 // защита: вражеские армии идут на вторженца
 const e2=MM.units.filter(u=>u.own==='Враг'&&SPEC[u.sub].kind==='land');
-if(e2.length)assert.ok(e2.some(u=>u.fight>0||Math.hypot(u.x-inv.x,u.y-inv.y)<80),'защитники двинулись на вторженца или сражаются');
+assert.ok(e2.length>0,'у противника есть сухопутные силы');
+assert.ok(inv.hp<100||e2.some(u=>u.fight>0||Math.hypot(u.x-inv.x,u.y-inv.y)<12),'вражеский ИИ должен реально вступить в бой с вторженцем');
 // отступление: раненый уходит на базу
 const w=MM.units.find(u=>u.own==='Враг'&&SPEC[u.sub].kind==='land'&&!SPEC[u.sub].static);
 if(w){w.hp=20;MM.units.filter(u=>u.own==='me').forEach(u=>u.hp=100);aiThink();assert.ok(w.heal,'раненый отступает');}
