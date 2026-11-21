@@ -185,3 +185,6 @@ input[type=range]{min-height:34px;accent-color:var(--gold)}
 .province-search{width:100%;margin:5px 0 3px;background:#101d2c;color:var(--txt);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .province-count{font-size:12px;color:var(--muted);margin:2px 0 7px}
 @media(max-width:520px){.cc-province-list{grid-template-columns:1fr;max-height:36vh}.ccbox{padding:11px}.ccbox h4{margin:9px 0 4px}}
+
+/* Novaria Z2: окна итогов войны и подтверждения — поверх полноэкранной карты */
+.ccm,.gameover{z-index:2147483001!important}
