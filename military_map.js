@@ -399,7 +399,7 @@ function aiThink(){
   if(!MM.units.some(u=>u.own===w.n&&kindOf(u)==='land'&&!SPEC[u.sub].static))activateWarForces(w.n);
  });
  MM.units=MM.units.filter(u=>u.own===ME||alive.has(String(u.own||'').trim().toLowerCase())||declared.has(String(u.own||'').trim().toLowerCase()));
- MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
+ MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(String(b.own||'').trim().toLowerCase())||declared.has(String(b.own||'').trim().toLowerCase()));
  wars.forEach(w=>{
   const mine=MM.units.filter(u=>u.own===w.n),nat=env.enemyNation&&env.enemyNation(w.n),pw=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
   const cap={land:Math.max(3,Math.round((4+Math.floor(pw/18))*aiScale)),sea:Math.max(1,Math.round((1+(pw>45?1:0))*aiScale)),air:Math.max(2,Math.round((2+(pw>55?1:0))*aiScale)),support:Math.max(1,Math.round((1+Math.floor(pw/90))*aiScale))};
