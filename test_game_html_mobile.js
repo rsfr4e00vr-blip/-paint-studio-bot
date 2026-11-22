@@ -5,6 +5,6 @@ assert.match(s,/viewport-fit=cover/);
 assert.match(s,/Telegram\.WebApp/);
 assert.match(s,/viewportChanged/);
 assert.match(s,/env\(safe-area-inset-top/);
-assert.match(s,/game\.js\?v=87/);
-assert.match(s,/military_map\.js\?v=9/);
+assert.match(s,/game\.js\?v=\d+/,'game.js must have cache busting');
+assert.match(s,/military_map\.js\?v=\d+/,'military_map.js must have cache busting');
 console.log('OK: Telegram viewport, safe areas and script cache busting');
