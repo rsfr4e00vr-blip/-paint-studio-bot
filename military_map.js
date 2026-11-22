@@ -402,12 +402,12 @@ function aiThink(){
   /* Доктрина «воюют армией»: если игрок стоит на земле врага или область уже потеряна, ИИ в первую очередь собирает сухопутную армию */
   let lostN=0;try{lostN=warTargetsSim(w).filter(t=>t.occ).length}catch(e){}
   const foeAll=MM.units.filter(u=>u.own===ME),invN=foeAll.filter(m=>kindOf(m)==='land'&&(()=>{const ra=regionAtSim(m.x,m.y);return !!ra&&ra.country===w.n})()).length;
+  const borderTargets=warTargetsSim(w);
   const borderPressure=foeAll.some(m=>{
    if(kindOf(m)!=='land')return false;
    const ownRegion=regionAtSim(m.x,m.y);
    if(ownRegion&&ownRegion.country===w.n)return true;
-   const targets=warTargetsSim(w);
-   return targets.some(t=>(t.x-m.x)*(t.x-m.x)+(t.y-m.y)*(t.y-m.y)<34*34);
+   return borderTargets.some(t=>(t.x-m.x)*(t.x-m.x)+(t.y-m.y)*(t.y-m.y)<34*34);
   });
   const threat=invN>0||lostN>0||borderPressure,crisis=threat&&sumP(mine)<sumP(foeAll)*.7;
   if(threat){MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog['m'+w.n]||-999)>150){MM.shortLog['m'+w.n]=MM.t;say('🪖 '+w.n+' срочно наращивает армию для обороны'+(crisis?': стране грозит поражение, берёт кредиты':''))}}
