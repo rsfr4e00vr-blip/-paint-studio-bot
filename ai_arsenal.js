@@ -143,16 +143,24 @@ function factoryTick(S,c,atWar){
  manageFactories(S,c,atWar);
 }
 function damageFactory(S,c,region,power){if(!c)return null;c.milFactories=Array.isArray(c.milFactories)?c.milFactories:[];const a=c.milFactories.filter(f=>f.hp>0&&(!region||f.region===region));if(!a.length)return null;const f=a[Math.floor(Math.random()*a.length)],F=FACTORIES[f.type];f.hp=Math.max(0,(f.hp||100)-Math.round(24+Math.max(.3,power||1)*18));if(f.hp<=0){c.milFactories=c.milFactories.filter(x=>x!==f);return{destroyed:true,name:F?F.name:'военный завод',region:f.region}}return{destroyed:false,name:F?F.name:'военный завод',region:f.region,hp:f.hp}}
+/* Множитель денег на оружие в войне: чем сильнее потрёпана армия (мощь относительно стартовой), тем меньше уходит на арсенал, минимум 52% */
+function armyFundK(c,atWar){
+  if(!atWar||!(+c.power0>0))return 1;
+  const p=Math.max(5,+c.power||20);
+  return 1-.6*C(1-p/c.power0,0,.8);
+}
 function monthly(S,c,atWar){
   const mi=mIdx(S);if(mi==null||c.arsM===mi)return;c.arsM=mi;
   if(window.AIRES){try{AIRES.tick(S,c,atWar)}catch(e){}}     // сначала ресурсы: добыча, нехватка, закупки сырья
   const p=Math.max(5,+c.power||20),ind=Math.max(.4,c.industry||1),cap=atWar?70:40;
   WK.forEach(k=>{c.ars[k]=Math.max(0,c.ars[k]*(atWar?.99:.985))});   // износ и устаревание
   const hasTre=typeof c.treasury==='number';let funds=0;
+  /* Воюют армией: чем сильнее потрёпана армия, тем меньше денег уходит на оружие (до −48%) — они остаются в казне на закупку войск */
+  const armyK=armyFundK(c,atWar);
   if(hasTre){
-    const want=p*(atWar?1.4:.2),take=Math.max(0,Math.min(want,c.treasury*.08));
+    const want=p*(atWar?1.4:.2)*armyK,take=Math.max(0,Math.min(want,c.treasury*.08*armyK));
     c.treasury-=take;funds=take;
-  }else{c.arsFund=(c.arsFund||0)+p*(atWar?1.4:.25);funds=c.arsFund;c.arsFund=0}
+  }else{c.arsFund=(c.arsFund||0)+p*(atWar?1.4:.25)*armyK;funds=c.arsFund;c.arsFund=0}
   if(window.AIRES)funds*=Math.max(.3,1-.25*AIRES.shortage(c));
   if(window.InterDep&&c.idp)funds*=Math.max(.35,InterDep.effects(c).fx);   // банки и финансы легли — на оружие денег меньше     // страна в нехватке сырья тратит деньги на еду и топливо, а не на оружие
   if(atWar&&!c.arsWar){   // начало войны: мобилизация оборонки и срочные закупки
@@ -272,5 +280,5 @@ function learnSector(S,act,reward){
   const nt=(window.NN&&!NN.off&&b.nn2)?b.nn2:null;
   if(nt&&act.x&&nt.nin===act.x.length)NN.train(nt,act.x,act.idx,C(reward,-1,1.5),.05);
 }
-window.AIARS={WK,learnAA,pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,feats,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,FACTORIES,manageFactories,factoryTick,damageFactory,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
+window.AIARS={armyFundK,WK,learnAA,pickSector,learnSector,WEAPONS,TARGETS,brain,ctx,feats,pick,plan,learn,stock,have,summary,produce,WN,TN,COST,AGGR,NNM,ARSM,cfg,aggrMult,applyCfg,FACTORIES,manageFactories,factoryTick,damageFactory,arsTotal:c=>WK.reduce((a,k)=>a+Math.floor((c.ars&&c.ars[k])||0),0)};
 })();
