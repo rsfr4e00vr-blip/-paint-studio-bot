@@ -21,6 +21,9 @@ jobs:
             node --check "$f"
           done
           node --check test_ai_commander.js
+          node --check test_ai_army_first.js
+          node --check test_ai_cache_versions.js
+          node --check test_arsenal_ranges.js
           node --check test_army_visibility.js
           node --check test_no_fake_battle_dots.js
           node --check test_frontpct.js
@@ -32,3 +35,9 @@ jobs:
         run: node test_no_fake_battle_dots.js
       - name: Front percentage regression
         run: node test_frontpct.js
+      - name: Army-first AI doctrine regression
+        run: node test_ai_army_first.js
+      - name: AI cache version regression
+        run: node test_ai_cache_versions.js
+      - name: Arsenal range regression
+        run: node test_arsenal_ranges.js
