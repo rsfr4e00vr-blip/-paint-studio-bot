@@ -644,7 +644,15 @@ function seedWorldGarrisons(){
    snap() ищет ближайшую сушу глобально, поэтому его результат обязательно перепроверяется
    через географию провинций: иначе войска могут появиться у соседей или у игрока. */
 function countryLandSpot(name,preferred,radius){
- if(!name||!env||!env.GEO)return null;
+ if(!name||!env)return null;
+ /* Тестовые/старые карты могут не иметь GEO.c, но regionAt всё ещё знает владельца клетки. */
+ if(!env.GEO){
+  if(!preferred||!Number.isFinite(preferred.x)||!Number.isFinite(preferred.y))return null;
+  const q=snap('land',preferred.x,preferred.y,Math.max(18,Number(radius)||30));
+  if(q<0)return null;
+  const pt=cellPt(q),ra=regionAtSim(pt[0],pt[1]);
+  return !ra||ra.country===name?pt:null;
+ }
  const countries=Object.values(env.GEO.c||{});
  const C=(env.GEO.c&&env.GEO.c[name])||countries.find(c=>c&&(c.name===name||c.iso===name));
  const regs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
