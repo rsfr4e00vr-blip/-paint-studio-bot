@@ -28,7 +28,12 @@ assert.equal(ePay(n, 'tank', { defend: true }), 'казна пуста, кред
 assert.equal(n.debt, 1450);
 setMask(new Uint8Array(500 * 288).fill(1).map((v, i) => ((i % 500) < 250 ? 1 : 0)));
 const nat = { name: 'Враг', power: 80, treasury: 1e6, manpower: 1e4, industry: 1, rs: { st: { steel: 1e6, fuel: 1e6, energy: 1e6, food: 100 } } };
-setEnv({ S: () => ({ money: 0 }), save() {}, toast() {}, wars: () => [{ n: 'Враг', enPow0: 80 }], enemyNation: () => nat, enemySpawn: () => ({ x: 100, y: 100 }), say() {}, aiEvent() {} });
+const testGeo = { W: 1000, H: 575, c: { 'Враг': { name: 'Враг', regs: [{ cx: 100, cy: 100, s: 10 }, { cx: 130, cy: 110, s: 8 }] } } };
+setEnv({ S: () => ({ money: 0 }), save() {}, toast() {}, wars: () => [{ n: 'Враг', enPow0: 80 }], enemyNation: () => nat, enemySpawn: () => ({ x: 100, y: 100 }), GEO: testGeo,
+  regionAt: (x, y) => ({ country: (x < 250 || x > 380) ? 'Враг' : 'Игрок' }),
+  say() {}, aiEvent() {} });
+const safeSpot = core.countryLandSpot('Враг', { x: 400, y: 100 }, 24);
+assert.ok(safeSpot && safeSpot[0] < 250, 'enemy reinforcements must deploy inside the enemy country, not on the player side');
 MM.units.push({ id: 'm1', own: 'me', sub: 'inf', x: 400, y: 150, hp: 100, path: [], mission: 'idle' });
 const before = MM.units.length;
 for (let i = 0; i < 60; i++) { MM.spawnT = {}; aiThink(); }
