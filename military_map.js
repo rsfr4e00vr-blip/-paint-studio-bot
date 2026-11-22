@@ -379,7 +379,10 @@ function aiThink(){
  const difficulty=env.difficulty?env.difficulty():'normal';
  const aiScale=difficulty==='hard'?1.22:difficulty==='easy'?.78:1;
  const wars=env.wars().filter(w=>!w.won&&!w.dead&&!w.lost);
- const alive=new Set(wars.map(w=>w.n));
+ const alive=new Set(wars.map(w=>String(w.n||'').trim().toLowerCase()));
+ /* Не удаляем уже развёрнутые части из-за временного флага lost/dead:
+    страна остаётся участником войны, пока война явно не завершена (won). */
+ const declared=new Set((env.wars()||[]).filter(w=>!w.won).map(w=>String(w.n||'').trim().toLowerCase()));
  wars.forEach(w=>{
   const stationed=(MM.garrisons||[]).filter(u=>u.own===w.n);
   if(stationed.length){
@@ -390,7 +393,7 @@ function aiThink(){
   /* Если у страны не было мирных маркеров, разворачиваем начальные силы прямо при первом тике войны. */
   if(!MM.units.some(u=>u.own===w.n&&kindOf(u)==='land'&&!SPEC[u.sub].static))activateWarForces(w.n);
  });
- MM.units=MM.units.filter(u=>u.own===ME||alive.has(u.own));
+ MM.units=MM.units.filter(u=>u.own===ME||alive.has(String(u.own||'').trim().toLowerCase())||declared.has(String(u.own||'').trim().toLowerCase()));
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
  wars.forEach(w=>{
   const mine=MM.units.filter(u=>u.own===w.n),nat=env.enemyNation&&env.enemyNation(w.n),pw=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
@@ -399,7 +402,14 @@ function aiThink(){
   /* Доктрина «воюют армией»: если игрок стоит на земле врага или область уже потеряна, ИИ в первую очередь собирает сухопутную армию */
   let lostN=0;try{lostN=warTargetsSim(w).filter(t=>t.occ).length}catch(e){}
   const foeAll=MM.units.filter(u=>u.own===ME),invN=foeAll.filter(m=>kindOf(m)==='land'&&(()=>{const ra=regionAtSim(m.x,m.y);return !!ra&&ra.country===w.n})()).length;
-  const threat=invN>0||lostN>0,crisis=threat&&sumP(mine)<sumP(foeAll)*.7;
+  const borderPressure=foeAll.some(m=>{
+   if(kindOf(m)!=='land')return false;
+   const ownRegion=regionAtSim(m.x,m.y);
+   if(ownRegion&&ownRegion.country===w.n)return true;
+   const targets=warTargetsSim(w);
+   return targets.some(t=>(t.x-m.x)*(t.x-m.x)+(t.y-m.y)*(t.y-m.y)<34*34);
+  });
+  const threat=invN>0||lostN>0||borderPressure,crisis=threat&&sumP(mine)<sumP(foeAll)*.7;
   if(threat){MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog['m'+w.n]||-999)>150){MM.shortLog['m'+w.n]=MM.t;say('🪖 '+w.n+' срочно наращивает армию для обороны'+(crisis?': стране грозит поражение, берёт кредиты':''))}}
   MM.spawnT=MM.spawnT||{};MM.spawnT[w.n]=(MM.spawnT[w.n]||0)-1.5;
   if(MM.spawnT[w.n]<=0){
@@ -411,9 +421,8 @@ function aiThink(){
     let pick='',sub=null,nm='',spot=null;
     const cands=buyOrder(defi,threat);
     for(const k of cands){
-     if(k==='land'||k==='support'){const q=snap('land',sp.x+rnd(-6,6),sp.y+rnd(-6,6),12);if(q>=0)spot=cellPt(q)}
+     if(k==='land'||k==='support'||k==='air'){spot=countryLandSpot(w.n,{x:sp.x+rnd(-6,6),y:sp.y+rnd(-6,6)},24);if(spot)spot=[spot.x,spot.y]}
      else if(k==='sea'){const q=snap('sea',sp.x,sp.y,45);if(q>=0)spot=cellPt(q)}
-     else spot=[sp.x,sp.y];
      if(spot){pick=k;break}}
     if(pick==='land'){const poor=nat&&(Number(nat.treasury)||0)<ECOST.tank.m*1.5;sub=Math.random()<landInfChance(poor,crisis)?'inf':'tank';nm='Армия противника'}
     else if(pick==='sea'){const roll=Math.random();sub=roll<.25?'submarine':roll<.5?'frigate':roll<.82?'destroyer':'carrier';nm='Флот противника'}
@@ -486,10 +495,11 @@ function commander(w,mine){
   const eHP=my.reduce((a,u)=>a+u.hp,0),mHP=mine.reduce((a,u)=>a+u.hp,0);
   if(st.hp){const dE=st.hp[0]-eHP,dM=st.hp[1]-mHP;tLearn(st.c,st.tact,clampN(.5+.5*(dM-dE)/(100*Math.max(2,my.length)),0,1))}
   st.c=ctx;st.tact=tPick(ctx);st.hp=[eHP,mHP];st.t=MM.t}
- /* Даже если доктрина выбрала оборону, ИИ регулярно переходит в контратаку. */
- if(!Number.isFinite(st.lastOffensive)||MM.t-st.lastOffensive>42)st.lastOffensive=MM.t;
- const offensiveWindow=MM.t-st.lastOffensive<30;
- if(offensiveWindow)st.tact='attack';
+ /* Решение о наступлении/обороне зависит от реального соотношения сухопутных сил.
+    Нейросеть выбирает тактику в обычной ситуации; при явном перевесе включается доктрина. */
+ const forceRatio=ePow/Math.max(.1,mPow);
+ if(near&&forceRatio<.9)st.tact='defend';
+ else if(forceRatio>1.2)st.tact='attack';
  const nearest=(u,arr)=>{let b=null;arr.forEach(m=>{const d=dist([u.x,u.y],[m.x,m.y]);if(!b||d<b.d)b={m,d}});return b};
  /* отступление раненых на базу (лечатся у базы) */
  my.forEach(u=>{if(SPEC[u.sub].static)return;if(u.hp<30)u.heal=true;else if(u.hp>=75)u.heal=false;
@@ -620,6 +630,34 @@ function seedWorldGarrisons(){
   if(p1>=0){const q=cellPt(p1);add('inf',q[0],q[1],'Гарнизон '+C.name)}
  });
 }
+/* Находим клетку суши строго внутри территории указанной страны.
+   snap() ищет ближайшую сушу глобально, поэтому его результат обязательно перепроверяется
+   через географию провинций: иначе войска могут появиться у соседей или у игрока. */
+function countryLandSpot(name,preferred,radius){
+ if(!name||!env||!env.GEO)return null;
+ const countries=Object.values(env.GEO.c||{});
+ const C=(env.GEO.c&&env.GEO.c[name])||countries.find(c=>c&&(c.name===name||c.iso===name));
+ const regs=(C&&C.regs||[]).filter(r=>Number.isFinite(r.cx)&&Number.isFinite(r.cy));
+ if(!regs.length)return null;
+ const p=preferred&&Number.isFinite(preferred.x)&&Number.isFinite(preferred.y)?preferred:null;
+ const ranked=regs.slice().sort((a,b)=>{
+  if(p){const da=(a.cx/scaleX-p.x)**2+(a.cy/scaleY-p.y)**2,db=(b.cx/scaleX-p.x)**2+(b.cy/scaleY-p.y)**2;return da-db}
+  return (b.s||0)-(a.s||0);
+ });
+ const candidates=[];
+ if(p)candidates.push(p);
+ ranked.slice(0,Math.min(48,ranked.length)).forEach(r=>candidates.push(toSim({x:r.cx,y:r.cy})));
+ const rad=Math.max(18,Number(radius)||30);
+ for(const c of candidates){
+  const direct=regionAtSim(c.x,c.y);
+  if(direct&&direct.country===name&&okCell('land',cellOf(c.x,c.y)))return{x:c.x,y:c.y};
+  const q=snap('land',c.x,c.y,rad);
+  if(q<0)continue;
+  const pt=cellPt(q),ra=regionAtSim(pt[0],pt[1]);
+  if(ra&&ra.country===name)return{x:pt[0],y:pt[1]};
+ }
+ return null;
+}
 function activateWarForces(name){
  if(!name||!env||!MM.ready)return 0;
  const already=MM.units.filter(u=>u.own===name);
@@ -643,10 +681,7 @@ function activateWarForces(name){
   const q=mk(name,sub,x,y,{name:label,base:SPEC[sub].kind==='air'?base:null});
   q.fuel=SPEC[sub].range||q.fuel;return q;
  };
- const land=(dx,dy)=>{
-  const q=snap('land',sp.x+dx,sp.y+dy,Math.max(24,Math.hypot(dx,dy)+16));
-  return q>=0?cellPt(q):null;
- };
+ const land=(dx,dy)=>countryLandSpot(name,{x:sp.x+dx,y:sp.y+dy},Math.max(24,Math.hypot(dx,dy)+16));
  /* Координата столицы может оказаться на воде/границе: пробуем соседние крупные провинции. */
  let anchor=sp,p1=land(0,0);
  if(!p1&&regs.length){const ranked=regs.slice().sort((a,b)=>(b.s||0)-(a.s||0));for(const r of ranked.slice(0,24)){const q0=toSim({x:r.cx,y:r.cy});const q=snap('land',q0.x,q0.y,28);if(q>=0){anchor=q0;p1=cellPt(q);break}}}
