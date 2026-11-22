@@ -421,7 +421,7 @@ function aiThink(){
     let pick='',sub=null,nm='',spot=null;
     const cands=buyOrder(defi,threat);
     for(const k of cands){
-     if(k==='land'||k==='support'||k==='air'){spot=countryLandSpot(w.n,{x:sp.x+rnd(-6,6),y:sp.y+rnd(-6,6)},24);if(spot)spot=[spot.x,spot.y]}
+     if(k==='land'||k==='support'||k==='air'){spot=countryLandSpot(w.n,{x:sp.x+rnd(-6,6),y:sp.y+rnd(-6,6)},24)}
      else if(k==='sea'){const q=snap('sea',sp.x,sp.y,45);if(q>=0)spot=cellPt(q)}
      if(spot){pick=k;break}}
     if(pick==='land'){const poor=nat&&(Number(nat.treasury)||0)<ECOST.tank.m*1.5;sub=Math.random()<landInfChance(poor,crisis)?'inf':'tank';nm='Армия противника'}
@@ -650,11 +650,11 @@ function countryLandSpot(name,preferred,radius){
  const rad=Math.max(18,Number(radius)||30);
  for(const c of candidates){
   const direct=regionAtSim(c.x,c.y);
-  if(direct&&direct.country===name&&okCell('land',cellOf(c.x,c.y)))return{x:c.x,y:c.y};
+  if(direct&&direct.country===name&&okCell('land',cellOf(c.x,c.y)))return[c.x,c.y];
   const q=snap('land',c.x,c.y,rad);
   if(q<0)continue;
   const pt=cellPt(q),ra=regionAtSim(pt[0],pt[1]);
-  if(ra&&ra.country===name)return{x:pt[0],y:pt[1]};
+  if(ra&&ra.country===name)return[pt[0],pt[1]];
  }
  return null;
 }
