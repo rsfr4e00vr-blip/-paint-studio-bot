@@ -300,17 +300,22 @@ function combatNearby(grid,x,y,r){
  out.sort((a,b)=>a-b);return out;
 }
 function combat(dt){
- const U=MM.units,grid=combatGrid(U);
+ const U=MM.units,grid=combatGrid(U),focusLoad=new Map();
  for(let i=0;i<U.length;i++){const a=U[i];if(a.hp<=0)continue;const S=SPEC[a.sub];
   if(a.mission==='rtb'&&S.kind==='air'&&a.sub==='bomber')continue;
-  let best=null,bd=1e9;
+  let best=null,bd=1e9,bLoad=1e9;
   const nearby=combatNearby(grid,a.x,a.y,S.rg);
   for(let n=0;n<nearby.length;n++){const j=nearby[n],t=U[j];if(t.hp<=0||!isEnemy(a,t))continue;
    const dm=DM[a.sub][SPEC[t.sub].kind];if(!dm)continue;
    let d=dist([a.x,a.y],[t.x,t.y]);
    if(t.sub==='submarine'&&a.sub!=='submarine'&&d>7)continue;  /* лодку видно только вблизи */
-   if(d<=S.rg&&d<bd){bd=d;best=t}}
-  if(best){
+   if(d<=S.rg){
+    /* Распределяем огонь по доступным целям: не допускаем, чтобы целая армия
+       мгновенно стирала одну ближайшую модель, пока остальные стоят без боя. */
+    const load=focusLoad.get(t.id)||0;
+    if(load<bLoad||(load===bLoad&&d<bd)){bLoad=load;bd=d;best=t}
+   }}
+  if(best){focusLoad.set(best.id,(focusLoad.get(best.id)||0)+1);
    let dmg=DM[a.sub][SPEC[best.sub].kind]*(.5+.5*a.hp/100)*dt*rnd(.7,1.3);
    if(a.sub==='fighter'&&best.sub==='bomber')dmg*=1.5;
    if(best.sub==='tank')dmg*=.85;
@@ -498,8 +503,13 @@ function commander(w,mine){
  /* Решение о наступлении/обороне зависит от реального соотношения сухопутных сил.
     Нейросеть выбирает тактику в обычной ситуации; при явном перевесе включается доктрина. */
  const forceRatio=ePow/Math.max(.1,mPow);
- if(near&&forceRatio<.9)st.tact='defend';
- else if(forceRatio>1.2)st.tact='attack';
+ /* Итоговая доктрина войны: 70% — реальное соотношение сил армий,
+    30% — решение обучаемой тактической нейросети. */
+ const forceSignal=clampN((ePow-mPow)/Math.max(1,ePow+mPow),-1,1);
+ const nnSignal=st.tact==='attack'?1:st.tact==='raid'?.35:st.tact==='turtle'?-0.4:-1;
+ const strategicScore=.7*forceSignal+.3*nnSignal;
+ if(strategicScore>.15)st.tact='attack';
+ else if(strategicScore<-.15||near&&forceRatio<.9)st.tact='defend';
  const nearest=(u,arr)=>{let b=null;arr.forEach(m=>{const d=dist([u.x,u.y],[m.x,m.y]);if(!b||d<b.d)b={m,d}});return b};
  /* отступление раненых на базу (лечатся у базы) */
  my.forEach(u=>{if(SPEC[u.sub].static)return;if(u.hp<30)u.heal=true;else if(u.hp>=75)u.heal=false;
