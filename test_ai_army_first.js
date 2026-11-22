@@ -28,7 +28,12 @@ assert.equal(ePay(n, 'tank', { defend: true }), 'казна пуста, кред
 assert.equal(n.debt, 1450);
 setMask(new Uint8Array(500 * 288).fill(1).map((v, i) => ((i % 500) < 250 ? 1 : 0)));
 const nat = { name: 'Враг', power: 80, treasury: 1e6, manpower: 1e4, industry: 1, rs: { st: { steel: 1e6, fuel: 1e6, energy: 1e6, food: 100 } } };
-setEnv({ S: () => ({ money: 0 }), save() {}, toast() {}, wars: () => [{ n: 'Враг', enPow0: 80 }], enemyNation: () => nat, enemySpawn: () => ({ x: 100, y: 100 }), say() {}, aiEvent() {} });
+const testGeo = { W: 1000, H: 575, c: { 'Враг': { name: 'Враг', regs: [{ cx: 100, cy: 100, s: 10 }, { cx: 130, cy: 110, s: 8 }] } } };
+setEnv({ S: () => ({ money: 0 }), save() {}, toast() {}, wars: () => [{ n: 'Враг', enPow0: 80 }], enemyNation: () => nat, enemySpawn: () => ({ x: 100, y: 100 }), GEO: testGeo,
+  regionAt: (x, y) => ({ country: (x < 250 || x > 380) ? 'Враг' : 'Игрок' }),
+  say() {}, aiEvent() {} });
+const safeSpot = core.countryLandSpot('Враг', { x: 400, y: 100 }, 24);
+assert.ok(safeSpot && safeSpot[0] < 250, 'enemy reinforcements must deploy inside the enemy country, not on the player side');
 MM.units.push({ id: 'm1', own: 'me', sub: 'inf', x: 400, y: 150, hp: 100, path: [], mission: 'idle' });
 const before = MM.units.length;
 for (let i = 0; i < 60; i++) { MM.spawnT = {}; aiThink(); }
@@ -36,6 +41,22 @@ const spawned = MM.units.slice(before).filter(u => u.own === 'Враг');
 const land = spawned.filter(u => u.sub === 'inf' || u.sub === 'tank').length;
 const air = spawned.filter(u => u.sub === 'fighter' || u.sub === 'bomber').length;
 assert.ok(land >= 6 && land > air, `армия должна преобладать: land=${land}, air=${air}`);
+
+// В равном бою огонь распределяется между доступными целями, а не стирает
+// одну ближайшую 2D-модель всем строем за один короткий залп.
+MM.units.length = 0;
+for (let i = 0; i < 3; i++) {
+  MM.units.push({ id: 'p' + i, own: 'me', sub: 'inf', x: 100 + i, y: 100, hp: 100, path: [], mission: 'idle' });
+  MM.units.push({ id: 'e' + i, own: 'Враг', sub: 'inf', x: 101 + i, y: 100, hp: 100, path: [], mission: 'idle' });
+}
+core.combat(1);
+const enemyHp = MM.units.filter(u => u.own === 'Враг').map(u => u.hp);
+const playerHp = MM.units.filter(u => u.own === 'me').map(u => u.hp);
+assert.equal(enemyHp.length, 3);
+assert.equal(playerHp.length, 3);
+assert.ok(enemyHp.every(hp => hp < 100), 'enemy fire should be distributed across all three player units');
+assert.ok(playerHp.every(hp => hp < 100), 'player fire should be distributed across all three enemy units');
+assert.ok(enemyHp.every(hp => hp > 0) && playerHp.every(hp => hp > 0), 'equal forces must not vanish in one combat second');
 require('./ai_nations.js');
 const D = NationsAI.armyDoctrine;
 const nat0 = (p = {}) => ({ name: 'А', war: 1, power: 100, power0: 100, ...p });
