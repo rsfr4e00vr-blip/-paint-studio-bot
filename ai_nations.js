@@ -52,6 +52,27 @@ const warDebtCeiling=n=>{
  // Единый предел военного заимствования: 150% ВВП, даже при критическом положении.
  return n.gdp*(n.war?1.5:debtLimit(n)/Math.max(1,n.gdp));
 };
+/* Доктрина «воюют армией, а не арсеналом»: ракеты и бомбы только помогают армии и не заменяют её.
+   Чем слабее армия (потери, перевес врага, проигрыш на фронте), тем сильнее сеть тянет деньги в армию и мобилизацию
+   и тем меньше в арсенал. При угрозе гибели страны добавляется экстренный заём (в пределах военного потолка долга). */
+function armyDoctrine(n,w,byName){
+  const none={need:0,army:0,mobilize:0,arsenal:0,borrow:0,survival:false};
+  if(!n||!n.war||!w)return none;
+  const pw=Number(n.power)||0,p0=Math.max(10,Number(n.power0)||pw||10),gap=C(1-pw/p0,0,1);
+  const foeName=w.a===n.name?w.b:w.a,foe=byName&&byName[foeName],fp=foe?Math.max(5,Number(foe.power)||5):0;
+  const ratio=fp?pw/fp:2,weak=ratio<1?C(1-ratio,0,1):0;
+  const sc=w.a===n.name?(Number(w.score)||0):-(Number(w.score)||0),lost=C(-sc/100,0,1);
+  const need=C(.5*gap+.3*weak+.4*lost,0,1),survival=lost>.45||gap>.7||ratio<.4;
+  return{need,army:.16+.34*need,mobilize:.08+.22*need,arsenal:(ratio<1.25||gap>.15)?.12+.3*need:0,borrow:survival?.3+.3*need:need>.35?.12:0,survival};
+}
+/* Режим спасения «липкий»: заём сразу поднимает мощь армии, но страна остаётся в режиме ещё 3 месяца войны —
+   иначе она тут же «выздоравливала» бы на бумаге и сама гасила только что взятый заём. */
+function survivalNow(n,w,byName,month){
+  if(!n||!n.war||!w)return false;
+  if(armyDoctrine(n,w,byName).survival){n.survUntil=month+3;return true}
+  return (n.survUntil||0)>month;
+}
+function inSurvival(n){return !!curW&&survivalNow(n,(curW.wars||[]).find(x=>x.id===n.war),byNameCur,curW.month)}
 function defaultNow(n){
  const W=curW,cut=n.debt*.6;n.debt-=cut;n.treasury=0;n.arrears=0;n.defaults=(n.defaults||0)+1;n.defMonth=W?W.month:0;n.noCredit=(W?W.month:0)+24;
  n.stability=C(n.stability-15,5,96);n.gdp*=.96;n.fx=C((n.fx||100)*1.4,45,700);n.relations-=15;
@@ -98,14 +119,16 @@ function economy(n){
  /* Разрешаем уходить в минус (бюджетный дефицит до -5% ВВП) при тяжёлых расходах */
  n.treasury=C(n.treasury+income-upkeep,-n.gdp*.05,n.gdp*.25);debtService(n);
  /* Военные займы ИИ при тяжёлой войне: кредит при дефиците казны, истощении или низком духе; каждый заём ослабляет валюту */
- if(n.war&&(n.treasury<n.gdp*.018||n.exhaustion>32||n.morale<48||n.power<25)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<warDebtCeiling(n)){
+ const surv=inSurvival(n);
+ if(n.war&&(n.treasury<n.gdp*.018||n.exhaustion>32||n.morale<48||n.power<25||surv)&&(!n.noCredit||curW.month>=n.noCredit)&&n.debt<warDebtCeiling(n)){
   const emer=Math.min(warDebtCeiling(n)-n.debt,n.gdp*.07);
   if(emer>n.gdp*.002){
    n.debt+=emer;n.treasury+=emer;
-   n.power=C(n.power+emer*.14,2,150);
+   n.power=C(n.power+emer*(surv?.16:.14),2,150);
    n.morale=C(n.morale+1.2,15,100);
    n.fx=C((n.fx||100)*1.035,45,950);
-   if(curW&&Math.random()<.22)ev(curW,`💳 ${n.name} выпустила военные облигации (+${Math.round(emer)}) из-за тяжёлой войны (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`);
+   if(curW&&surv&&(!n.survLogM||curW.month-n.survLogM>=6)){n.survLogM=curW.month;ev(curW,`🆘 ${n.name} берёт экстренный заём на оборону (+${Math.round(emer)}): стране грозит поражение, деньги идут в армию (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`)}
+   else if(curW&&Math.random()<.22)ev(curW,`💳 ${n.name} выпустила военные облигации (+${Math.round(emer)}) из-за тяжёлой войны (долг ${Math.round(100*n.debt/n.gdp)}% ВВП)`);
   }
  }
  if(!window.NN&&n.treasury>n.gdp*.025){
@@ -287,9 +310,10 @@ function think(W,n,A,m,wv){
   const st=B.stat[ACTS[n.last.k]]||(B.stat[ACTS[n.last.k]]={n:0,r:0});st.n++;st.r+=r;B.avg=B.avg*.998+r*.002;B.steps++}
  /* 2) допустимые действия и бюджет */
  const s=Math.min(n.treasury*.025,n.gdp*.0012),rich=s>=.5,peaceW=n.war?W.wars.find(w=>w.id===n.war):null;
+ const surv0=survivalNow(n,peaceW,wv.byName,W.month);   // страна спасает себя: долг не гасит
  const ok=i=>{const a=ACTS[i];
   if(a==='borrow')return(!n.noCredit||W.month>=n.noCredit)&&n.debt<warDebtCeiling(n)*.995&&n.treasury<n.gdp*.22;
-  if(a==='repay')return n.debt>0&&n.treasury>n.gdp*.004;
+  if(a==='repay')return n.debt>0&&n.treasury>n.gdp*.004&&!surv0;
   if(a==='mobilize'||a==='peace')return !!peaceW&&(a==='mobilize'?n.manpower>.05:peaceW.months>=2&&!peaceW.peaceReq);
   if(a==='rate')return (n.inflation||0)>8&&n.cbRate<15;
   if(a==='reserves')return (n.inflation||0)>12&&n.cbRate>=8;
@@ -312,6 +336,8 @@ function think(W,n,A,m,wv){
    if(n.morale<42)q[7]+=.18;
    if(peaceW&&peaceW.months>=7&&(n.exhaustion>72||(n.treasury<n.gdp*.001&&n.morale<28)||(((peaceW.a===n.name&&peaceW.score < -58)||(peaceW.b===n.name&&peaceW.score > 58))&&n.exhaustion>58)))q[11]+=.16;
    if((n.aa||0)<2)q[5]+=.14;
+   const D=armyDoctrine(n,peaceW,wv.byName);   // армия важнее арсенала
+   q[4]+=D.army;q[10]+=D.mobilize;q[6]-=D.arsenal;q[12]+=Math.max(D.borrow,surv0?.3+.3*D.need:0);
  }else{
    const danger=A.filter(b=>b!==n&&!b.annexed&&!b.war).sort((a,b)=>b.power-a.power)[0];
    if(danger&&danger.power>n.power*1.45&&n.stability>35){q[5]+=.16;q[4]+=.12;q[9]+=.08}
@@ -431,5 +457,5 @@ function econSetSort(k){
  const tb=document.getElementById('econTb');if(tb)tb.innerHTML=econBody(econRows(S));
  const p=document.getElementById('econPanel');if(p)p.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.getAttribute('onclick')==="NationsAI.econSort('"+k+"')"));
 }
-window.NationsAI={fxIndex,init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort,debtLimit};
+window.NationsAI={fxIndex,init,tick,panel,export:exportData,brainStats,ACTS,econRows,econPanel,econSort:econSetSort,debtLimit,armyDoctrine};
 })();
