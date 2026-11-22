@@ -31,7 +31,11 @@ const ECOST={
  fort:{m:150,s:4,f:0,e:1}, aabat:{m:220,s:5,f:0,e:3}
 };
 /* оплата ИИ-страной: возвращает причину отказа или '' если оплачено */
-function ePay(nat,sub){
+/* порядок закупок ИИ: армия важнее флота и авиации, а под угрозой — прежде всего сухопутные части */
+function buyOrder(defi,threat){const sc=k=>defi[k]*(k==='land'?1.6:1)+(threat&&k==='land'?1:0);return Object.keys(defi).filter(k=>defi[k]>0).sort((x,y)=>sc(y)-sc(x)||(x==='sea'?-1:1))}
+/* доля дешёвой пехоты среди новых сухопутных частей: бедная или гибнущая страна берёт массой */
+function landInfChance(poor,crisis){return crisis?.85:poor?.75:.6}
+function ePay(nat,sub,opt){
  if(!nat)return '';const c=ECOST[sub];if(!c)return '';const rs=nat.rs&&nat.rs.st;let why='';
  const cash=Number(nat.treasury)||0,gdp=Math.max(1,Number(nat.gdp)||1),debt=Number(nat.debt)||0;
  /* Сначала проверяем ресурсы: отказ в закупке не должен оставлять ненужный долг. */
@@ -46,7 +50,7 @@ function ePay(nat,sub){
    nat.debt=debt+need;nat.treasury=cash+need;
    nat.fx=Math.min(950,(Number(nat.fx)||100)*(1+Math.min(.025,need/gdp*.08)));
    nat.warLoans=(nat.warLoans||0)+need;
-   if(env&&env.aiEvent)env.aiEvent('💳 '+(nat.name||'Государство')+' взяло военный кредит на '+Math.round(need)+' для закупки '+(NAMES[sub]||sub)+' (долг '+Math.round(nat.debt/gdp*100)+'% ВВП)');
+   if(env&&env.aiEvent)env.aiEvent((opt&&opt.defend?'🆘 '+(nat.name||'Государство')+' берёт экстренный кредит на оборону страны: '+Math.round(need)+' на закупку ':'💳 '+(nat.name||'Государство')+' взяло военный кредит на '+Math.round(need)+' для закупки ')+(NAMES[sub]||sub)+' (долг '+Math.round(nat.debt/gdp*100)+'% ВВП');
   }
  }
  if(why)return why;
@@ -390,8 +394,13 @@ function aiThink(){
  MM.bases=MM.bases.filter(b=>!b.own||b.own===ME||alive.has(b.own));
  wars.forEach(w=>{
   const mine=MM.units.filter(u=>u.own===w.n),nat=env.enemyNation&&env.enemyNation(w.n),pw=Math.max(20,Number(nat&&nat.power!=null?nat.power:w.enPow0)||50);
-  const cap={land:Math.max(2,Math.round((3+Math.floor(pw/24))*aiScale)),sea:Math.max(1,Math.round((1+(pw>45?1:0))*aiScale)),air:Math.max(2,Math.round((2+(pw>55?1:0))*aiScale)),support:Math.max(1,Math.round((1+Math.floor(pw/90))*aiScale))};
+  const cap={land:Math.max(3,Math.round((4+Math.floor(pw/18))*aiScale)),sea:Math.max(1,Math.round((1+(pw>45?1:0))*aiScale)),air:Math.max(2,Math.round((2+(pw>55?1:0))*aiScale)),support:Math.max(1,Math.round((1+Math.floor(pw/90))*aiScale))};
   const cnt=k=>k==='support'?mine.filter(u=>u.sub==='aabat'||u.sub==='fort').length:mine.filter(u=>kindOf(u)===k&&!SPEC[u.sub].static).length;
+  /* Доктрина «воюют армией»: если игрок стоит на земле врага или область уже потеряна, ИИ в первую очередь собирает сухопутную армию */
+  let lostN=0;try{lostN=warTargetsSim(w).filter(t=>t.occ).length}catch(e){}
+  const foeAll=MM.units.filter(u=>u.own===ME),invN=foeAll.filter(m=>kindOf(m)==='land'&&(()=>{const ra=regionAtSim(m.x,m.y);return !!ra&&ra.country===w.n})()).length;
+  const threat=invN>0||lostN>0,crisis=threat&&sumP(mine)<sumP(foeAll)*.7;
+  if(threat){MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog['m'+w.n]||-999)>150){MM.shortLog['m'+w.n]=MM.t;say('🪖 '+w.n+' срочно наращивает армию для обороны'+(crisis?': стране грозит поражение, берёт кредиты':''))}}
   MM.spawnT=MM.spawnT||{};MM.spawnT[w.n]=(MM.spawnT[w.n]||0)-1.5;
   if(MM.spawnT[w.n]<=0){
    const sp=toSim(env.enemySpawn&&env.enemySpawn(w.n));
@@ -400,26 +409,26 @@ function aiThink(){
     const defi={land:(cap.land-cnt('land'))/cap.land,sea:(cap.sea-cnt('sea'))/cap.sea,air:(cap.air-cnt('air'))/cap.air,support:(cap.support-cnt('support'))/cap.support};
     /* перебираем роды войск по нехватке; если для одного нет места (нет выхода к морю), берём следующий */
     let pick='',sub=null,nm='',spot=null;
-    const cands=Object.keys(defi).filter(k=>defi[k]>0).sort((x,y)=>defi[y]-defi[x]||(x==='sea'?-1:1));
+    const cands=buyOrder(defi,threat);
     for(const k of cands){
      if(k==='land'||k==='support'){const q=snap('land',sp.x+rnd(-6,6),sp.y+rnd(-6,6),12);if(q>=0)spot=cellPt(q)}
      else if(k==='sea'){const q=snap('sea',sp.x,sp.y,45);if(q>=0)spot=cellPt(q)}
      else spot=[sp.x,sp.y];
      if(spot){pick=k;break}}
-    if(pick==='land'){sub=Math.random()<.6?'inf':'tank';nm='Армия противника'}
+    if(pick==='land'){const poor=nat&&(Number(nat.treasury)||0)<ECOST.tank.m*1.5;sub=Math.random()<landInfChance(poor,crisis)?'inf':'tank';nm='Армия противника'}
     else if(pick==='sea'){const roll=Math.random();sub=roll<.25?'submarine':roll<.5?'frigate':roll<.82?'destroyer':'carrier';nm='Флот противника'}
     else if(pick==='air'){sub=cnt('air')%2?'bomber':'fighter';nm='Авиация противника'}
     else if(pick==='support'){sub='aabat';nm='Батарея ПВО противника'}
     /* расходы: враг платит казной, сталью, топливом, энергией и людьми, как игрок */
     let why='',paid=true;
-    if(sub&&nat){why=ePay(nat,sub);if(why)paid=false}
+    if(sub&&nat){why=ePay(nat,sub,{defend:threat});if(why)paid=false}
     if(sub&&!paid){MM.shortLog=MM.shortLog||{};if(MM.t-(MM.shortLog[w.n]||-999)>90){MM.shortLog[w.n]=MM.t;say('📉 '+w.n+' не может пополнить '+(pick==='sea'?'флот':pick==='air'?'авиацию':pick==='support'?'ПВО':'армию')+': '+why)}}
     else if(sub){
      if(pick==='air')mk(w.n,sub,spot[0],spot[1],{name:nm,base:eb})
      else mk(w.n,sub,spot[0],spot[1],{name:nm,base:null})}
     /* промышленность определяет темп: слабая индустрия — медленнее */
     const ind=nat&&Number(nat.industry)>0?Math.max(.4,Math.min(3,Number(nat.industry))):1;
-    MM.spawnT[w.n]=(paid?22:30)/(ind*aiScale)}
+    MM.spawnT[w.n]=(paid?22:30)*(crisis?.6:threat?.8:1)/(ind*aiScale)}
   }
  });
  const mine=MM.units.filter(u=>u.own===ME);
@@ -961,7 +970,7 @@ const API={
  speed(s){MM.speed=s;MM.dirty=true;paintHud(true)},
  deploy(sub){if(sub==='aabat'){MM.mode='placeAA';say('🛡️ Выберите точку на суше для размещения батареи ПВО · 500 млн',true);paintHud(true);return}deploy(sub)},deployProd:deployProduced
 };
-const core={MM,SPEC,DM,ECOST,ePay,autoCommand,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,activateWar:activateWarForces,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
+const core={MM,SPEC,DM,ECOST,ePay,buyOrder,landInfChance,autoCommand,paint,fixSea,setMask,findPath,step,mk,orderMove,orderStop,orderRtb,aiThink,activateWar:activateWarForces,canAdvance:e=>!(e&&typeof e.isRunning==='function')||!!e.isRunning(),setEnv:e=>{env=e},cellOf,snap,addBase,nearestBase,capture,setNetworkState(player,units,country){if(!player)return;const owner='mp:'+String(player);const keep=(MM.remoteUnits||[]).filter(u=>u.own!==owner);(Array.isArray(units)?units:[]).forEach((u,i)=>{if(!SPEC[u.sub]||!Number.isFinite(+u.x)||!Number.isFinite(+u.y))return;keep.push({id:owner+':'+String(u.id||i),own:owner,sub:u.sub,x:clampN(+u.x,0,GW),y:clampN(+u.y,0,GH),ang:Number(u.ang)||0,hp:clampN(Number(u.hp)||0,0,100),path:[],mission:String(u.mission||'idle'),fuel:Number(u.fuel)||0,name:String(u.name||country||'Игрок').slice(0,32),remote:true})});MM.remoteUnits=keep;}};
 if(typeof module!=='undefined'&&module.exports){module.exports=core}
 if(typeof window!=='undefined'&&root===window){
  window.MilMap={depToggle(o){MM.depOpen=!!o},handleTap,attach,core,setNetworkState:core.setNetworkState};
