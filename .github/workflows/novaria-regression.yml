@@ -41,3 +41,9 @@ jobs:
         run: node test_ai_cache_versions.js
       - name: Arsenal range regression
         run: node test_arsenal_ranges.js
+      - name: Telegram mobile shell regression
+        run: node test_game_html_mobile.js
+      - name: Mobile map performance regression
+        run: node test_mobile_map_performance.js
+      - name: Map and war regression
+        run: node test_map_war_regressions.js
